@@ -11,6 +11,7 @@ import { detectShowScrollAnchors, scrollShowToAnchor } from '@/utils/scrollToCar
 import { FullscreenProvider, type FullscreenMedia } from '@/context/FullscreenContext';
 import { Lightbox, VideoLightbox } from '@/components/layout/Lightbox';
 import { useWsChannel } from '@/services/useBackendSocket';
+import type { QuestionOrderHandle } from '@/hooks/useQuestionOrder';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand, GamemasterScrollAnchor, GamePhase, ShowHoldState } from '@/types/game';
 import { PHASE_SCREEN_LABELS } from '@/types/game';
 
@@ -44,6 +45,11 @@ interface BaseGameWrapperProps {
   /** True when entered via back-navigation — start in the 'game' phase so the
    * game can open at its last question for review. See specs/game-back-review.md. */
   resumeAtEnd?: boolean;
+  /** The game's live-stable question order, from `useQuestionOrder`. Pass it
+   * whenever the game holds a question index, so the wrapper can tell a real
+   * question change from a question *index* that merely shifted because a
+   * question was added or removed live. See specs/live-question-order.md. */
+  order?: QuestionOrderHandle;
   /** The main game content rendered in 'game' phase */
   children: (props: {
     onGameComplete: () => void;
@@ -102,6 +108,7 @@ export default function BaseGameWrapper({
   onNextGame,
   onPrevGame,
   resumeAtEnd,
+  order,
   children,
 }: BaseGameWrapperProps) {
   // Back-arrival resumes in the game phase (skips landing/rules); a normal
@@ -471,11 +478,28 @@ export default function BaseGameWrapper({
     return () => observer.disconnect();
   }, [phase, answerRevealed, questionNumber]);
 
+  /**
+   * Identity of the question currently on screen, as opposed to its *position*.
+   *
+   * A live question add/remove shifts every index after the edit, so keying
+   * per-question resets on `questionNumber` would tear down a running question
+   * (deadline, fullscreen, reveal state) just because an earlier question was
+   * deleted. The slot key survives that shift and only changes on a real
+   * question change. Games that don't pass an `order` keep the old behaviour.
+   * See specs/live-question-order.md.
+   */
+  const questionToken = useMemo((): number | string | undefined => {
+    const n = gamemasterData?.questionNumber;
+    if (n === undefined) return undefined;
+    if (!order) return n;
+    return order.slotKeys[n] ?? `oob:${n}`;
+  }, [order, gamemasterData?.questionNumber]);
+
   // Clear an active deadline timer whenever the question changes — deadlines
   // are per-question and must not bleed forward.
-  const lastQuestionRef = useRef<number | undefined>(gamemasterData?.questionNumber);
+  const lastQuestionRef = useRef<number | string | undefined>(questionToken);
   useEffect(() => {
-    const current = gamemasterData?.questionNumber;
+    const current = questionToken;
     if (current !== undefined && current !== lastQuestionRef.current) {
       lastQuestionRef.current = current;
       setDeadlineEndsAt(null);
@@ -499,7 +523,21 @@ export default function BaseGameWrapper({
         expiryClearTimerRef.current = null;
       }
     }
-  }, [gamemasterData?.questionNumber]);
+  }, [questionToken]);
+
+  // A live question add/remove shifted this game's question indices. The
+  // correct-answer tally is keyed by index, so re-key it in the same beat or
+  // every bucket after the edit is misattributed on the GM's "Wertung pro Frage"
+  // panel. See specs/gamemaster-question-scores.md.
+  const orderRevision = order?.revision;
+  const orderMoved = order?.moved;
+  const lastOrderRevisionRef = useRef(orderRevision);
+  useEffect(() => {
+    if (orderRevision === undefined || orderRevision === lastOrderRevisionRef.current) return;
+    lastOrderRevisionRef.current = orderRevision;
+    if (currentIndex === undefined || !orderMoved) return;
+    gameDispatch({ type: 'REMAP_QUESTION_TALLY', payload: { gameIndex: currentIndex, moved: orderMoved } });
+  }, [orderRevision, orderMoved, currentIndex, gameDispatch]);
 
   // Auto-hide the active timer the moment the game reveals its answer — the
   // countdown is no longer relevant once players see the solution. Covers both

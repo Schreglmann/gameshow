@@ -4,6 +4,7 @@ import type { QuizjagdConfig } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
 import BaseGameWrapper from './BaseGameWrapper';
 import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
+import { useQuestionOrder } from '@/hooks/useQuestionOrder';
 import { useGameContext } from '@/context/GameContext';
 import { teamName } from '@/utils/teamNames';
 
@@ -46,6 +47,7 @@ export default function Quizjagd(props: GameComponentProps) {
       {({ onGameComplete, setNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, setAnswerRevealed }) => (
         <QuizjagdInner
           config={config}
+          gameId={props.gameId}
           pointSystemEnabled={props.pointSystemEnabled}
           onGameComplete={onGameComplete}
           setNavHandler={setNavHandler}
@@ -63,6 +65,7 @@ export default function Quizjagd(props: GameComponentProps) {
 
 interface InnerProps {
   config: QuizjagdConfig;
+  gameId?: string;
   pointSystemEnabled: boolean;
   onGameComplete: () => void;
   setNavHandler: (fn: (() => void) | null) => void;
@@ -74,41 +77,57 @@ interface InnerProps {
   setAnswerRevealed: (revealed: boolean) => void;
 }
 
-function QuizjagdInner({ config, pointSystemEnabled, onGameComplete, setNavHandler, onAwardPoints, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, setAnswerRevealed }: InnerProps) {
+function QuizjagdInner({ config, gameId, pointSystemEnabled, onGameComplete, setNavHandler, onAwardPoints, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, setAnswerRevealed }: InnerProps) {
   const { state } = useGameContext();
   const questionsPerTeam = config.questionsPerTeam || 10;
 
-  // Build pools: example questions at front (like main branch), then shuffled regulars.
-  // Supports both flat array (difficulty: 3/5/7) and structured { easy, medium, hard }.
-  const pools = useMemo(() => {
+  // Split the questions into the three difficulty pools. Supports both the flat
+  // array (difficulty: 3/5/7) and the structured { easy, medium, hard } format.
+  // The first entry of each pool is its Beispielfrage; `disabled` filtering and
+  // the shuffle are left to useQuestionOrder below.
+  const sources = useMemo(() => {
     const qs = config.questions as unknown;
-    const shuffle = <T,>(arr: T[]) => [...arr].sort(() => Math.random() - 0.5);
-    // First question per difficulty is the example, rest are shuffled
-    const buildPool = (arr: { question: string; answer: string }[]): QuizjagdQ[] => {
-      if (arr.length === 0) return [];
-      const [example, ...rest] = arr;
-      return [{ question: example!.question, answer: example!.answer }, ...shuffle(rest.map(q => ({ question: q.question, answer: q.answer })))];
-    };
     if (Array.isArray(qs)) {
-      type FlatQ = { question: string; answer: string; difficulty: number; disabled?: boolean };
-      const flatArr = (qs as FlatQ[]).filter(q => !q.disabled);
+      type FlatQ = QuizjagdQ & { difficulty: number; disabled?: boolean };
+      const flat = qs as FlatQ[];
       return {
-        easy: buildPool(flatArr.filter(q => q.difficulty === 3)),
-        medium: buildPool(flatArr.filter(q => q.difficulty === 5)),
-        hard: buildPool(flatArr.filter(q => q.difficulty === 7)),
+        easy: flat.filter(q => q.difficulty === 3),
+        medium: flat.filter(q => q.difficulty === 5),
+        hard: flat.filter(q => q.difficulty === 7),
       };
     }
-    // Structured format: { easy, medium, hard }
     type StructQ = QuizjagdQ & { disabled?: boolean };
     const structured = qs as { easy: StructQ[]; medium: StructQ[]; hard: StructQ[] };
     return {
-      easy: buildPool([...(structured.easy || [])].filter(q => !q.disabled)),
-      medium: buildPool([...(structured.medium || [])].filter(q => !q.disabled)),
-      hard: buildPool([...(structured.hard || [])].filter(q => !q.disabled)),
+      easy: structured.easy || [],
+      medium: structured.medium || [],
+      hard: structured.hard || [],
     };
   }, [config.questions]);
 
-  const [poolIndex, setPoolIndex] = useState({ easy: 0, medium: 0, hard: 0 });
+  // One live-stable deck per difficulty. Each keeps its own session seed, so the
+  // three pools shuffle independently and — crucially — do NOT re-deal when the
+  // questions are edited mid-game. The previous unseeded shuffle sat in a
+  // `useMemo(..., [config.questions])`, so every live edit re-dealt all three
+  // decks while the consumed counter kept running: already-asked questions came
+  // back around. See specs/live-question-order.md.
+  const easy = useQuestionOrder(sources.easy, true, undefined, gameId && `${gameId}#easy`);
+  const medium = useQuestionOrder(sources.medium, true, undefined, gameId && `${gameId}#medium`);
+  const hard = useQuestionOrder(sources.hard, true, undefined, gameId && `${gameId}#hard`);
+  const pools: Record<Difficulty, QuizjagdQ[]> = useMemo(
+    () => ({ easy: easy.questions, medium: medium.questions, hard: hard.questions }),
+    [easy.questions, medium.questions, hard.questions],
+  );
+  const slotKeys: Record<Difficulty, number[]> = useMemo(
+    () => ({ easy: easy.order.slotKeys, medium: medium.order.slotKeys, hard: hard.order.slotKeys }),
+    [easy.order, medium.order, hard.order],
+  );
+
+  // Which questions have already been asked, tracked by SLOT KEY rather than by a
+  // per-pool cursor. A cursor would have to be remapped on every live edit;
+  // identities need no remapping at all — a deleted question simply never comes
+  // up again, and an added one queues at the end of its pool.
+  const [used, setUsed] = useState<Record<Difficulty, number[]>>({ easy: [], medium: [], hard: [] });
   // Track which difficulty was used for the example round (null = not yet played)
   const [exampleDifficulty, setExampleDifficulty] = useState<Difficulty | null>(null);
   const [team1Count, setTeam1Count] = useState(0);
@@ -150,27 +169,32 @@ function QuizjagdInner({ config, pointSystemEnabled, onGameComplete, setNavHandl
   }, [currentQuestion, turn.phase, turn.team, turn.difficulty, config.title, team1Count, team2Count, isCurrentExample, questionsPerTeam, setGamemasterData, state.teams]);
 
   // Index 0 is the example question in every pool — skip it once any example has been played
+  const nextUnusedIn = useCallback(
+    (d: Difficulty): number => {
+      const from = exampleDifficulty !== null ? 1 : 0;
+      const keys = slotKeys[d];
+      for (let i = from; i < pools[d].length; i++) {
+        if (!used[d].includes(keys[i]!)) return i;
+      }
+      return -1;
+    },
+    [pools, slotKeys, used, exampleDifficulty]
+  );
+
   const pickQuestion = useCallback(
     (difficulty: Difficulty): QuizjagdQ | null => {
-      const pool = pools[difficulty];
-      let idx = poolIndex[difficulty];
-      // After the example round, skip index 0 for ALL difficulties (each pool's first Q is a Beispielfrage)
-      if (idx === 0 && exampleDifficulty !== null) idx = 1;
-      if (idx >= pool.length) return null;
-      setPoolIndex(prev => ({ ...prev, [difficulty]: idx + 1 }));
-      return pool[idx]!;
+      const idx = nextUnusedIn(difficulty);
+      if (idx < 0) return null;
+      const key = slotKeys[difficulty][idx]!;
+      setUsed(prev => ({ ...prev, [difficulty]: [...prev[difficulty], key] }));
+      return pools[difficulty][idx]!;
     },
-    [pools, poolIndex, exampleDifficulty]
+    [pools, slotKeys, nextUnusedIn]
   );
 
   const isDifficultyExhausted = useCallback(
-    (d: Difficulty) => {
-      const pool = pools[d];
-      let idx = poolIndex[d];
-      if (idx === 0 && exampleDifficulty !== null) idx = 1;
-      return idx >= pool.length;
-    },
-    [pools, poolIndex, exampleDifficulty]
+    (d: Difficulty) => nextUnusedIn(d) < 0,
+    [nextUnusedIn]
   );
 
   const selectDifficulty = useCallback(

@@ -24,6 +24,12 @@ its "Out of scope: Per-game grouping / full session ledger UI" bullet.
       total do nothing.
 - [x] The tracker shows a caption naming the question the buttons write to and what it already holds
       (`Frage 3 · 1`), so both the attribution and a disabled `−` are legible without expanding the panel.
+- [x] Editing the playing game's questions **re-keys the tally in the same beat**. `questionKey` is a
+      position, so adding or removing a question would otherwise misattribute every bucket after the
+      edit. `BaseGameWrapper` dispatches `REMAP_QUESTION_TALLY { gameIndex, moved }` on an
+      `order.revision` bump; a **deleted** question's counts merge into the `'none'` bucket rather than
+      onto its neighbour — never dropped, never re-attributed. Historical `ScoreLogEntry` rows are left
+      untouched. See [live-question-order.md](live-question-order.md).
 
 ### Attribution — real points (inline-scored games)
 - [x] `ScoreLogEntry` records `questionNumber?`, so every point delta in bet-quiz / quizjagd /

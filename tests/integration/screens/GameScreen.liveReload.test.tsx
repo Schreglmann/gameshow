@@ -180,6 +180,160 @@ describe('GameScreen — live content reload', () => {
     await waitFor(() => expect(mockedNavigate).toHaveBeenCalledWith('/summary'));
   });
 
+  /**
+   * The host edits the questions of the game that is *currently being played*.
+   * Nothing the audience can see may move. See specs/live-question-order.md.
+   */
+  describe('editing the playing game’s questions', () => {
+    const OriginalAudio = globalThis.Audio;
+    let audioCreated = 0;
+
+    beforeEach(() => {
+      audioCreated = 0;
+      (globalThis as unknown as { Audio: unknown }).Audio = class extends OriginalAudio {
+        constructor(src?: string) {
+          super(src);
+          audioCreated++;
+        }
+      };
+    });
+    afterEach(() => {
+      (globalThis as unknown as { Audio: unknown }).Audio = OriginalAudio;
+    });
+
+    const quiz = (names: string[], randomize = true) => ({
+      gameId: 'game1',
+      config: {
+        type: 'simple-quiz',
+        title: 'Quiz',
+        rules: ['Rule'],
+        randomizeQuestions: randomize,
+        questions: [
+          { question: 'Beispiel', answer: 'B', questionAudio: 'ex.mp3' },
+          ...names.map(n => ({ question: n, answer: `A-${n}`, questionAudio: `${n}.mp3` })),
+        ],
+      },
+      currentIndex: 0,
+      totalGames: 1,
+      pointSystemEnabled: true,
+    });
+
+    const next = () => act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
+    /** Two presses per question: reveal the answer, then move on. */
+    const nextQuestion = () => { next(); next(); };
+    const label = () => document.querySelector('.quiz-question-number')?.textContent;
+    const onScreen = () => document.querySelector('.quiz-question')?.textContent;
+
+    /** Enters the game phase and advances to the given play index. */
+    async function playTo(data: ReturnType<typeof quiz>, playIdx: number) {
+      mockFetchGameData.mockResolvedValue(data);
+      renderGameScreen();
+      await waitFor(() => expect(screen.getByText('Quiz')).toBeInTheDocument());
+      next(); // landing → rules
+      next(); // rules → game
+      await waitFor(() => expect(label()).toBe('Beispiel Frage'));
+      for (let i = 0; i < playIdx; i++) nextQuestion();
+    }
+
+    async function pushEdit(data: ReturnType<typeof quiz>) {
+      mockFetchGameData.mockResolvedValue(data);
+      await act(async () => { __emitChannelForTests('content-changed', { games: true }); });
+      await waitFor(() => expect(mockFetchGameData).toHaveBeenCalledTimes(2));
+    }
+
+    it('appending a question leaves the current one and everything before it untouched', async () => {
+      await playTo(quiz(['A', 'B', 'C']), 2);
+      const before = onScreen();
+      expect(label()).toBe('Frage 2 von 3');
+      const audioBefore = audioCreated;
+      // Guards the assertions below from passing vacuously: playing to question
+      // 2 must genuinely have built audio elements.
+      expect(audioBefore).toBeGreaterThan(0);
+
+      await pushEdit(quiz(['A', 'B', 'C', 'NEU']));
+
+      expect(onScreen()).toBe(before);
+      expect(label()).toBe('Frage 2 von 4'); // only the total grew
+      expect(audioCreated).toBe(audioBefore); // playback was never restarted
+    });
+
+    it('deleting an already-asked question keeps the same question on screen, one number lower', async () => {
+      const data = quiz(['A', 'B', 'C']);
+      await playTo(data, 1);
+      const asked = onScreen()!; // whatever the shuffle dealt into play index 1
+      nextQuestion();
+      const current = onScreen();
+      expect(label()).toBe('Frage 2 von 3');
+      const audioBefore = audioCreated;
+
+      await pushEdit(quiz(['A', 'B', 'C'].filter(n => n !== asked)));
+
+      expect(onScreen()).toBe(current);   // the host's question did not move
+      expect(label()).toBe('Frage 1 von 2'); // ...it is just numbered one lower
+      expect(audioCreated).toBe(audioBefore);
+    });
+
+    it('deleting a not-yet-asked question does not move the current one', async () => {
+      await playTo(quiz(['A', 'B', 'C']), 1);
+      const current = onScreen()!;
+      const pending = ['A', 'B', 'C'].find(n => n !== current)!;
+      const audioBefore = audioCreated;
+
+      await pushEdit(quiz(['A', 'B', 'C'].filter(n => n !== pending)));
+
+      expect(onScreen()).toBe(current);
+      expect(label()).toBe('Frage 1 von 2');
+      expect(audioCreated).toBe(audioBefore);
+    });
+
+    it('deleting the on-screen question slides the next one in', async () => {
+      await playTo(quiz(['A', 'B', 'C']), 1);
+      const current = onScreen()!;
+
+      await pushEdit(quiz(['A', 'B', 'C'].filter(n => n !== current)));
+
+      expect(onScreen()).not.toBe(current);
+      expect(label()).toBe('Frage 1 von 2');
+    });
+
+    it('reshuffling the file in admin is a no-op on the running deck', async () => {
+      await playTo(quiz(['A', 'B', 'C', 'D']), 2);
+      const current = onScreen();
+      const audioBefore = audioCreated;
+
+      await pushEdit(quiz(['C', 'A', 'D', 'B'])); // "🔀 Fragen mischen"
+
+      expect(onScreen()).toBe(current);
+      expect(label()).toBe('Frage 2 von 4');
+      expect(audioCreated).toBe(audioBefore);
+    });
+
+    it('fixing a typo on the current question updates it in place', async () => {
+      const data = quiz(['A', 'B', 'C'], false);
+      await playTo(data, 2); // ordered game → play index 2 is 'B'
+      expect(onScreen()).toBe('B');
+
+      await pushEdit(quiz(['A', 'B korrigiert', 'C'], false));
+
+      expect(onScreen()).toBe('B korrigiert');
+      expect(label()).toBe('Frage 2 von 3');
+    });
+
+    it('survives a keystroke-by-keystroke autosave of a newly typed question', async () => {
+      await playTo(quiz(['A', 'B']), 1);
+      const current = onScreen();
+
+      for (const partial of ['N', 'NE', 'NEU']) {
+        mockFetchGameData.mockResolvedValue(quiz(['A', 'B', partial]));
+        await act(async () => { __emitChannelForTests('content-changed', { games: true }); });
+        await waitFor(() => expect(onScreen()).toBe(current));
+      }
+
+      // One appended question, not three — each keystroke paired to the same slot.
+      expect(label()).toBe('Frage 1 von 3');
+    });
+  });
+
   it('keeps the running game on a transient (non-404) live-refresh error', async () => {
     mockFetchGameData.mockResolvedValue(gameData('Stable Game', [{ question: 'Q', answer: 'A' }]));
     renderGameScreen();

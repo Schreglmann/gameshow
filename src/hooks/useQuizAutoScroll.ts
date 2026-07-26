@@ -8,9 +8,11 @@ import { absoluteOffsetTop } from '@/utils/scrollToCardAnchor';
 // Instant scroll — no smooth animation — so the first paint already shows the
 // final position.
 //
-// Pass `triggerKey` as whatever should reset scroll: e.g. just `qIdx` for
-// SimpleQuiz, or a combined `${qIdx}:${phase}` for games with multiple phases
-// per question.
+// Pass `triggerKey` as whatever should reset scroll: e.g. just `qKey` (the
+// question's stable slot key from `useLiveQuestionIndex`) for SimpleQuiz, or a
+// combined `${qKey}:${phase}` for games with multiple phases per question. Use
+// `qKey` rather than `qIdx` so a live question add/remove, which merely shifts
+// the index, doesn't jump the projector back to the top of the card.
 //
 // `align` controls where an overflowing card is anchored:
 //  - 'top' (default): card top sits just below the sticky header. Best when the

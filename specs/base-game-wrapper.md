@@ -15,9 +15,13 @@ Every game component shares an identical phase flow (landing → rules → game 
 - [x] After `onGameComplete()`, the wrapper transitions to `award-points` or navigates forward
 - [x] After points are awarded (or skipped), the wrapper navigates immediately and automatically to `?index=N+1` or `/summary` — there is no intermediate "proceed to next game" screen or button
 - [x] Keyboard navigation is handled by `useKeyboardNavigation` hook — not inline event listeners
+- [x] Per-question state (GM deadline timer, fullscreen overlay, paused-media resume state, `answerRevealed`) is cleared when the question **changes** — but NOT when a live question add/remove merely shifts the current question's index
 
 ## State / data changes
 - Phase state is local to `BaseGameWrapper` (not in `GameContext`) — intentional, ephemeral
+- Optional `order?: QuestionOrderHandle` prop (from the game's `useQuestionOrder`). Passed by every game that tracks a question index. Two uses, both described in [live-question-order.md](live-question-order.md):
+  - the per-question reset above keys on a **question token** (`order.slotKeys[questionNumber]`) rather than on `questionNumber`, so a compensating index shift doesn't tear down a running question. Falls back to `questionNumber` when no `order` is given
+  - on an `order.revision` bump it dispatches `REMAP_QUESTION_TALLY`, re-keying the per-question correct-answer tally ([gamemaster-question-scores.md](gamemaster-question-scores.md))
 - `GameContext.currentGame` is updated by `GameScreen` before the wrapper renders
 - Navigation is performed via React Router `useNavigate`
 

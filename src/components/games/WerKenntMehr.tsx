@@ -5,14 +5,16 @@ import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from 
 import { useGameContext } from '@/context/GameContext';
 import { teamName } from '@/utils/teamNames';
 import { teamDisplayOrder } from '@/utils/teamOrder';
-import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
+import { useQuestionOrder, type QuestionOrderHandle } from '@/hooks/useQuestionOrder';
+import { useLiveQuestionIndex } from '@/hooks/useLiveQuestionIndex';
+import { EXAMPLE_SLOT_ID } from '@/utils/questionOrder';
 import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
 import BaseGameWrapper from './BaseGameWrapper';
 import QuizQuestionView from './QuizQuestionView';
 
 export default function WerKenntMehr(props: GameComponentProps) {
   const config = props.config as WerKenntMehrConfig;
-  const questions = useShuffledQuestions(config.questions, config.randomizeQuestions, config.questionLimit, props.gameId);
+  const { questions, order } = useQuestionOrder(config.questions, config.randomizeQuestions, config.questionLimit, props.gameId);
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
   const scoringMode = config.scoringMode ?? 'standard';
 
@@ -48,10 +50,12 @@ export default function WerKenntMehr(props: GameComponentProps) {
       onNextGame={props.onNextGame}
       onPrevGame={props.onPrevGame}
       resumeAtEnd={props.resumeAtEnd}
+      order={order}
     >
       {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, setAnswerRevealed, setGameTimer }) => (
         <WerKenntMehrInner
           questions={questions}
+          order={order}
           resumeAtEnd={resumeAtEnd}
           gameTitle={config.title}
           scoringMode={scoringMode}
@@ -77,6 +81,7 @@ type Phase = 'question' | 'answer' | 'summary';
 
 interface InnerProps {
   questions: WerKenntMehrQuestion[];
+  order: QuestionOrderHandle;
   resumeAtEnd: boolean;
   gameTitle: string;
   /** 'standard' (default): tally round wins and award the positional game points to
@@ -109,6 +114,7 @@ function examplesSummary(q: WerKenntMehrQuestion): string | undefined {
 
 function WerKenntMehrInner({
   questions,
+  order,
   resumeAtEnd,
   gameTitle,
   scoringMode,
@@ -129,7 +135,7 @@ function WerKenntMehrInner({
   // Resuming (back-navigation): open at the last question's answer phase. The
   // live per-team count of that round isn't reconstructed — the answer is shown
   // for review (see specs/game-back-review.md).
-  const [qIdx, setQIdx] = useState(() => (resumeAtEnd ? Math.max(0, questions.length - 1) : 0));
+  const [qIdx, setQIdx, qKey] = useLiveQuestionIndex(order, resumeAtEnd);
   const [phase, setPhase] = useState<Phase>(resumeAtEnd ? 'answer' : 'question');
   const [team1Sel, setTeam1Sel] = useState(false);
   const [team2Sel, setTeam2Sel] = useState(false);
@@ -140,8 +146,10 @@ function WerKenntMehrInner({
   // input. Reset on leaving the answer phase.
   const [scoringActive, setScoringActive] = useState(false);
   // Standard mode only: per-round round-win record the host keeps on the GM
-  // ("wer hatte mehr?"). Keyed by qIdx so back-navigation reveals the recorded
-  // selection; the example round (qIdx 0) is never counted. Purely a scorekeeping
+  // ("wer hatte mehr?"). Keyed by the question's stable SLOT — not its index, which
+  // a live question add/remove shifts and would silently reassign every recorded
+  // round to a different question. Back-navigation still reveals the recorded
+  // selection; the example round (slot 0) is never counted. Purely a scorekeeping
   // aid — the host still confirms the overall winner on the summary screen.
   const [roundWins, setRoundWins] = useState<Record<number, 'team1' | 'team2' | 'draw'>>({});
 
@@ -215,8 +223,8 @@ function WerKenntMehrInner({
     let t1Wins = 0;
     let t2Wins = 0;
     let draws = 0;
-    for (const [idx, winner] of Object.entries(roundWins)) {
-      if (Number(idx) === 0) continue;
+    for (const [slot, winner] of Object.entries(roundWins)) {
+      if (Number(slot) === EXAMPLE_SLOT_ID) continue;
       if (winner === 'team1') t1Wins += 1;
       else if (winner === 'team2') t2Wins += 1;
       else draws += 1;
@@ -242,7 +250,7 @@ function WerKenntMehrInner({
     } else {
       onGameComplete();
     }
-  }, [qIdx, questions.length, isStandard, pointSystemEnabled, onGameComplete]);
+  }, [qIdx, questions.length, isStandard, pointSystemEnabled, onGameComplete, setQIdx]);
 
   const awardAndAdvance = useCallback((rawCount: string) => {
     if (pointSystemEnabled && !isExample) {
@@ -312,7 +320,7 @@ function WerKenntMehrInner({
       return true;
     }
     return false;
-  }, [phase, qIdx]);
+  }, [phase, qIdx, setQIdx]);
 
   useEffect(() => {
     setNavHandler(handleNext);
@@ -343,7 +351,7 @@ function WerKenntMehrInner({
         // system get plain nav with no scoring controls.
         setNavState({});
         if (pointSystemEnabled && !isExample) {
-          const sel = roundWins[qIdx];
+          const sel = roundWins[qKey];
           controls.push({
             type: 'button-group',
             id: 'round-winner',
@@ -402,7 +410,7 @@ function WerKenntMehrInner({
       setNavState({});
     }
     setGamemasterControls(controls);
-  }, [phase, qIdx, count, team1Sel, team2Sel, isExample, isStandard, pointSystemEnabled, team1Members, team2Members, t1, t2, roundWins, tallyText, state.teams.orderSwapped, state.settings.teamMirrorEnabled, setGamemasterControls, setNavState]);
+  }, [phase, qIdx, qKey, count, team1Sel, team2Sel, isExample, isStandard, pointSystemEnabled, team1Members, team2Members, t1, t2, roundWins, tallyText, state.teams.orderSwapped, state.settings.teamMirrorEnabled, setGamemasterControls, setNavState]);
 
   // Gamemaster command routing.
   const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
@@ -413,12 +421,12 @@ function WerKenntMehrInner({
       // when the already-selected button is tapped again (so mis-taps are undoable).
       const pick = cmd.controlId === 'round-team1' ? 'team1' : cmd.controlId === 'round-team2' ? 'team2' : 'draw';
       setRoundWins(prev => {
-        if (prev[qIdx] === pick) {
+        if (prev[qKey] === pick) {
           const next = { ...prev };
-          delete next[qIdx];
+          delete next[qKey];
           return next;
         }
-        return { ...prev, [qIdx]: pick };
+        return { ...prev, [qKey]: pick };
       });
     }
     else if (cmd.controlId === 'final-team1') finishGame({ team1: true, team2: false });
@@ -433,7 +441,7 @@ function WerKenntMehrInner({
       setCount(next);
       awardAndAdvance(next);
     }
-  }, [awardAndAdvance, finishGame, qIdx]);
+  }, [awardAndAdvance, finishGame, qKey]);
 
   useEffect(() => {
     setCommandHandler(commandHandlerFn);
@@ -453,7 +461,7 @@ function WerKenntMehrInner({
   // re-arm until the next question.
   useEffect(() => {
     setGameTimer(phase === 'question' && q?.timer ? q.timer : null);
-  }, [qIdx, phase, q?.timer, setGameTimer]);
+  }, [qKey, phase, q?.timer, setGameTimer]);
 
   // Answer-phase scroll anchor:
   //  - before scoring: anchor to the ANSWER (same target as the GM "Antwort"
@@ -466,7 +474,7 @@ function WerKenntMehrInner({
   // Summary has no answer to show, so it keeps the bottom anchor.
   const followControls = scoringActive && !isStandard;
   useQuizAutoScroll(
-    `${qIdx}:${phase}:${followControls}`,
+    `${qKey}:${phase}:${followControls}`,
     phase === 'summary' ? 'bottom' : phase === 'answer' ? (followControls ? 'bottom' : 'answer') : 'top',
   );
 

@@ -2,58 +2,26 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { GameComponentProps } from './types';
 import type { RankingConfig, RankingQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterCommand, GamemasterControl } from '@/types/game';
-import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
+import { useQuestionOrder, type QuestionOrderHandle } from '@/hooks/useQuestionOrder';
+import { useLiveQuestionIndex } from '@/hooks/useLiveQuestionIndex';
 import { useArrowRightLongPress } from '@/hooks/useArrowRightLongPress';
 import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
 import { safePlay } from '@/utils/safePlay';
 import { toMediaSrc } from '@/utils/assetUrl';
 import { useMusicPlayer } from '@/context/MusicContext';
 import { fadeAudio } from '@/utils/fadeAudio';
+import { mulberry32 } from '@/utils/questions';
+// Shared with the live question-order reconciler, which classifies edits to the
+// question LIST the same way this game classifies edits to one question's answers.
+import { diffSingleElement } from '@/utils/questionOrder';
 import BaseGameWrapper from './BaseGameWrapper';
-
-// Classify how `next` differs from `prev` as a single structural edit. Used to
-// reconcile the progressive-reveal count when a question's answers are edited
-// live. A pure text edit / reorder / multi-change is reported as 'same' (equal)
-// or 'complex' so the caller falls back to clamping rather than mis-shifting.
-type AnswerDiff =
-  | { type: 'same' }
-  | { type: 'complex' }
-  | { type: 'removed'; index: number }
-  | { type: 'added'; index: number };
-
-function diffSingleElement(prev: string[], next: string[]): AnswerDiff {
-  if (prev.length === next.length) {
-    return prev.every((v, i) => v === next[i]) ? { type: 'same' } : { type: 'complex' };
-  }
-  if (next.length === prev.length - 1) {
-    let d = next.length; // default: the removed element was the last one
-    for (let i = 0; i < next.length; i++) {
-      if (prev[i] !== next[i]) { d = i; break; }
-    }
-    for (let i = 0; i < next.length; i++) {
-      if (next[i] !== prev[i < d ? i : i + 1]) return { type: 'complex' };
-    }
-    return { type: 'removed', index: d };
-  }
-  if (next.length === prev.length + 1) {
-    let ins = prev.length; // default: the added element is at the end
-    for (let i = 0; i < prev.length; i++) {
-      if (next[i] !== prev[i]) { ins = i; break; }
-    }
-    for (let i = 0; i < prev.length; i++) {
-      if (prev[i] !== next[i < ins ? i : i + 1]) return { type: 'complex' };
-    }
-    return { type: 'added', index: ins };
-  }
-  return { type: 'complex' };
-}
 
 export default function Ranking(props: GameComponentProps) {
   const config = props.config as RankingConfig;
   const music = useMusicPlayer();
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  const questions = useShuffledQuestions(config.questions, config.randomizeQuestions, config.questionLimit, props.gameId);
+  const { questions, order } = useQuestionOrder(config.questions, config.randomizeQuestions, config.questionLimit, props.gameId);
 
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
   // When any question carries answer audio, mute the ambient background music
@@ -87,10 +55,12 @@ export default function Ranking(props: GameComponentProps) {
       onNextGame={props.onNextGame}
       onPrevGame={props.onPrevGame}
       resumeAtEnd={props.resumeAtEnd}
+      order={order}
     >
       {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setAnswerRevealed }) => (
         <RankingInner
           questions={questions}
+          order={order}
           resumeAtEnd={resumeAtEnd}
           gameTitle={config.title}
           audioRef={audioRef}
@@ -109,6 +79,7 @@ export default function Ranking(props: GameComponentProps) {
 
 interface InnerProps {
   questions: RankingQuestion[];
+  order: QuestionOrderHandle;
   resumeAtEnd: boolean;
   gameTitle: string;
   audioRef: React.RefObject<HTMLAudioElement | null>;
@@ -121,13 +92,13 @@ interface InnerProps {
   setAnswerRevealed: (revealed: boolean) => void;
 }
 
-function RankingInner({ questions, resumeAtEnd, gameTitle, audioRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setAnswerRevealed }: InnerProps) {
-  // Resuming (back-navigation): open at the last question, all ranks revealed
-  // (this game's "answer" is the fully-revealed list).
-  const lastIdx = Math.max(0, questions.length - 1);
-  const [qIdx, setQIdx] = useState(() => (resumeAtEnd ? lastIdx : 0));
+function RankingInner({ questions, order, resumeAtEnd, gameTitle, audioRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setAnswerRevealed }: InnerProps) {
+  // Resuming (back-navigation): open at the last question asked, all ranks
+  // revealed (this game's "answer" is the fully-revealed list).
+  const initialIdx = resumeAtEnd ? order.resumeIndex : 0;
+  const [qIdx, setQIdx, qKey] = useLiveQuestionIndex(order, resumeAtEnd);
   const [revealedCount, setRevealedCount] = useState(() =>
-    resumeAtEnd ? (questions[lastIdx]?.answers ?? []).filter(a => a && a.trim()).length : 0,
+    resumeAtEnd ? (questions[initialIdx]?.answers ?? []).filter(a => a && a.trim()).length : 0,
   );
 
   const hasPlayedRef = useRef(false);
@@ -152,18 +123,21 @@ function RankingInner({ questions, resumeAtEnd, gameTitle, audioRef, onGameCompl
   // When a question carries `items` (the bare candidates to sort — distinct from
   // `answers`, which reveal the solution), the guessing phase presents them in a
   // scrambled order so teams arrange the given items instead of recalling them.
-  // Shuffled once per question mount (stable across re-renders, like Q1's
-  // statement shuffle) → a fresh order each playthrough.
+  // Seeded off the question's slot: a fresh order each playthrough, but stable
+  // across a live edit — an unseeded shuffle here re-scrambled the candidates in
+  // front of the audience on every admin save (specs/live-question-order.md).
   const items = useMemo(() => (q?.items ?? []).filter(a => a && a.trim()), [q]);
+  const poolSeed = order.slotSeed(qIdx);
   const poolItems = useMemo(() => {
     if (items.length <= 1) return items;
+    const rand = mulberry32(poolSeed);
     const arr = [...items];
     for (let i = arr.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
+      const j = Math.floor(rand() * (i + 1));
       [arr[i], arr[j]] = [arr[j]!, arr[i]!];
     }
     return arr;
-  }, [items]);
+  }, [items, poolSeed]);
   const showPool = revealedCount === 0 && poolItems.length > 0;
 
   useEffect(() => {
@@ -223,7 +197,7 @@ function RankingInner({ questions, resumeAtEnd, gameTitle, audioRef, onGameCompl
     } else {
       audio.removeAttribute('src');
     }
-  }, [qIdx, answerAudio, audioRef]);
+  }, [qKey, answerAudio, audioRef]);
 
   // Keep the GM Pause/Abspielen label in sync with the shared audio element.
   useEffect(() => {
@@ -308,15 +282,17 @@ function RankingInner({ questions, resumeAtEnd, gameTitle, audioRef, onGameCompl
   // positional prefix (answers.slice(0, revealedCount)), so naively deleting a
   // *revealed* answer would slide the next hidden answer into view. Instead,
   // adjust revealedCount so a deleted item simply disappears, leaving the
-  // reveal ready for the next one. A qIdx change is a navigation (handled by
-  // the nav handlers) — skip it. See specs/live-config-reload.md.
+  // reveal ready for the next one. A question CHANGE is a navigation (handled
+  // by the nav handlers) — skip it. Keyed on `qKey`, so a live add/remove that
+  // only shifts the index still reconciles instead of being read as navigation.
+  // See specs/live-config-reload.md and specs/live-question-order.md.
   const revealedCountRef = useRef(revealedCount);
   revealedCountRef.current = revealedCount;
-  const revealBaselineRef = useRef<{ qIdx: number; answers: string[] }>({ qIdx: -1, answers: [] });
+  const revealBaselineRef = useRef<{ qKey: number; answers: string[] }>({ qKey: -1, answers: [] });
   useEffect(() => {
     const prev = revealBaselineRef.current;
-    revealBaselineRef.current = { qIdx, answers };
-    if (prev.qIdx !== qIdx || prev.answers === answers) return;
+    revealBaselineRef.current = { qKey, answers };
+    if (prev.qKey !== qKey || prev.answers === answers) return;
     const rc = revealedCountRef.current;
     const diff = diffSingleElement(prev.answers, answers);
     if (diff.type === 'removed' && diff.index < rc) {
@@ -326,7 +302,7 @@ function RankingInner({ questions, resumeAtEnd, gameTitle, audioRef, onGameCompl
     } else if (rc > answers.length) {
       setRevealedCount(answers.length);
     }
-  }, [qIdx, answers]);
+  }, [qKey, answers]);
 
   const handleNext = useCallback(() => {
     // "Listen first": on a fresh audio question the first press only starts the
@@ -344,7 +320,7 @@ function RankingInner({ questions, resumeAtEnd, gameTitle, audioRef, onGameCompl
     } else {
       onGameComplete();
     }
-  }, [needsAudioCue, audioCued, revealedCount, answersLength, qIdx, questions.length, onGameComplete]);
+  }, [needsAudioCue, audioCued, revealedCount, answersLength, qIdx, questions.length, onGameComplete, setQIdx]);
 
   const handleBack = useCallback((): boolean => {
     if (revealedCount > 0) {
@@ -364,7 +340,7 @@ function RankingInner({ questions, resumeAtEnd, gameTitle, audioRef, onGameCompl
       return true;
     }
     return false;
-  }, [revealedCount, audioCued, qIdx, questions]);
+  }, [revealedCount, audioCued, qIdx, questions, setQIdx]);
 
   useEffect(() => {
     setNavHandler(handleNext);
@@ -444,7 +420,7 @@ function RankingInner({ questions, resumeAtEnd, gameTitle, audioRef, onGameCompl
   // comes into view — identical behaviour to simple-quiz (reduces the top space
   // when the content is too long). Disabled once the reveal starts so it never
   // fights the scroll-to-bottom effect below.
-  useQuizAutoScroll(qIdx, 'top', 'instant', revealedCount === 0);
+  useQuizAutoScroll(qKey, 'top', 'instant', revealedCount === 0);
 
   useEffect(() => {
     if (revealedCount === 0) return;
@@ -457,7 +433,7 @@ function RankingInner({ questions, resumeAtEnd, gameTitle, audioRef, onGameCompl
       timers.push(window.setTimeout(scrollToBottom, delay));
     });
     return () => { timers.forEach(clearTimeout); };
-  }, [revealedCount, qIdx]);
+  }, [revealedCount, qKey]);
 
   // Short ArrowRight tap reveals the next answer; holding it (≥500 ms) reveals
   // all remaining answers at once. Disabled once everything is revealed so the

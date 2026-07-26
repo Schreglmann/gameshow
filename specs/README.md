@@ -36,6 +36,7 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | gameOrder cascade-cleanup on game/instance delete | [config-gameorder-cascade.md](config-gameorder-cascade.md) | ✅ Implemented |
 | Disable a game/instance (hide from add-to-gameshow pickers) | [game-disable.md](game-disable.md) | ✅ Implemented |
 | Live config/games/theme reload (no page refresh) | [live-config-reload.md](live-config-reload.md) | ✅ Implemented |
+| Live question order (editing the playing game's questions) | [live-question-order.md](live-question-order.md) | ✅ Implemented |
 | Base game wrapper | [base-game-wrapper.md](base-game-wrapper.md) | ✅ Implemented |
 | Background music | [background-music.md](background-music.md) | ✅ Implemented |
 | Admin screen | [admin-screen.md](admin-screen.md) | ✅ Implemented |

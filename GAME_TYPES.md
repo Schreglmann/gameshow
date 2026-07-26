@@ -838,7 +838,7 @@ Videos often live only on the NAS, which may not be mounted at the live event. I
 - **`type`** (required): The game type identifier
 - **`title`** (required): Display name for the game
 - **`rules`** (optional): Array of rule strings displayed before the game starts
-- **`randomizeQuestions`** (optional): Set to `true` to randomize question order (preserves first question as example)
+- **`randomizeQuestions`** (optional): Set to `true` to randomize question order (preserves first question as example). The dealt order is fixed for the session, so editing the game's questions **while it is being played** does not re-shuffle it: added questions queue at the end, removed ones drop out, and the host stays on the same question — see [specs/live-question-order.md](specs/live-question-order.md)
 
 ### Notes:
 - First question is always treated as an example question

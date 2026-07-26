@@ -2,7 +2,9 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { GameComponentProps } from './types';
 import type { ImageGuessConfig, ImageGuessQuestion } from '@/types/config';
 import type { GamemasterAnswerData } from '@/types/game';
-import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
+import { useQuestionOrder, type QuestionOrderHandle } from '@/hooks/useQuestionOrder';
+import { useLiveQuestionIndex } from '@/hooks/useLiveQuestionIndex';
+import { mulberry32 } from '@/utils/questions';
 import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
 import { useFullscreen, useRegisterFullscreenMedia } from '@/context/FullscreenContext';
 import { toMediaSrc } from '@/utils/assetUrl';
@@ -60,9 +62,13 @@ function pixelateWidth(t: number, fullWidth: number): number {
 
 // ── Helpers ──
 
-function resolveObfuscation(value?: string): EffectType {
+// A question without an explicit `obfuscation` gets a random effect — SEEDED off
+// its slot, so it is fresh per playthrough but survives a live edit. Rolling it
+// unseeded re-picked the effect of the on-screen image on every admin save.
+// See specs/live-question-order.md.
+function resolveObfuscation(value: string | undefined, seed: number): EffectType {
   if (ALL_EFFECTS.includes(value as EffectType)) return value as EffectType;
-  return ALL_EFFECTS[Math.floor(Math.random() * ALL_EFFECTS.length)]!;
+  return ALL_EFFECTS[Math.floor(mulberry32(seed)() * ALL_EFFECTS.length)]!;
 }
 
 function useImageLoader(src: string) {
@@ -101,7 +107,7 @@ interface CanvasEffectProps {
 
 export default function ImageGuess(props: GameComponentProps) {
   const config = props.config as ImageGuessConfig;
-  const questions = useShuffledQuestions(config.questions, config.randomizeQuestions, config.questionLimit, props.gameId);
+  const { questions, order } = useQuestionOrder(config.questions, config.randomizeQuestions, config.questionLimit, props.gameId);
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
 
   return (
@@ -116,10 +122,12 @@ export default function ImageGuess(props: GameComponentProps) {
       onNextGame={props.onNextGame}
       onPrevGame={props.onPrevGame}
       resumeAtEnd={props.resumeAtEnd}
+      order={order}
     >
       {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setAnswerRevealed }) => (
         <ImageGuessInner
           questions={questions}
+          order={order}
           resumeAtEnd={resumeAtEnd}
           gameTitle={config.title}
           onGameComplete={onGameComplete}
@@ -135,6 +143,7 @@ export default function ImageGuess(props: GameComponentProps) {
 
 interface InnerProps {
   questions: ImageGuessQuestion[];
+  order: QuestionOrderHandle;
   resumeAtEnd: boolean;
   gameTitle: string;
   onGameComplete: () => void;
@@ -144,10 +153,10 @@ interface InnerProps {
   setAnswerRevealed: (revealed: boolean) => void;
 }
 
-function ImageGuessInner({ questions, resumeAtEnd, gameTitle, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setAnswerRevealed }: InnerProps) {
+function ImageGuessInner({ questions, order, resumeAtEnd, gameTitle, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setAnswerRevealed }: InnerProps) {
   // Resuming (back-navigation): open at the last question, answer revealed and
   // the reveal animation complete (percent 100).
-  const [qIdx, setQIdx] = useState(() => (resumeAtEnd ? Math.max(0, questions.length - 1) : 0));
+  const [qIdx, setQIdx, qKey] = useLiveQuestionIndex(order, resumeAtEnd);
   const [showAnswer, setShowAnswer] = useState(resumeAtEnd);
   const [percent, setPercent] = useState(resumeAtEnd ? 100 : 0);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -155,8 +164,8 @@ function ImageGuessInner({ questions, resumeAtEnd, gameTitle, onGameComplete, se
   const { open: openLightbox } = useFullscreen();
 
   const resolvedEffects = useMemo(() =>
-    questions.map(q => resolveObfuscation(q.obfuscation)),
-    [questions]
+    questions.map((q, i) => resolveObfuscation(q.obfuscation, order.slotSeed(i))),
+    [questions, order]
   );
 
   const q = questions[qIdx];
@@ -201,7 +210,7 @@ function ImageGuessInner({ questions, resumeAtEnd, gameTitle, onGameComplete, se
   // Scroll the card just below the sticky header when it's taller than the
   // viewport — same behaviour as SimpleQuiz. Disabled on reveal so the
   // scroll-to-bottom effect above can bring the answer text into view instead.
-  useQuizAutoScroll(qIdx, 'top', 'instant', !showAnswer);
+  useQuizAutoScroll(qKey, 'top', 'instant', !showAnswer);
 
   // JS-driven animation for blur and zoom (canvas modes handle themselves)
   useEffect(() => {
@@ -249,7 +258,7 @@ function ImageGuessInner({ questions, resumeAtEnd, gameTitle, onGameComplete, se
 
     rafRef.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [qIdx, duration, obfuscation, showAnswer, isImgMode]);
+  }, [qKey, duration, obfuscation, showAnswer, isImgMode]);
 
   const handleNext = useCallback(() => {
     if (!showAnswer) {
@@ -263,7 +272,7 @@ function ImageGuessInner({ questions, resumeAtEnd, gameTitle, onGameComplete, se
         onGameComplete();
       }
     }
-  }, [showAnswer, qIdx, questions.length, onGameComplete]);
+  }, [showAnswer, qIdx, questions.length, onGameComplete, setQIdx]);
 
   const handleBack = useCallback((): boolean => {
     if (showAnswer) {
@@ -275,7 +284,7 @@ function ImageGuessInner({ questions, resumeAtEnd, gameTitle, onGameComplete, se
       return true;
     }
     return false;
-  }, [showAnswer, qIdx]);
+  }, [showAnswer, qIdx, setQIdx]);
 
   useEffect(() => {
     setNavHandler(handleNext);

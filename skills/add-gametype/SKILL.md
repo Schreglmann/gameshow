@@ -90,7 +90,9 @@ Use `import type` for type-only imports throughout.
 Rules:
 - **Must** wrap in `<BaseGameWrapper>` — it owns phase transitions (landing → rules → game → points → next)
 - **Must** call `onGameComplete()` after the last question (not `onNextGame`)
-- Use `randomizeQuestions()` utility from `@/utils` if question shuffling is needed
+- **Must** take its question list from `useQuestionOrder(config.questions, config.randomizeQuestions, config.questionLimit, props.gameId)` and its current index from `useLiveQuestionIndex(order, resumeAtEnd)` — never a raw `useState` for `qIdx`. Pass the returned `order` to `<BaseGameWrapper order={order}>` and down to the inner component. This is what keeps the host on the same question when the game's questions are edited **during a live show**; a component that rolls its own index re-deals the deck on every admin save. See [specs/live-question-order.md](../../specs/live-question-order.md)
+- Key per-question effects (audio/video load, timers, auto-scroll, animations) on the returned **`qKey`**, not on `qIdx` — `qIdx` is a position and shifts when a question is added or removed; `qKey` is the question's identity. Keep `qIdx` in the `setGamemasterData` payload, where the number is the point
+- Anything the question shuffles or picks at random internally (clue order, candidate pool) must be seeded off `order.slotSeed(qIdx)` — an unseeded `useMemo` re-rolls on every live re-fetch
 - All player-facing text must be in **German** — no English strings in the UI
 - Follow the same props interface: `GameComponentProps` from `@/components/games/types`
 

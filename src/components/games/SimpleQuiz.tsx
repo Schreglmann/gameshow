@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { GameComponentProps } from './types';
 import type { SimpleQuizConfig, SimpleQuizQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
-import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
+import { useQuestionOrder, type QuestionOrderHandle } from '@/hooks/useQuestionOrder';
+import { useLiveQuestionIndex } from '@/hooks/useLiveQuestionIndex';
 import { toMediaSrc } from '@/utils/assetUrl';
 import { useMusicPlayer } from '@/context/MusicContext';
 import { safePlay } from '@/utils/safePlay';
@@ -21,7 +22,7 @@ export default function SimpleQuiz(props: GameComponentProps) {
   const answerAudioRef = useRef<HTMLAudioElement | null>(null);
   const questionAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  const questions = useShuffledQuestions(config.questions, config.randomizeQuestions, config.questionLimit, props.gameId);
+  const { questions, order } = useQuestionOrder(config.questions, config.randomizeQuestions, config.questionLimit, props.gameId);
 
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
   const hasAudio = questions.some(q => q.answerAudio || q.questionAudio);
@@ -69,10 +70,12 @@ export default function SimpleQuiz(props: GameComponentProps) {
       onNextGame={props.onNextGame}
       onPrevGame={props.onPrevGame}
       resumeAtEnd={props.resumeAtEnd}
+      order={order}
     >
       {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setStopAudioHandler, setAnswerRevealed, setGameTimer }) => (
         <QuizInner
           questions={questions}
+          order={order}
           resumeAtEnd={resumeAtEnd}
           gameTitle={config.title}
           answerAudioRef={answerAudioRef}
@@ -95,6 +98,7 @@ export default function SimpleQuiz(props: GameComponentProps) {
 
 interface QuizInnerProps {
   questions: SimpleQuizQuestion[];
+  order: QuestionOrderHandle;
   resumeAtEnd: boolean;
   gameTitle: string;
   answerAudioRef: React.RefObject<HTMLAudioElement | null>;
@@ -111,11 +115,13 @@ interface QuizInnerProps {
   setGameTimer: (seconds: number | null) => void;
 }
 
-function QuizInner({ questions, resumeAtEnd, gameTitle, answerAudioRef, questionAudioRef, skipAudioCleanupRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setStopAudioHandler, setAnswerRevealed, setGameTimer }: QuizInnerProps) {
+function QuizInner({ questions, order, resumeAtEnd, gameTitle, answerAudioRef, questionAudioRef, skipAudioCleanupRef, onGameComplete, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setStopAudioHandler, setAnswerRevealed, setGameTimer }: QuizInnerProps) {
   const gmConnected = useGmConnected();
   // Resuming (entered via back-navigation): open at the last question with its
   // answer revealed, so back-stepping walks the whole game in reverse.
-  const [qIdx, setQIdx] = useState(() => (resumeAtEnd ? Math.max(0, questions.length - 1) : 0));
+  // `qKey` is the question's identity: per-question effects key on it so a live
+  // question add/remove, which only shifts `qIdx`, doesn't restart them.
+  const [qIdx, setQIdx, qKey] = useLiveQuestionIndex(order, resumeAtEnd);
   const [showAnswer, setShowAnswer] = useState(resumeAtEnd);
   const [audioCurrentTime, setAudioCurrentTime] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
@@ -150,22 +156,28 @@ function QuizInner({ questions, resumeAtEnd, gameTitle, answerAudioRef, question
 
   useEffect(() => {
     setAssetFailed(false);
-  }, [qIdx]);
+  }, [qKey]);
+
+  // The index is read through a ref purely so these stay referentially stable:
+  // they feed the audio effects below, and a callback that changed identity on
+  // every index shift would restart playback for a question that never moved.
+  const qIdxRef = useRef(qIdx);
+  qIdxRef.current = qIdx;
 
   const onPlayError = useCallback((err: unknown, attempt: number) => {
-    console.warn('[asset-resilience] SimpleQuiz play failed', { qIdx, attempt, err });
+    console.warn('[asset-resilience] SimpleQuiz play failed', { qIdx: qIdxRef.current, attempt, err });
     if (attempt >= 1) setAssetFailed(true);
-  }, [qIdx]);
+  }, []);
 
   const onAssetFailure = useCallback(() => {
-    console.warn('[asset-resilience] SimpleQuiz image final failure', { qIdx });
+    console.warn('[asset-resilience] SimpleQuiz image final failure', { qIdx: qIdxRef.current });
     setAssetFailed(true);
-  }, [qIdx]);
+  }, []);
 
   const onSlowAudio = useCallback((kind: 'question' | 'answer') => {
-    console.warn('[asset-resilience] SimpleQuiz audio slow-load timeout', { qIdx, kind });
+    console.warn('[asset-resilience] SimpleQuiz audio slow-load timeout', { qIdx: qIdxRef.current, kind });
     setAssetFailed(true);
-  }, [qIdx]);
+  }, []);
 
   useEffect(() => {
     if (!q) return;
@@ -228,7 +240,7 @@ function QuizInner({ questions, resumeAtEnd, gameTitle, answerAudioRef, question
         onGameComplete();
       }
     }
-  }, [showAnswer, qIdx, questions, q, onGameComplete, answerAudioRef, questionAudioRef]);
+  }, [showAnswer, qIdx, questions, q, onGameComplete, answerAudioRef, questionAudioRef, setQIdx]);
 
   // Back nav
   const handleBack = useCallback((): boolean => {
@@ -291,7 +303,7 @@ function QuizInner({ questions, resumeAtEnd, gameTitle, answerAudioRef, question
       return true;
     }
     return false;
-  }, [showAnswer, qIdx, q, questionAudioRef, answerAudioRef, onPlayError]);
+  }, [showAnswer, qIdx, q, questionAudioRef, answerAudioRef, onPlayError, setQIdx]);
 
   useEffect(() => {
     setNavHandler(handleNext);
@@ -359,9 +371,9 @@ function QuizInner({ questions, resumeAtEnd, gameTitle, answerAudioRef, question
   // because these deps don't change on stop.
   useEffect(() => {
     setGameTimer(!showAnswer && q?.timer ? q.timer : null);
-  }, [qIdx, q?.timer, showAnswer, setGameTimer]);
+  }, [qKey, q?.timer, showAnswer, setGameTimer]);
 
-  useQuizAutoScroll(qIdx);
+  useQuizAutoScroll(qKey);
 
   // Auto-play answer audio when answer is revealed.
   // No cleanup here — audio intentionally keeps playing when advancing questions.
@@ -470,7 +482,7 @@ function QuizInner({ questions, resumeAtEnd, gameTitle, answerAudioRef, question
       questionAudioRef.current = null;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [qIdx, q?.questionAudio, reloadKey]); // intentionally excludes showAnswer — audio keeps playing while answer is shown
+  }, [qKey, q?.questionAudio, reloadKey]); // intentionally excludes showAnswer — audio keeps playing while answer is shown
 
   // (Cleanup on unmount is handled by the outer SimpleQuiz component)
 

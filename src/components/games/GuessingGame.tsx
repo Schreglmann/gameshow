@@ -3,7 +3,8 @@ import type { GameComponentProps } from './types';
 import type { GuessingGameConfig, GuessingGameQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
 import { formatNumber } from '@/utils/questions';
-import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
+import { useQuestionOrder, type QuestionOrderHandle } from '@/hooks/useQuestionOrder';
+import { useLiveQuestionIndex } from '@/hooks/useLiveQuestionIndex';
 import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
 import { toMediaSrc } from '@/utils/assetUrl';
 import { useGameContext } from '@/context/GameContext';
@@ -15,7 +16,7 @@ import { useFullscreen, useRegisterFullscreenMedia } from '@/context/FullscreenC
 export default function GuessingGame(props: GameComponentProps) {
   const config = props.config as GuessingGameConfig;
 
-  const questions = useShuffledQuestions(config.questions, config.randomizeQuestions, undefined, props.gameId);
+  const { questions, order } = useQuestionOrder(config.questions, config.randomizeQuestions, undefined, props.gameId);
 
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
 
@@ -34,6 +35,7 @@ export default function GuessingGame(props: GameComponentProps) {
       {({ onGameComplete, setNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, setAnswerRevealed }) => (
         <GuessingInner
           questions={questions}
+          order={order}
           gameTitle={config.title}
           onGameComplete={onGameComplete}
           setNavHandler={setNavHandler}
@@ -50,6 +52,7 @@ export default function GuessingGame(props: GameComponentProps) {
 
 interface GuessingInnerProps {
   questions: GuessingGameQuestion[];
+  order: QuestionOrderHandle;
   gameTitle: string;
   onGameComplete: () => void;
   setNavHandler: (fn: (() => void) | null) => void;
@@ -60,11 +63,11 @@ interface GuessingInnerProps {
   setAnswerRevealed: (revealed: boolean) => void;
 }
 
-function GuessingInner({ questions, gameTitle, onGameComplete, setNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, setAnswerRevealed }: GuessingInnerProps) {
+function GuessingInner({ questions, order, gameTitle, onGameComplete, setNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, setAnswerRevealed }: GuessingInnerProps) {
   const { state } = useGameContext();
   const t1 = teamName(state.teams, 1);
   const t2 = teamName(state.teams, 2);
-  const [qIdx, setQIdx] = useState(0);
+  const [qIdx, setQIdx, qKey] = useLiveQuestionIndex(order);
   const [phase, setPhase] = useState<'question' | 'result'>('question');
   const [team1Guess, setTeam1Guess] = useState('');
   const [team2Guess, setTeam2Guess] = useState('');
@@ -135,7 +138,7 @@ function GuessingInner({ questions, gameTitle, onGameComplete, setNavHandler, se
         onGameComplete();
       }
     }
-  }, [phase, qIdx, questions.length, onGameComplete]);
+  }, [phase, qIdx, questions.length, onGameComplete, setQIdx]);
 
   useEffect(() => {
     setNavHandler(handleNext);
@@ -198,7 +201,7 @@ function GuessingInner({ questions, gameTitle, onGameComplete, setNavHandler, se
     setCommandHandler(commandHandlerFn);
   }, [commandHandlerFn, setCommandHandler]);
 
-  useQuizAutoScroll(`${qIdx}:${phase}`);
+  useQuizAutoScroll(`${qKey}:${phase}`);
 
   if (!q) return null;
 

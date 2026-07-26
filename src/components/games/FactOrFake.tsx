@@ -2,7 +2,8 @@ import { useState, useEffect, useLayoutEffect, useCallback } from 'react';
 import type { GameComponentProps } from './types';
 import type { FactOrFakeConfig, FactOrFakeQuestion } from '@/types/config';
 import type { GamemasterAnswerData } from '@/types/game';
-import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
+import { useQuestionOrder, type QuestionOrderHandle } from '@/hooks/useQuestionOrder';
+import { useLiveQuestionIndex } from '@/hooks/useLiveQuestionIndex';
 import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
 import { toMediaSrc } from '@/utils/assetUrl';
 import BaseGameWrapper from './BaseGameWrapper';
@@ -11,7 +12,7 @@ import { useFullscreen, useRegisterFullscreenMedia } from '@/context/FullscreenC
 export default function FactOrFake(props: GameComponentProps) {
   const config = props.config as FactOrFakeConfig;
 
-  const questions = useShuffledQuestions(config.questions, config.randomizeQuestions, undefined, props.gameId);
+  const { questions, order } = useQuestionOrder(config.questions, config.randomizeQuestions, undefined, props.gameId);
 
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
 
@@ -30,6 +31,7 @@ export default function FactOrFake(props: GameComponentProps) {
       {({ onGameComplete, setNavHandler, setGamemasterData, setAnswerRevealed }) => (
         <FactOrFakeInner
           questions={questions}
+          order={order}
           gameTitle={config.title}
           onGameComplete={onGameComplete}
           setNavHandler={setNavHandler}
@@ -43,6 +45,7 @@ export default function FactOrFake(props: GameComponentProps) {
 
 interface InnerProps {
   questions: FactOrFakeQuestion[];
+  order: QuestionOrderHandle;
   gameTitle: string;
   onGameComplete: () => void;
   setNavHandler: (fn: (() => void) | null) => void;
@@ -50,8 +53,8 @@ interface InnerProps {
   setAnswerRevealed: (revealed: boolean) => void;
 }
 
-function FactOrFakeInner({ questions, gameTitle, onGameComplete, setNavHandler, setGamemasterData, setAnswerRevealed }: InnerProps) {
-  const [qIdx, setQIdx] = useState(0);
+function FactOrFakeInner({ questions, order, gameTitle, onGameComplete, setNavHandler, setGamemasterData, setAnswerRevealed }: InnerProps) {
+  const [qIdx, setQIdx, qKey] = useLiveQuestionIndex(order);
   const [showAnswer, setShowAnswer] = useState(false);
 
   const q = questions[qIdx];
@@ -95,7 +98,7 @@ function FactOrFakeInner({ questions, gameTitle, onGameComplete, setNavHandler, 
         onGameComplete();
       }
     }
-  }, [showAnswer, qIdx, questions.length, onGameComplete]);
+  }, [showAnswer, qIdx, questions.length, onGameComplete, setQIdx]);
 
   useEffect(() => {
     setNavHandler(handleNext);
@@ -104,7 +107,7 @@ function FactOrFakeInner({ questions, gameTitle, onGameComplete, setNavHandler, 
   // Scroll the card just below the sticky header when the question is taller
   // than the viewport — same behaviour as SimpleQuiz. Disabled on reveal so the
   // scroll-to-bottom effect below can bring the full answer into view instead.
-  useQuizAutoScroll(qIdx, 'top', 'instant', !showAnswer);
+  useQuizAutoScroll(qKey, 'top', 'instant', !showAnswer);
 
   // On answer reveal, smooth-scroll all the way to the bottom of the card so
   // the entire reveal (description + answerImage) is visible. Re-fires when
@@ -126,7 +129,7 @@ function FactOrFakeInner({ questions, gameTitle, onGameComplete, setNavHandler, 
     const observer = new ResizeObserver(scrollToBottom);
     observer.observe(card);
     return () => observer.disconnect();
-  }, [showAnswer, qIdx]);
+  }, [showAnswer, qIdx, setQIdx]);
 
   if (!q) return null;
 

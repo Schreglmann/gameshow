@@ -1,8 +1,10 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { GameComponentProps } from './types';
 import type { FinalQuizConfig, FinalQuizQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
 import { toMediaSrc } from '@/utils/assetUrl';
+import { useQuestionOrder, type QuestionOrderHandle } from '@/hooks/useQuestionOrder';
+import { useLiveQuestionIndex } from '@/hooks/useLiveQuestionIndex';
 import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
 import { useGameContext } from '@/context/GameContext';
 import { teamName } from '@/utils/teamNames';
@@ -12,10 +14,10 @@ import { useFullscreen, useRegisterFullscreenMedia } from '@/context/FullscreenC
 
 export default function FinalQuiz(props: GameComponentProps) {
   const config = props.config as FinalQuizConfig;
-  const questions = useMemo(
-    () => [config.questions[0]!, ...config.questions.slice(1).filter(q => !q.disabled)],
-    [config.questions]
-  );
+  // Never randomized, but still routed through useQuestionOrder so a live
+  // question add/remove keeps the host on the same question.
+  // See specs/live-question-order.md.
+  const { questions, order } = useQuestionOrder(config.questions, false, undefined, props.gameId);
 
   return (
     <BaseGameWrapper
@@ -35,6 +37,7 @@ export default function FinalQuiz(props: GameComponentProps) {
       {({ onGameComplete, setNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, setAnswerRevealed }) => (
         <FinalQuizInner
           questions={questions}
+          order={order}
           gameTitle={config.title}
           pointSystemEnabled={props.pointSystemEnabled}
           onGameComplete={onGameComplete}
@@ -53,6 +56,7 @@ export default function FinalQuiz(props: GameComponentProps) {
 
 interface InnerProps {
   questions: FinalQuizQuestion[];
+  order: QuestionOrderHandle;
   gameTitle: string;
   pointSystemEnabled: boolean;
   onGameComplete: () => void;
@@ -65,8 +69,8 @@ interface InnerProps {
   setAnswerRevealed: (revealed: boolean) => void;
 }
 
-function FinalQuizInner({ questions, gameTitle, pointSystemEnabled, onGameComplete, setNavHandler, onAwardPoints, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, setAnswerRevealed }: InnerProps) {
-  const [qIdx, setQIdx] = useState(0);
+function FinalQuizInner({ questions, order, gameTitle, pointSystemEnabled, onGameComplete, setNavHandler, onAwardPoints, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, setAnswerRevealed }: InnerProps) {
+  const [qIdx, setQIdx, qKey] = useLiveQuestionIndex(order);
   const [phase, setPhase] = useState<'question' | 'betting' | 'answer' | 'judging'>('question');
   const { state } = useGameContext();
   const t1 = teamName(state.teams, 1);
@@ -122,7 +126,7 @@ function FinalQuizInner({ questions, gameTitle, pointSystemEnabled, onGameComple
         onGameComplete();
       }
     }
-  }, [phase, qIdx, questions.length, onGameComplete, pointSystemEnabled, showAnswerFn]);
+  }, [phase, qIdx, questions.length, onGameComplete, pointSystemEnabled, showAnswerFn, setQIdx]);
 
   useEffect(() => {
     setNavHandler(handleNext);
@@ -239,7 +243,7 @@ function FinalQuizInner({ questions, gameTitle, pointSystemEnabled, onGameComple
   // Scroll the card just below the sticky header when it overflows — same
   // behaviour as SimpleQuiz. During judging the scoring buttons are the
   // actionable content at the bottom, so anchor the bottom into view instead.
-  useQuizAutoScroll(`${qIdx}:${phase}`, phase === 'judging' ? 'bottom' : 'top');
+  useQuizAutoScroll(`${qKey}:${phase}`, phase === 'judging' ? 'bottom' : 'top');
 
   if (!q) return null;
 

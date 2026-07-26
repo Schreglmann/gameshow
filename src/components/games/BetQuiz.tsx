@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { GameComponentProps } from './types';
 import type { BetQuizConfig, SimpleQuizQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
-import { useShuffledQuestions } from '@/hooks/useShuffledQuestions';
+import { useQuestionOrder, type QuestionOrderHandle } from '@/hooks/useQuestionOrder';
+import { useLiveQuestionIndex } from '@/hooks/useLiveQuestionIndex';
 import { toMediaSrc } from '@/utils/assetUrl';
 import { fadeAudio } from '@/utils/fadeAudio';
 import { useMusicPlayer } from '@/context/MusicContext';
@@ -20,7 +21,7 @@ export default function BetQuiz(props: GameComponentProps) {
   const answerAudioRef = useRef<HTMLAudioElement | null>(null);
   const questionAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  const questions = useShuffledQuestions(config.questions, config.randomizeQuestions, config.questionLimit, props.gameId);
+  const { questions, order } = useQuestionOrder(config.questions, config.randomizeQuestions, config.questionLimit, props.gameId);
 
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
   const hasAudio = questions.some(q => q.answerAudio || q.questionAudio);
@@ -78,10 +79,12 @@ export default function BetQuiz(props: GameComponentProps) {
       onNextGame={props.onNextGame}
       onPrevGame={props.onPrevGame}
       resumeAtEnd={props.resumeAtEnd}
+      order={order}
     >
       {({ onGameComplete, resumeAtEnd, setNavHandler, setBackNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, setStopAudioHandler, setAnswerRevealed, setGameTimer }) => (
         <BetQuizInner
           questions={questions}
+          order={order}
           resumeAtEnd={resumeAtEnd}
           gameTitle={config.title}
           scoringMode={scoringMode}
@@ -110,6 +113,7 @@ type Phase = 'category' | 'question' | 'answer';
 
 interface InnerProps {
   questions: SimpleQuizQuestion[];
+  order: QuestionOrderHandle;
   resumeAtEnd: boolean;
   gameTitle: string;
   scoringMode: 'standard' | 'transfer';
@@ -132,6 +136,7 @@ interface InnerProps {
 
 function BetQuizInner({
   questions,
+  order,
   resumeAtEnd,
   gameTitle,
   scoringMode,
@@ -155,7 +160,7 @@ function BetQuizInner({
   // Resuming (back-navigation): open at the last question's answer phase. The
   // live bet/result of that round isn't reconstructed — the answer is shown for
   // review (see specs/game-back-review.md).
-  const [qIdx, setQIdx] = useState(() => (resumeAtEnd ? Math.max(0, questions.length - 1) : 0));
+  const [qIdx, setQIdx, qKey] = useLiveQuestionIndex(order, resumeAtEnd);
   const [phase, setPhase] = useState<Phase>(resumeAtEnd ? 'answer' : 'category');
   const [bettingTeam, setBettingTeam] = useState<'team1' | 'team2' | null>(null);
   const [bet, setBet] = useState('');
@@ -244,7 +249,7 @@ function BetQuizInner({
     } else {
       onGameComplete();
     }
-  }, [qIdx, questions.length, answerAudioRef, questionAudioRef, onGameComplete]);
+  }, [qIdx, questions.length, answerAudioRef, questionAudioRef, onGameComplete, setQIdx]);
 
   const judgeTeam = useCallback((correct: boolean) => {
     if (bettingTeam == null) return;
@@ -338,7 +343,7 @@ function BetQuizInner({
       return true;
     }
     return false;
-  }, [phase, qIdx, q, answerAudioRef, questionAudioRef]);
+  }, [phase, qIdx, q, answerAudioRef, questionAudioRef, setQIdx]);
 
   useEffect(() => {
     setNavHandler(handleNext);
@@ -478,12 +483,12 @@ function BetQuizInner({
   // clears it in the wrapper and it won't re-arm until the next question.
   useEffect(() => {
     setGameTimer(phase === 'question' && q?.timer ? q.timer : null);
-  }, [qIdx, phase, q?.timer, setGameTimer]);
+  }, [qKey, phase, q?.timer, setGameTimer]);
 
   // Mirror SimpleQuiz: scroll the card just below the sticky header when it
   // overflows the viewport. Re-fires on every qIdx + phase change so each new
   // screen (category / question / answer) is positioned correctly.
-  useQuizAutoScroll(`${qIdx}:${phase}`);
+  useQuizAutoScroll(`${qKey}:${phase}`);
 
   // Auto-play answer audio when answer is revealed
   useEffect(() => {
@@ -583,7 +588,7 @@ function BetQuizInner({
       questionAudioRef.current = null;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [qIdx, phase, q?.questionAudio]);
+  }, [qKey, phase, q?.questionAudio]);
 
   if (!q) return null;
 

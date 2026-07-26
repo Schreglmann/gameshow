@@ -14,7 +14,9 @@ import type {
   ScoreLogEntry,
   CorrectAnswersMap,
   CorrectAnswersByQuestion,
+  QuestionTally,
 } from '@/types/game';
+import { NO_QUESTION_KEY } from '@/types/game';
 import type { ContentChangedPayload } from '@/types/config';
 import { COMEBACK_JOKER_ID } from '@/data/jokers';
 import { fetchSettings } from '@/services/api';
@@ -475,6 +477,7 @@ type Action =
       payload: { gameIndex: number; question: string; team: 'team1' | 'team2'; delta: number };
     }
   | { type: 'SET_CORRECT_ANSWERS'; payload: CorrectAnswersMap }
+  | { type: 'REMAP_QUESTION_TALLY'; payload: { gameIndex: number; moved: readonly (number | null)[] } }
   | { type: 'CLEAR_ALL' };
 
 /**
@@ -728,6 +731,42 @@ function baseReducer(state: AppState, action: Action): AppState {
     case 'SET_CORRECT_ANSWERS': {
       writeCorrectAnswersMap(action.payload);
       return { ...state, correctAnswersByGame: action.payload };
+    }
+    case 'REMAP_QUESTION_TALLY': {
+      // A live question add/remove shifted the playing game's question indices.
+      // The tally is keyed by index, so re-key it or every bucket after the edit
+      // is silently misattributed. A deleted question's counts move to the
+      // reserved 'none' bucket rather than onto its neighbour — a tap made in a
+      // live show is never dropped, but it is never re-attributed either.
+      const { gameIndex, moved } = action.payload;
+      const key = String(gameIndex);
+      const byQuestion = state.correctAnswersByGame[key];
+      if (!byQuestion) return state;
+
+      const next: CorrectAnswersByQuestion = {};
+      let changed = false;
+      const add = (bucket: string, tally: QuestionTally) => {
+        const current = next[bucket];
+        next[bucket] = current
+          ? { team1: current.team1 + tally.team1, team2: current.team2 + tally.team2 }
+          : tally;
+      };
+      for (const [question, tally] of Object.entries(byQuestion)) {
+        const from = Number(question);
+        if (!Number.isInteger(from) || from < 0 || from >= moved.length) {
+          add(question, tally); // 'none' and anything out of range stays put
+          continue;
+        }
+        const to = moved[from];
+        const bucket = to === null || to === undefined ? NO_QUESTION_KEY : String(to);
+        if (bucket !== question) changed = true;
+        add(bucket, tally);
+      }
+      if (!changed) return state;
+
+      const nextMap: CorrectAnswersMap = { ...state.correctAnswersByGame, [key]: next };
+      writeCorrectAnswersMap(nextMap);
+      return { ...state, correctAnswersByGame: nextMap };
     }
     case 'CLEAR_ALL': {
       localStorage.clear();

@@ -2,8 +2,11 @@
  * Deterministic 32-bit PRNG (mulberry32). Given the same seed it always yields
  * the same sequence — used to keep a randomized question order stable across
  * live re-fetches (a content edit must not re-shuffle the playthrough).
+ *
+ * Shared with [questionOrder.ts](./questionOrder.ts) so the live-stable first
+ * deal produces the exact same permutation as `randomizeQuestions`.
  */
-function mulberry32(seed: number): () => number {
+export function mulberry32(seed: number): () => number {
   let a = seed >>> 0;
   return () => {
     a |= 0;
