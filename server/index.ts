@@ -4502,14 +4502,6 @@ function includesRefCI(haystack: string, relPath: string): boolean {
   return haystack.toLowerCase().includes(relPath.toLowerCase());
 }
 
-// Case-insensitive find, case-preserving replace for rewriting asset refs in
-// game JSONs after a rename/move/merge. Escapes regex metacharacters in `from`
-// so paths with `.`, `(`, etc. match literally.
-function replaceRefCI(haystack: string, from: string, to: string): string {
-  const escaped = from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return haystack.replace(new RegExp(escaped, 'gi'), to);
-}
-
 // Path-BOUNDARY-anchored variants of the two helpers above, for rewriting refs
 // after a move/rename.
 //

@@ -297,7 +297,7 @@ describe('GameEditor', () => {
     expect((select as HTMLSelectElement).value).toBe('guessing-game');
   });
 
-  it('warns before changing game type when the game has questions, and resets to a clean game on confirm', async () => {
+  it('warns before changing game type when the game has questions, and resets the questions on confirm', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderEditor(); // multiInstanceData: v1 + v2 (v2 has a question) → has content
@@ -307,11 +307,30 @@ describe('GameEditor', () => {
 
     expect(confirmSpy).toHaveBeenCalledWith('Spieltyp ändern?');
     await waitFor(() => expect(select.value).toBe('guessing-game'));
-    // Content reset to the clean template (single v1 instance) — NOT a blank page, and the
-    // old v2 instance is gone. The editor still renders its base card + instance editor.
+    // Questions are reset to the clean per-type template — they cannot be
+    // carried across incompatible types — and the editor renders its base card
+    // plus the instance editor rather than a blank page.
     expect(screen.getByText('Grundeinstellungen')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText('Instanz: v1')).toBeInTheDocument());
-    expect(screen.queryByRole('button', { name: 'v2' })).not.toBeInTheDocument();
+    confirmSpy.mockRestore();
+  });
+
+  // Regression: the type change used to apply the template verbatim, collapsing
+  // a multi-instance game to a bare `v1` and DELETING v2/v3/… Nothing cascaded
+  // to gameOrder, so a gameshow referencing "allgemeinwissen/v2" only failed at
+  // that round, live, with `Instance "v2" not found`. The keys must survive
+  // (empty) so every reference still resolves.
+  it('preserves every instance key when the game type changes', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderEditor(); // v1 + v2
+
+    const select = screen.getByRole('combobox', { name: 'Spieltyp' }) as HTMLSelectElement;
+    await user.selectOptions(select, 'guessing-game');
+    await waitFor(() => expect(select.value).toBe('guessing-game'));
+
+    expect(screen.getByRole('button', { name: 'v1' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'v2' })).toBeInTheDocument();
     confirmSpy.mockRestore();
   });
 

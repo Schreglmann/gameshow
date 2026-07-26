@@ -21,7 +21,7 @@ import {
   type SpellRateStatus,
   type LanguageToolDockerStatus,
 } from '@/services/backendApi';
-import { segmentsForGameFile, applyReplacement, type SpellSegment } from '@/utils/spellcheckFields';
+import { segmentsForGameFile, applyReplacement, readAtPath, type SpellSegment } from '@/utils/spellcheckFields';
 import { useSpellcheckSettings } from './SpellcheckSettingsContext';
 import SpellCheckPanel, { type SpellGroup, type SpellIssue } from './SpellCheckPanel';
 import SpellcheckDictionary from './SpellcheckDictionary';
@@ -226,9 +226,30 @@ export default function LektoratTab({ onNavigateToGame }: Props) {
     const entry = entries.find(e => e.issue.id === issue.id);
     if (!entry) return;
     const { fileName, path, segKey } = entry.meta;
-    const gameFile = gameFiles.current.get(fileName);
-    if (!gameFile) return;
-    const updated = applyReplacement(gameFile, path, issue.match.offset, issue.match.length, replacement);
+    if (!gameFiles.current.has(fileName)) return;
+
+    // Re-fetch before writing. A whole-show scan takes minutes (the public
+    // LanguageTool API is rate-limited), and this used to PUT the snapshot
+    // captured BEFORE that scan — so any edit made in another admin window in
+    // the meantime was silently overwritten, with a success tick shown. Read
+    // fresh, verify the text is still what the match was computed against, then
+    // splice.
+    let fresh: Record<string, unknown>;
+    try {
+      fresh = (await fetchGame(fileName)) as Record<string, unknown>;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Spieldatei konnte nicht geladen werden.');
+      return;
+    }
+    const current = readAtPath(fresh, path);
+    if (current !== issue.text) {
+      gameFiles.current.set(fileName, fresh);
+      setEntries(prev => prev.filter(e => !(e.meta.fileName === fileName && e.meta.segKey === segKey)));
+      setError(`"${fileName}" wurde zwischenzeitlich geändert — bitte erneut prüfen.`);
+      return;
+    }
+
+    const updated = applyReplacement(fresh, path, issue.match.offset, issue.match.length, replacement);
     gameFiles.current.set(fileName, updated);
     try {
       await saveGame(fileName, updated);

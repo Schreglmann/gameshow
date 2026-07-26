@@ -5,7 +5,7 @@ import { GameProvider } from '@/context/GameContext';
 import SummaryScreen from '@/components/screens/SummaryScreen';
 
 // Mock canvas-confetti
-vi.mock('canvas-confetti', () => ({ default: vi.fn() }));
+vi.mock('canvas-confetti', () => ({ default: Object.assign(vi.fn(), { reset: vi.fn() }) }));
 
 vi.mock('@/services/api', () => ({
   fetchSettings: vi.fn().mockResolvedValue({

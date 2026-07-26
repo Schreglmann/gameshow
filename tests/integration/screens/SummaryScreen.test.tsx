@@ -4,10 +4,12 @@ import { BrowserRouter } from 'react-router-dom';
 import { GameProvider } from '@/context/GameContext';
 import SummaryScreen from '@/components/screens/SummaryScreen';
 
-// Mock canvas-confetti
-vi.mock('canvas-confetti', () => ({
-  default: vi.fn(),
-}));
+// Mock canvas-confetti. The real default export is a callable that also carries
+// a `.reset()` used by SummaryScreen's unmount cleanup, so the mock needs both.
+vi.mock('canvas-confetti', () => {
+  const confetti = Object.assign(vi.fn(), { reset: vi.fn() });
+  return { default: confetti };
+});
 
 const mockedNavigate = vi.fn();
 vi.mock('react-router-dom', async () => {

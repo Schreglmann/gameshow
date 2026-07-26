@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { isTouchDevice } from '@/utils/isTouchDevice';
 import { assetUrl } from '@/utils/assetUrl';
 import type { AssetCategory, AssetFolder, AssetFileMeta } from '@/types/config';
@@ -869,6 +869,15 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   const videoPreviewRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollerRef  = useRef<HTMLElement | null>(null);
+  // Monotonic id for `load()` + a live mirror of the active category, so a
+  // response that arrives after a category switch is discarded rather than
+  // repainting the list with the wrong tree. See the guard inside `load`.
+  const loadIdRef = useRef(0);
+  // Lets `passesUsageFilter` — declared long before the predicate itself —
+  // delegate to the current visibility rule without a forward reference.
+  const visibilityPredicateRef = useRef<(p: string) => boolean>(() => true);
+  const activeCategoryRef = useRef(activeCategory);
+  activeCategoryRef.current = activeCategory;
   const { startUpload, startYtDownload, startAudioCoverFetch, lastRateLimitedFiles } = useUpload();
   const [audioCoverModal, setAudioCoverModal] = useState(false);
   const [existingCovers, setExistingCovers] = useState<Set<string>>(new Set());
@@ -1116,15 +1125,27 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       setImageGuessFiles(null);
       setImageDimensions(null);
     }
+    // Category guard. `load()` closes over the category it was called for, but
+    // it can resolve AFTER the operator has switched tabs — an `assets-changed`
+    // debounce firing for `audio` just as they click "Hintergrundmusik", say.
+    // The stale response then repainted the list with the OTHER category's
+    // tree while `activeCategory` said otherwise, so the next 🗑 issued
+    // deleteAsset(<current category>, <file listed from the other one>) and
+    // DELETED THE WRONG FILE. Same monotonic-id pattern as audioCoverMetaFetchId.
+    const requestedCategory = activeCategory;
+    const loadId = ++loadIdRef.current;
+    const isStale = () => loadId !== loadIdRef.current || requestedCategory !== activeCategoryRef.current;
     try {
-      const data = await fetchAssets(activeCategory);
+      const data = await fetchAssets(requestedCategory);
+      if (isStale()) return;
       setFiles(data.files ?? []);
       setFileMeta(data.fileMeta ?? {});
       setSubfolders(data.subfolders ?? []);
     } catch (e) {
+      if (isStale()) return;
       showMsg('error', `Fehler beim Laden: ${(e as Error).message}`);
     } finally {
-      if (showLoading) setLoading(false);
+      if (showLoading && !isStale()) setLoading(false);
       if (preserveScroll) requestAnimationFrame(() => requestAnimationFrame(() => {
         if (scroller) scroller.scrollTop = scrollTop;
       }));
@@ -1144,6 +1165,15 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   };
 
   useEffect(() => { load(); }, [activeCategory]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Cancel a pending `assets-changed` reload when the category changes — it was
+  // scheduled for the OLD category and would otherwise fire against the new one.
+  useEffect(() => () => {
+    if (assetsChangedTimer.current) {
+      clearTimeout(assetsChangedTimer.current);
+      assetsChangedTimer.current = null;
+    }
+  }, [activeCategory]);
 
   // Eager-load every image's natural pixel dimensions when entering the images category.
   // The server reads from a persistent cache (`local-assets/.image-dimension-cache.json`)
@@ -1970,12 +2000,16 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
 
   // --- Multi-select helpers ---
 
-  // Apply the active usage filter to a path. Returns true when the path is visible.
-  // No-op when no filter is active (or usages haven't loaded yet).
-  const passesUsageFilter = (filePath: string): boolean => {
-    if (usageFilter === null || usedFiles === null) return true;
-    return usageFilter === 'used' ? usedFiles.has(filePath) : !usedFiles.has(filePath);
-  };
+  // Is this path currently VISIBLE? Delegates to the same predicate the rendered
+  // tree is built from (see `filteredTree` below), so selection and display can
+  // never disagree.
+  //
+  // It used to re-implement only the usage filter and ignore "Niedrige
+  // Auflösung" entirely, so with that filter on, "Alle" selected every file in
+  // the category — including the ones the operator could not see — and the bulk
+  // delete then took them all. Only ever called from event handlers, so reading
+  // the later-declared `filteredTree` here is safe.
+  const passesUsageFilter = (filePath: string): boolean => visibilityPredicateRef.current(filePath);
 
   const getVisibleFilePaths = (): string[] => {
     if (searchQuery) {
@@ -2747,30 +2781,37 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   // SVGs and unprobed files have no `.dimensions` → never flagged.
   // RENDER_BOX_QUIZ / RENDER_BOX_IMAGE_GUESS are module-level (see top of file).
   const usageFilterActive = usageFilter !== null && usedFiles !== null;
+  const metaByPath = useMemo(
+    () => new Map(collectAllFiles(files, fileMeta, subfolders).map(e => [e.filePath, e.meta])),
+    [files, fileMeta, subfolders],
+  );
   const lowResActive = lowResFilter && imageGuessFiles !== null && imageDimensions !== null && activeCategory === 'images';
-  const filteredTree = useMemo(() => {
-    if (!usageFilterActive && !lowResActive) return { files, subfolders };
-    const metaByPath = new Map(collectAllFiles(files, fileMeta, subfolders).map(e => [e.filePath, e.meta]));
-    const isLowResImage = (p: string): boolean => {
+  // THE single visibility rule, shared by the rendered tree and by selection.
+  // Keeping two copies is what let "Alle" select files the operator could not
+  // see (the old passesUsageFilter knew about the usage filter but not about
+  // "Niedrige Auflösung"), so a bulk delete reached them.
+  const visibilityPredicate = useCallback((p: string): boolean => {
+    if (usageFilterActive) {
+      const used = usedFiles!.has(p);
+      if (usageFilter === 'used' && !used) return false;
+      if (usageFilter === 'unused' && used) return false;
+    }
+    if (lowResActive) {
       const meta = metaByPath.get(p);
       if (!meta?.dimensions) return false;
       const box = imageGuessFiles!.has(p) ? RENDER_BOX_IMAGE_GUESS : RENDER_BOX_QUIZ;
-      return meta.dimensions.width < box.w && meta.dimensions.height < box.h;
-    };
-    const predicate = (p: string): boolean => {
-      if (usageFilterActive) {
-        const used = usedFiles!.has(p);
-        if (usageFilter === 'used' && !used) return false;
-        if (usageFilter === 'unused' && used) return false;
-      }
-      if (lowResActive && !isLowResImage(p)) return false;
-      return true;
-    };
-    const filteredSubs = filterFolderTree(subfolders, predicate, new Set<string>());
-    const filteredRoot = files.filter(predicate);
+      if (!(meta.dimensions.width < box.w && meta.dimensions.height < box.h)) return false;
+    }
+    return true;
+  }, [usageFilterActive, usageFilter, usedFiles, lowResActive, imageGuessFiles, metaByPath]);
+  visibilityPredicateRef.current = visibilityPredicate;
+
+  const filteredTree = useMemo(() => {
+    if (!usageFilterActive && !lowResActive) return { files, subfolders };
+    const filteredSubs = filterFolderTree(subfolders, visibilityPredicate, new Set<string>());
+    const filteredRoot = files.filter(visibilityPredicate);
     return { files: filteredRoot, subfolders: filteredSubs };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [usageFilterActive, usageFilter, usedFiles, lowResActive, lowResFilter, imageGuessFiles, files, subfolders, fileMeta]);
+  }, [usageFilterActive, lowResActive, visibilityPredicate, files, subfolders]);
   const displayFiles = filteredTree.files;
   const displaySubfolders = filteredTree.subfolders;
 
@@ -2929,7 +2970,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
               category={activeCategory}
               onClose={() => { setInTrashView(false); refreshTrashCount(); load({ showLoading: false, preserveScroll: true }); }}
               onChanged={() => { setMessage(null); refreshTrashCount(); load({ showLoading: false, preserveScroll: true }); }}
-              showMessage={(type, text) => showMsg(type, text)}
+              showMessage={showMsg}
             />
           ) : (
           <>

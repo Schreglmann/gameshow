@@ -106,7 +106,13 @@ export function UploadProvider({ children }: { children: ReactNode }) {
   const [pendingCoverConfirm, setPendingCoverConfirm] = useState<AudioCoverConfirmation | null>(null);
   // Track confirm keys that have been responded to / dismissed — prevents SSE re-showing them
   const respondedConfirmsRef = useRef(new Set<string>());
-  const abortRef = useRef<AbortController | null>(null);
+  // Every in-flight upload job, keyed by a monotonic id. A single shared
+  // abortRef meant a second startUpload OVERWROTE the first job's controller:
+  // the abort button then only ever reached the newest job, and once the newest
+  // finished it nulled the ref, so the button silently did nothing at all while
+  // the earlier upload kept running.
+  const abortJobsRef = useRef(new Map<number, AbortController>());
+  const nextUploadJobId = useRef(0);
   // Server job IDs with an active SSE connection — polling skips these to avoid duplicates
   const liveJobIds = useRef(new Set<string>());
   // Map client-side download ID → server job ID (ref so cancelYtDownload can read it synchronously)
@@ -128,13 +134,17 @@ export function UploadProvider({ children }: { children: ReactNode }) {
   const displayEtaRef = useRef(0);
 
   const abortUpload = useCallback(() => {
-    abortRef.current?.abort();
+    // Abort every in-flight job — the UI shows one aggregate progress bar, so
+    // "Abbrechen" means "stop the upload", not "stop the most recent file".
+    for (const controller of abortJobsRef.current.values()) controller.abort();
+    abortJobsRef.current.clear();
   }, []);
 
   const startUpload = useCallback(async (category: AssetCategory, files: File[], subfolder?: string): Promise<{ success: boolean; count: number }> => {
     if (!files.length) return { success: true, count: 0 };
     const controller = new AbortController();
-    abortRef.current = controller;
+    const jobId = nextUploadJobId.current++;
+    abortJobsRef.current.set(jobId, controller);
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i]!;
@@ -202,14 +212,16 @@ export function UploadProvider({ children }: { children: ReactNode }) {
           controller.signal,
         );
       } catch (e) {
-        setUploadProgress(null);
-        abortRef.current = null;
+        abortJobsRef.current.delete(jobId);
+        // Only the LAST job standing may clear the shared progress bar —
+        // otherwise a finishing job wiped the display of one still running.
+        if (abortJobsRef.current.size === 0) setUploadProgress(null);
         if ((e as Error).name === 'AbortError') return { success: false, count: i };
         throw e;
       }
     }
-    setUploadProgress(null);
-    abortRef.current = null;
+    abortJobsRef.current.delete(jobId);
+    if (abortJobsRef.current.size === 0) setUploadProgress(null);
     return { success: true, count: files.length };
   }, []);
 
