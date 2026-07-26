@@ -233,9 +233,25 @@ function restoreBackups(): void {
   }
 
   const backups = findBackupFiles(AUDIO_DIR);
+  let placeholders = 0;
   for (const backup of backups) {
     // Restore to parent directory of the backup/ folder
     const original = path.join(path.dirname(path.dirname(backup)), path.basename(backup));
+
+    // A 0-byte entry is a PLACEHOLDER, not a backup. Files that were already
+    // near the target loudness are skipped by `normalize()`, which drops an
+    // empty marker in backup/ purely so the next run can skip them fast (see
+    // the `backupIsReal` check above). Copying one of those over the original
+    // truncated every already-normalized MP3/M4A to zero bytes — with the
+    // placeholder then deleted, so there was nothing left to recover, and the
+    // NAS sync propagated the truncation. Drop the marker instead.
+    const size = fs.existsSync(backup) ? fs.statSync(backup).size : 0;
+    if (size <= 0) {
+      fs.unlinkSync(backup);
+      placeholders++;
+      continue;
+    }
+
     fs.copyFileSync(backup, original);
     fs.unlinkSync(backup);
     console.log(`   ✅ Restored: ${path.relative(AUDIO_DIR, original)}`);
@@ -243,6 +259,9 @@ function restoreBackups(): void {
   }
 
   console.log(`\n✅ Restored ${restored} files.`);
+  if (placeholders > 0) {
+    console.log(`   (${placeholders} placeholder marker(s) removed — those files were never re-encoded.)`);
+  }
 }
 
 // ─── Clean backups ───────────────────────────────────────────

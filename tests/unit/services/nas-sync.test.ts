@@ -215,6 +215,38 @@ describe('buildNewSyncState', () => {
     expect(state.files['audio/fail.mp3']).toBeUndefined();
   });
 
+  // A failed delete must KEEP its entry. Dropping it made the file "not in prev"
+  // on the next run, and because it still existed on the other side the engine
+  // resurrected it with a pull — silently undoing the user's deletion.
+  it('keeps files whose delete-nas op failed, so next sync retries the delete', () => {
+    const local = new Map<string, FileMeta>();
+    const nas = new Map([['audio/gone.mp3', meta('2025-06-01', 500)]]);
+    const ops = [{ action: 'delete-nas' as const, rel: 'audio/gone.mp3' }];
+    const failedOps = new Set(['audio/gone.mp3']);
+
+    const state = buildNewSyncState(local, nas, ops, failedOps);
+    expect(state.files['audio/gone.mp3']).toBeDefined();
+  });
+
+  it('keeps files whose delete-local op failed, so next sync retries the delete', () => {
+    const local = new Map([['audio/gone.mp3', meta('2025-06-01', 500)]]);
+    const nas = new Map<string, FileMeta>();
+    const ops = [{ action: 'delete-local' as const, rel: 'audio/gone.mp3' }];
+    const failedOps = new Set(['audio/gone.mp3']);
+
+    const state = buildNewSyncState(local, nas, ops, failedOps);
+    expect(state.files['audio/gone.mp3']).toBeDefined();
+  });
+
+  it('still drops files whose delete op succeeded', () => {
+    const local = new Map([['audio/gone.mp3', meta('2025-06-01', 500)]]);
+    const nas = new Map<string, FileMeta>();
+    const ops = [{ action: 'delete-local' as const, rel: 'audio/gone.mp3' }];
+
+    const state = buildNewSyncState(local, nas, ops, new Set());
+    expect(state.files['audio/gone.mp3']).toBeUndefined();
+  });
+
   it('defaults failedOps to empty set when omitted (backwards compatible)', () => {
     const local = new Map([['audio/a.mp3', meta('2025-01-01', 1000)]]);
     const nas = new Map<string, FileMeta>();

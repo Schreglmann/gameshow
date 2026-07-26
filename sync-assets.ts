@@ -49,6 +49,25 @@ function isNasMounted(): boolean {
   }
 }
 
+/**
+ * rsync excludes mirroring `shouldSkipDirent` in server/nas-sync.ts.
+ *
+ * `sync:pull` runs rsync with `--delete`, but without these the delete pass
+ * covered paths the sync engine deliberately never tracks — every dotfile
+ * sidecar (`.video-references.json`, `.asset-aliases.json`,
+ * `.audio-cover-meta.json`, `.color-profiles.json`, `.nas-sync-moves.json`, …)
+ * and the local-only auto-LUFS `backup/` folders. Because they are local-only
+ * by design they are absent on the NAS, so `--delete` wiped them: the original
+ * pre-normalization audio, and the sidecars the DAM and sync layers depend on.
+ * The exclude list and `shouldSkipDirent` must stay in step.
+ */
+const SKIP_DIRENT_EXCLUDES =
+  " --exclude='.*'" +
+  " --exclude='*/.*'" +
+  " --exclude='*.transcoding.*'" +
+  " --exclude='backup/'" +
+  " --exclude='*/backup/'";
+
 /** Build the list of rsync --exclude flags for the videos folder.
  *  Reference-only videos (local symlinks to external sources) and the registry file
  *  are excluded from NAS sync — syncing them would either create dangling symlinks on
@@ -291,14 +310,14 @@ function applySafetyLayers(
  * unless `--force` is passed, and refuses bulk deletes above the safety
  * threshold unless `--force-bulk-delete` is passed.
  */
-function pull(): void {
+async function pull(): Promise<void> {
   if (!isNasMounted()) {
     console.error(`✗ NAS not reachable: ${NAS_BASE}`);
     console.error('  Mount the NAS before running sync:pull.');
     process.exit(1);
   }
 
-  pruneTrash(LOCAL_BASE);
+  await pruneTrash(LOCAL_BASE);
   const runId = makeRunId();
 
   // Pre-flight: walk both sides, check for empty-NAS folders that have files locally.
@@ -358,7 +377,7 @@ function pull(): void {
       const extra = folder === 'videos' ? ' ' + videoReferenceExcludes().join(' ') : '';
       const deleteFlag = suspectFolders.includes(folder) ? '' : ' --delete';
       execSync(
-        `rsync -av${deleteFlag} --backup --backup-dir="${backupDir}"${extra} "${src}" "${dest}/"`,
+        `rsync -av${deleteFlag} --backup --backup-dir="${backupDir}"${SKIP_DIRENT_EXCLUDES}${extra} "${src}" "${dest}/"`,
         { stdio: 'inherit' },
       );
       console.log(`✓ ${folder}: done\n`);
@@ -380,15 +399,15 @@ function pull(): void {
  * missing from one side, it is moved to the other side's `.trash/<runId>/`
  * (Layer 1 soft-delete) instead of being unlinked.
  */
-function sync(): void {
+async function sync(): Promise<void> {
   if (!isNasMounted()) {
     console.error(`✗ NAS not reachable: ${NAS_BASE}`);
     console.error('  Mount the NAS before running sync.');
     process.exit(1);
   }
 
-  pruneTrash(LOCAL_BASE);
-  pruneTrash(NAS_BASE);
+  await pruneTrash(LOCAL_BASE);
+  await pruneTrash(NAS_BASE);
   const runId = makeRunId();
 
   console.log(`Syncing ${LOCAL_BASE} ↔ NAS\n`);
@@ -453,12 +472,16 @@ function sync(): void {
           break;
         case 'delete-local':
           console.log(`  ✗ trash local ${op.rel}`);
-          softDelete(LOCAL_BASE, op.rel, runId);
+          // Awaited: an un-awaited softDelete meant a failing delete never
+          // reached the catch below, so it was neither reported nor recorded in
+          // failedOps — and the new sync state was written before the deletes
+          // had actually run.
+          await softDelete(LOCAL_BASE, op.rel, runId);
           s.deleted++;
           break;
         case 'delete-nas':
           console.log(`  ✗ trash NAS   ${op.rel}`);
-          softDelete(NAS_BASE, op.rel, runId);
+          await softDelete(NAS_BASE, op.rel, runId);
           s.deleted++;
           break;
       }
@@ -494,9 +517,9 @@ function countByFolder(files: Map<string, FileMeta>): Record<string, number> {
 }
 
 if (command === 'pull') {
-  pull();
+  void pull().catch((err) => { console.error(err); process.exit(1); });
 } else if (command === 'sync') {
-  sync();
+  void sync().catch((err) => { console.error(err); process.exit(1); });
 } else {
   console.error('Usage: tsx sync-assets.ts <pull|sync> [--force] [--force-bulk-delete]');
   console.error('');
