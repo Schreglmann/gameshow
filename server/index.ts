@@ -35,7 +35,7 @@ import { collectFileMetadata, collectTrashedRelPaths } from './nas-walk.js';
 import { pruneTrash, softDelete } from './sync-safety.js';
 import { ROOT_DIR, NAS_BASE, LOCAL_ASSETS_BASE } from './asset-paths.js';
 import { getNasSyncConfig, setNasSyncConfig, getNasSyncEnabled } from './nas-sync-prefs.js';
-import { isNasReachable, refreshNasReachable, startNasMonitor, nasStat, nasPathExists } from './nas-reachability.js';
+import { isNasReachable, refreshNasReachable, startNasMonitor, nasStat, nasPathExists, nasReaddir, nasUnlink } from './nas-reachability.js';
 import {
   prerenderedDir,
   prerenderedFileName,
@@ -233,7 +233,14 @@ function saveProbeCache(): void {
 async function cachedProbe(fullPath: string, relPath: string): Promise<ProbeResult> {
   const mtimeMs = await stat(fullPath).then(s => s.mtimeMs, () => 0);
   const cached = probeResultCache.get(relPath);
-  if (cached && mtimeMs > 0 && cached.mtimeMs === mtimeMs) return cached.result;
+  // `mtimeMs === 0` means the source could not be stat'ed at all — a dangling
+  // reference symlink, an unmounted NAS, a disconnected external drive. That is
+  // exactly the case the persistent cache exists for, so serve it rather than
+  // falling through to an ffprobe that is certain to throw. Requiring a fresh
+  // mtime here made every offline source look un-probeable, which in turn made
+  // expectedCacheFilenames() report zero tracks and pruneUnusedCaches() delete
+  // the per-track caches a locked show runs from (specs/video-guess-lock.md).
+  if (cached && (mtimeMs === 0 || cached.mtimeMs === mtimeMs)) return cached.result;
   const result = await probeVideoTracks(fullPath);
   probeResultCache.set(relPath, { mtimeMs, result });
   saveProbeCache();
@@ -261,9 +268,16 @@ function saveHdrCache(): void {
   if (_hdrSaveTimer) return; // already scheduled
   _hdrSaveTimer = setTimeout(() => {
     _hdrSaveTimer = null;
-    mkdirSync(path.dirname(HDR_CACHE_FILE), { recursive: true });
-    writeFileSync(HDR_CACHE_FILE, JSON.stringify(Object.fromEntries(hdrCache), null, 2) + '\n');
-    mirrorHdrCacheToNas();
+    // Timer callbacks have no caller to catch for them: an ENOSPC/EACCES here
+    // would be an uncaught exception and take the whole server down mid-show.
+    // Non-critical cache — log and carry on, matching saveProbeCache.
+    try {
+      mkdirSync(path.dirname(HDR_CACHE_FILE), { recursive: true });
+      writeFileSync(HDR_CACHE_FILE, JSON.stringify(Object.fromEntries(hdrCache), null, 2) + '\n');
+      mirrorHdrCacheToNas();
+    } catch (e) {
+      console.warn('[cache] hdr.json write failed:', e);
+    }
   }, 500);
 }
 
@@ -271,20 +285,48 @@ function saveHdrCache(): void {
 /** Invalidate system-status cache-dir stats so next poll re-scans. */
 function invalidateCacheDirStats(): void { _cacheDirStatsCache = null; }
 
-/** Delete all persistent cache files whose slug starts with the given prefix. */
+/** Delete all persistent cache files whose slug starts with the given prefix.
+ *
+ *  The local cache is cleared synchronously (fast local disk); the NAS mirror is
+ *  cleared on a detached async path guarded by `isNasReachable()` and the bounded
+ *  wrappers. Doing NAS `readdirSync`/`unlinkSync` here used to park the event loop
+ *  uninterruptibly on a stale mount — see specs/nas-freeze-resilience.md. */
 function deleteCacheFilesForVideo(relPath: string): void {
   invalidateCacheDirStats();
   const slug = cacheSlug(relPath).replace(/\.[^.]+$/, '');
-  for (const base of [VIDEO_CACHE_BASE, NAS_CACHE_BASE]) {
-    for (const subdir of ['sdr', 'compressed']) {
-      const dir = path.join(base, subdir);
-      try {
-        for (const file of readdirSync(dir)) {
-          if (file.startsWith(slug + '__')) {
-            try { unlinkSync(path.join(dir, file)); } catch { /* already gone */ }
-          }
+  for (const subdir of ['sdr', 'compressed']) {
+    const dir = path.join(VIDEO_CACHE_BASE, subdir);
+    try {
+      for (const file of readdirSync(dir)) {
+        if (file.startsWith(slug + '__')) {
+          try { unlinkSync(path.join(dir, file)); } catch { /* already gone */ }
         }
-      } catch { /* dir doesn't exist yet */ }
+      }
+    } catch { /* dir doesn't exist yet */ }
+  }
+  void deleteNasCacheFilesForSlug(slug);
+}
+
+/** NAS half of `deleteCacheFilesForVideo` — never awaited by a request handler. */
+async function deleteNasCacheFilesForSlug(slug: string): Promise<void> {
+  if (!isNasReachable()) return;
+  for (const subdir of ['sdr', 'compressed']) {
+    const dir = path.join(NAS_CACHE_BASE, subdir);
+    for (const file of await nasReaddir(dir)) {
+      if (file.startsWith(slug + '__')) await nasUnlink(path.join(dir, file));
+    }
+  }
+}
+
+/** NAS half of POST /api/backend/caches/clear — never awaited by the handler.
+ *  Best-effort: the local cache is authoritative and has already been cleared. */
+async function clearNasSegmentCaches(): Promise<void> {
+  if (!isNasReachable()) return;
+  for (const subdir of ['sdr', 'compressed']) {
+    const dir = path.join(NAS_CACHE_BASE, subdir);
+    for (const file of await nasReaddir(dir)) {
+      if (file.startsWith('.') || file.endsWith('.tmp')) continue;
+      await nasUnlink(path.join(dir, file));
     }
   }
 }
@@ -305,8 +347,23 @@ async function expectedCacheFilenames(): Promise<{ compressed: Set<string>; sdr:
   // filenames for ALL track variants so a language switch doesn't prune other tracks'
   // caches. Marker changes or question deletion still prune because the start/end values
   // (or the entire entry) change.
+  // A value of -1 means "probe failed, track count unknown" — see the fail-safe below.
   const trackCountCache = new Map<string, number>();
   const videosDir = path.join(LOCAL_ASSETS_BASE, 'videos');
+
+  // Lazily-read listing of what is actually on disk. Only needed for the
+  // probe-failed fail-safe, so it costs nothing on the normal path.
+  let cacheListings: { compressed: string[]; sdr: string[] } | null = null;
+  async function getCacheListings(): Promise<{ compressed: string[]; sdr: string[] }> {
+    if (cacheListings) return cacheListings;
+    const listings = { compressed: [] as string[], sdr: [] as string[] };
+    for (const subdir of ['compressed', 'sdr'] as const) {
+      try { listings[subdir] = await readdir(path.join(VIDEO_CACHE_BASE, subdir)); }
+      catch { /* dir doesn't exist yet */ }
+    }
+    cacheListings = listings;
+    return listings;
+  }
 
   for (const file of files) {
     if (!file.endsWith('.json') || file.startsWith('_template-') || file.includes('.fingerprints.')) continue;
@@ -361,21 +418,43 @@ async function expectedCacheFilenames(): Promise<{ compressed: Set<string>; sdr:
           // when markers change (different start/end → different basename) or the question
           // is deleted (no entry emits this basename at all).
           if (!trackCountCache.has(relPath)) {
-            let count = 0;
+            let count = -1; // -1 = probe failed, track count unknown
             try {
               const { tracks } = await cachedProbe(path.join(videosDir, relPath), relPath);
               count = tracks.length;
-            } catch { /* probe failed — 0 means we only keep the no-track variant */ }
+            } catch { /* leave -1 — the fail-safe below keeps every on-disk variant */ }
             trackCountCache.set(relPath, count);
           }
-          const numTracks = trackCountCache.get(relPath) ?? 0;
+          const numTracks = trackCountCache.get(relPath) ?? -1;
           // Also accept an explicit per-question audioTrack that may exceed the probed
           // count (e.g. if the video file was replaced after caching).
           const explicitTrack = typeof q.audioTrack === 'number' ? q.audioTrack : -1;
-          const maxTrack = Math.max(numTracks - 1, explicitTrack);
-          for (let t = 0; t <= maxTrack; t++) {
-            expected.compressed.add(`${baseName}.t${t}`);
-            expected.sdr.add(`${baseName}.t${t}`);
+
+          if (numTracks < 0) {
+            // NEVER DELETE ON MISSING INFORMATION. The probe failed, so we cannot know
+            // how many track variants this question legitimately owns. Treat every
+            // per-track file already on disk for this basename as expected — otherwise
+            // an unreachable source (unmounted NAS, offline reference, disconnected
+            // drive) would prune the pre-built caches that a locked show is meant to
+            // run from. See specs/video-guess-lock.md.
+            const listings = await getCacheListings();
+            const prefix = `${baseName}.t`;
+            for (const subdir of ['compressed', 'sdr'] as const) {
+              for (const f of listings[subdir]) {
+                if (f.startsWith(prefix)) expected[subdir].add(f);
+              }
+            }
+            // An explicit per-question track must survive even if not yet encoded.
+            for (let t = 0; t <= explicitTrack; t++) {
+              expected.compressed.add(`${baseName}.t${t}`);
+              expected.sdr.add(`${baseName}.t${t}`);
+            }
+          } else {
+            const maxTrack = Math.max(numTracks - 1, explicitTrack);
+            for (let t = 0; t <= maxTrack; t++) {
+              expected.compressed.add(`${baseName}.t${t}`);
+              expected.sdr.add(`${baseName}.t${t}`);
+            }
           }
         }
       }
@@ -5605,20 +5684,24 @@ function getCacheDirStats(): { sdr: { count: number; totalSizeBytes: number; fil
 // dotfiles. Caches regenerate on demand, so this is non-destructive beyond one-time latency.
 app.post('/api/backend/caches/clear', (_req, res) => {
   const cleared = { sdr: 0, compressed: 0, hdr: 0 };
+  // Local cache only, synchronously: fast local disk, and the count we report.
   for (const subdir of ['sdr', 'compressed'] as const) {
-    for (const base of [VIDEO_CACHE_BASE, NAS_CACHE_BASE]) {
-      const dir = path.join(base, subdir);
-      let entries: string[];
-      try { entries = readdirSync(dir); } catch { continue; }
-      for (const f of entries) {
-        if (f.startsWith('.') || f.endsWith('.tmp')) continue;
-        try {
-          unlinkSync(path.join(dir, f));
-          if (base === VIDEO_CACHE_BASE) cleared[subdir]++;
-        } catch { /* already gone */ }
-      }
+    const dir = path.join(VIDEO_CACHE_BASE, subdir);
+    let entries: string[];
+    try { entries = readdirSync(dir); } catch { continue; }
+    for (const f of entries) {
+      if (f.startsWith('.') || f.endsWith('.tmp')) continue;
+      try {
+        unlinkSync(path.join(dir, f));
+        cleared[subdir]++;
+      } catch { /* already gone */ }
     }
   }
+  // NAS mirror on a detached, reachability-guarded path. Doing this inline with
+  // readdirSync/unlinkSync parked the event loop uninterruptibly on a stale
+  // mount — the whole server (show, gamemaster WS, /api/game/:index) died and
+  // could not even be killed. See specs/nas-freeze-resilience.md.
+  void clearNasSegmentCaches();
   cleared.hdr = hdrCache.size;
   hdrCache.clear();
   try { unlinkSync(HDR_CACHE_FILE); } catch { /* already gone */ }

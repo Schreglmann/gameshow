@@ -22,7 +22,7 @@
  *    event loop stays alive.
  */
 
-import { stat } from 'fs/promises';
+import { stat, readdir, unlink } from 'fs/promises';
 import type { Stats } from 'fs';
 import { NAS_BASE } from './asset-paths.js';
 
@@ -140,6 +140,20 @@ export function nasStat(p: string): Promise<Stats | null> {
 /** Bounded existence check — `false` on absence OR on a stale-mount timeout. */
 export async function nasPathExists(p: string): Promise<boolean> {
   return (await nasStat(p)) !== null;
+}
+
+/** Bounded `readdir` — resolves to `[]` on absence OR on a stale-mount timeout. */
+export function nasReaddir(p: string): Promise<string[]> {
+  return withTimeout<string[]>(readdir(p), OP_TIMEOUT_MS, [], markNasUnreachable);
+}
+
+/**
+ * Bounded `unlink` — resolves to `false` on failure OR on a stale-mount timeout.
+ * Deleting cache files on the NAS is always best-effort: the local copy is
+ * authoritative, so a dead mount must degrade to "skipped", never to a hang.
+ */
+export function nasUnlink(p: string): Promise<boolean> {
+  return withTimeout<boolean>(unlink(p).then(() => true), OP_TIMEOUT_MS, false, markNasUnreachable);
 }
 
 /** Test-only: reset module state between vitest cases. */

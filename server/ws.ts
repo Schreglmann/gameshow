@@ -222,7 +222,13 @@ export function setupWebSocket(server: Server, g: WsGetters): void {
     });
 
     ws.on('message', (raw) => {
-      handleClientMessage(ws, raw);
+      // Defence in depth: no malformed or hostile frame from any connected
+      // client may ever take the backend down during a live show.
+      try {
+        handleClientMessage(ws, raw);
+      } catch (e) {
+        console.warn('[ws] dropped a message that threw:', e);
+      }
     });
 
     ws.on('close', () => {
@@ -290,13 +296,20 @@ export function broadcastThrottled(channel: WsChannel, data: unknown, minMs: num
 // ── Client→server message handling ──
 
 function handleClientMessage(origin: WebSocket, raw: unknown): void {
-  let parsed: { channel?: string; type?: string; data?: unknown; id?: string };
+  let decoded: unknown;
   try {
     const text = typeof raw === 'string' ? raw : raw instanceof Buffer ? raw.toString('utf-8') : String(raw);
-    parsed = JSON.parse(text);
+    decoded = JSON.parse(text);
   } catch {
     return;
   }
+  // `JSON.parse` happily yields null / numbers / strings / arrays for a
+  // well-formed frame like `null` or `42`. Reading `.type` off those threw a
+  // TypeError out of the `message` handler and killed the whole backend
+  // process — any connected client could do it. Anything that is not a plain
+  // object carries no channel or control type, so drop it.
+  if (!decoded || typeof decoded !== 'object' || Array.isArray(decoded)) return;
+  const parsed = decoded as { channel?: string; type?: string; data?: unknown; id?: string };
 
   // Meta control messages: { type: 'show-register' | 'show-claim' | …, id? }
   if (parsed.type) {
