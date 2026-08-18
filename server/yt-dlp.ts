@@ -56,6 +56,13 @@ async function downloadYtDlp(): Promise<void> {
 }
 
 export function ensureYtDlp(): Promise<void> {
+  // Only dedupes calls that land *while a download/update is in flight* — the
+  // memo is always cleared once that settles (success or failure), so every
+  // call re-verifies the binary is actually still on disk via a cheap
+  // existsSync/stat rather than trusting a stale "it was fine once" result.
+  // The binary can otherwise vanish out from under a long-running process
+  // (deleted by hand, cache wiped) and every future call would keep skipping
+  // the download forever, spawning a path that no longer exists.
   if (!ytDlpReady) {
     ytDlpReady = (async () => {
       if (!existsSync(YT_DLP_BIN)) {
@@ -68,11 +75,8 @@ export function ensureYtDlp(): Promise<void> {
         // unreachable rather than failing an otherwise-working download.
         await downloadYtDlp().catch(() => {});
       }
-    })().catch((err) => {
-      // Clear the memo so a later call retries instead of replaying the
-      // rejection for the rest of the process's life.
+    })().finally(() => {
       ytDlpReady = null;
-      throw err;
     });
   }
   return ytDlpReady;
