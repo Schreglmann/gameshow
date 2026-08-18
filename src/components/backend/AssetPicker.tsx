@@ -645,7 +645,7 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
                       title={isDisabled ? `${file} — Quelle der Zusammenführung` : file}
                     >
                       <div className="picker-thumb-wrap">
-                        <img src={toMediaSrc(coverUrl(url) ?? url)} alt={file} className="picker-thumbnail" />
+                        <img src={coverUrl(url)} alt={file} className="picker-thumbnail" />
                         {folderPath && <span className="picker-thumb-folder">{folderPath}</span>}
                       </div>
                       <span className="picker-file-name">{fileName}</span>
@@ -814,9 +814,9 @@ export function AssetField({ label, value, category, onChange, readOnly = false,
   const coverUrl = useCoverUrl();
   // Encoded ONLY at the DOM boundary — `value` itself stays the raw logical
   // path, because rename/move rewrites config refs by matching raw disk paths.
-  // Without this, filenames containing '#', '?' or '&' silently failed to load
-  // and the picker showed a broken preview for a file that is perfectly fine.
-  const displaySrc = value ? toMediaSrc(coverUrl(value) ?? value) : value;
+  // `coverUrl` already runs `toMediaSrc` internally; encoding a second time
+  // turns `%20` into `%2520` and breaks every path containing spaces.
+  const displaySrc = coverUrl(value);
 
   useEffect(() => {
     if (!preview) return;
