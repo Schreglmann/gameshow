@@ -138,8 +138,12 @@ describe('GameScreen - Gaps', () => {
     await waitFor(() => expect(screen.getByText('Test Quiz')).toBeInTheDocument());
 
     mockNavigate.mockClear();
-    act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' })); });
-    expect(mockNavigate).toHaveBeenCalledWith('/rules');
+    // The '/rules' target depends on the async-loaded global settings, which may
+    // commit after the game data renders — retry the keypress until they have.
+    await waitFor(() => {
+      act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' })); });
+      expect(mockNavigate).toHaveBeenCalledWith('/rules');
+    });
   });
 
   it('navigates to previous game on ArrowLeft from error screen', async () => {
