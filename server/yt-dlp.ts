@@ -21,6 +21,15 @@ const UPDATE_CHECK_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 // that users without deno installed can still download.
 export const YT_DLP_JS_RUNTIME_ARGS = ['--js-runtimes', `node:${process.execPath}`];
 
+// Hook for pinning YouTube player clients when a client regression breaks
+// downloads (spread into every per-video yt-dlp invocation). Currently empty:
+// the android_vr 403 regression (https://github.com/yt-dlp/yt-dlp/issues/17456)
+// is fixed in the nightly builds we now install, and overriding clients
+// ourselves backfired — web/web_safari withhold format URLs without a PO
+// token and fail with "Requested format is not available". Prefer defaults;
+// reach for this only when upstream documents a specific client incantation.
+export const YT_DLP_PLAYER_CLIENT_ARGS: string[] = [];
+
 let ytDlpReady: Promise<void> | null = null;
 
 export function ytDlpAssetName(): string {
@@ -35,7 +44,11 @@ export function ytDlpAssetName(): string {
 async function downloadYtDlp(): Promise<void> {
   await mkdir(path.dirname(YT_DLP_BIN), { recursive: true });
   const asset = ytDlpAssetName();
-  const url = `https://github.com/yt-dlp/yt-dlp/releases/latest/download/${asset}`;
+  // Nightly builds, not stable: YouTube breaks yt-dlp faster than stable
+  // releases ship the fixes (e.g. the android_vr 403 regression was fixed in
+  // nightly weeks before a stable release carried it). The nightly repo
+  // publishes the same asset names as the main repo.
+  const url = `https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/latest/download/${asset}`;
   // Stage through a temp file and rename into place. Streaming straight to
   // YT_DLP_BIN meant an interrupted download (connection drop, disk full,
   // Ctrl-C) left a truncated binary at the final path — and because

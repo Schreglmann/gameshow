@@ -6481,7 +6481,7 @@ app.post('/api/backend/assets/:category/upload-abort', express.json(), async (re
 // ── yt-dlp binary management (auto-downloaded standalone binary) ──
 // Binary bootstrap lives in ./yt-dlp.ts so the download flow (below) and the
 // keyword-search flow (./youtube-search.ts) share one implementation.
-import { YT_DLP_BIN, YT_DLP_JS_RUNTIME_ARGS, ensureYtDlp } from './yt-dlp.js';
+import { YT_DLP_BIN, YT_DLP_JS_RUNTIME_ARGS, YT_DLP_PLAYER_CLIENT_ARGS, ensureYtDlp } from './yt-dlp.js';
 
 function isPlaylistUrl(url: string): boolean {
   try {
@@ -6882,6 +6882,7 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
 
         const ytdlpArgs = [
           ...YT_DLP_JS_RUNTIME_ARGS,
+          ...YT_DLP_PLAYER_CLIENT_ARGS,
           '-f', 'bestaudio',
           '-x', '--audio-format', 'mp3', '--audio-quality', '0',
           '--no-playlist',
@@ -7029,7 +7030,7 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
   const singleBaseDir = subfolder ? path.join(categoryDir(category), subfolder) : categoryDir(category);
   try {
     const probedTitle = await new Promise<string>((resolve) => {
-      const proc = spawn(YT_DLP_BIN, [...YT_DLP_JS_RUNTIME_ARGS, '--skip-download', '--no-playlist', '--print', '%(title)s', url]);
+      const proc = spawn(YT_DLP_BIN, [...YT_DLP_JS_RUNTIME_ARGS, ...YT_DLP_PLAYER_CLIENT_ARGS, '--skip-download', '--no-playlist', '--print', '%(title)s', url]);
       const onAbort = () => { proc.kill('SIGTERM'); };
       jobAbort.signal.addEventListener('abort', onAbort, { once: true });
       let out = '';
@@ -7067,6 +7068,7 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
     const ytdlpArgs = isVideoDownload
       ? [
           ...YT_DLP_JS_RUNTIME_ARGS,
+          ...YT_DLP_PLAYER_CLIENT_ARGS,
           // Codec preference for the raw DAM <video> preview: H.264 → VP9 → anything
           // but AV1 → (AV1 only as an absolute last resort). Browsers can't decode
           // AV1 via a plain <video> (YouTube serves AV1 only to clients that
@@ -7087,6 +7089,7 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
         ]
       : [
           ...YT_DLP_JS_RUNTIME_ARGS,
+          ...YT_DLP_PLAYER_CLIENT_ARGS,
           '-f', 'bestaudio',             // download audio stream only (skip video)
           '-x',                          // extract audio
           '--audio-format', 'mp3',       // convert to mp3
@@ -7163,7 +7166,12 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
     });
 
     if (exitCode !== 0) {
-      send({ phase: 'error', message: `yt-dlp fehlgeschlagen (Exit Code ${exitCode}): ${downloadError.slice(0, 300)}` });
+      // yt-dlp's actual failure reason (an "ERROR:" line) sits at the end of
+      // the output, after progress noise and version-check warnings — slicing
+      // from the start showed only that noise and hid the real cause.
+      const errorLines = downloadError.split('\n').map(l => l.trim()).filter(l => /^ERROR:/i.test(l));
+      const detail = errorLines.length > 0 ? errorLines.join(' ') : downloadError.trim();
+      send({ phase: 'error', message: `yt-dlp fehlgeschlagen (Exit Code ${exitCode}): ${detail.slice(-500)}` });
       res.end();
       await rm(tmpDir, { recursive: true, force: true });
       return;
