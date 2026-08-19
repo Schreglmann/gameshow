@@ -6,7 +6,7 @@ Duplicate all interactive game controls (award points, navigation, difficulty se
 ## Acceptance criteria
 - [x] The gamemaster screen (`/gamemaster`) shows a controls panel below the existing answer card
 - [x] Navigation controls (Weiter / Zurück) appear during landing, rules, and answer-reveal phases. They are hidden during inline-interaction sub-phases where pressing them would be a no-op (FinalQuiz `betting` and `judging`-before-both-judged, GuessingGame `question`, Quizjagd difficulty pick and judging, BetQuiz `category`; in BetQuiz `answer` only Weiter is hidden because Zurück rewinds to the question). Games declare these phases via the `setNavState({ hideForward, hideBack })` render-prop on `BaseGameWrapper`.
-- [x] Award points controls (Team 1 / Team 2 / Unentschieden) appear during the points phase
+- [x] Award points controls appear during the points phase: an `award-selection` group of team toggles (both selected = Unentschieden) whose `active` state mirrors the show's cards, plus an `award-confirm` button that stays disabled until a team is selected
 - [x] Quizjagd: difficulty selection and Richtig/Falsch judgment buttons appear on the gamemaster screen
 - [x] FinalQuiz: bet inputs, "Antwort anzeigen" button, and per-team judgment controls appear on the gamemaster screen
 - [x] GuessingGame: guess inputs and "Tipp Abgeben" button appear on the gamemaster screen

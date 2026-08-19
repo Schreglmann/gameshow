@@ -82,8 +82,12 @@ describe('BaseGameWrapper - Gaps', () => {
     advanceToGame();
     await user.click(screen.getByTestId('complete-game'));
 
-    // Clicking Team 1 immediately awards points and navigates
+    // Selecting a team states what it would get; only the confirm books it.
     await user.click(screen.getByText('Team 1'));
+    expect(screen.getByText('+7 Punkte')).toBeInTheDocument();
+    expect(defaultProps.onAwardPoints).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Punkte vergeben & weiter' }));
 
     expect(defaultProps.onAwardPoints).toHaveBeenCalledWith('team1', 7);
     expect(defaultProps.onNextGame).toHaveBeenCalled();
@@ -97,18 +101,24 @@ describe('BaseGameWrapper - Gaps', () => {
     await user.click(screen.getByTestId('complete-game'));
 
     await user.click(screen.getByText('Team 2'));
+    await user.click(screen.getByRole('button', { name: 'Punkte vergeben & weiter' }));
 
     expect(defaultProps.onAwardPoints).toHaveBeenCalledWith('team2', 5);
+    expect(defaultProps.onAwardPoints).toHaveBeenCalledTimes(1);
   });
 
-  it('calls onAwardPoints for both teams on Unentschieden', async () => {
+  it('calls onAwardPoints for both teams when both are selected (draw)', async () => {
     const user = userEvent.setup();
     render(<BaseGameWrapper {...defaultProps} pointValue={4} />);
 
     advanceToGame();
     await user.click(screen.getByTestId('complete-game'));
 
-    await user.click(screen.getByText('Unentschieden'));
+    await user.click(screen.getByText('Team 1'));
+    await user.click(screen.getByText('Team 2'));
+    expect(screen.getByText('Unentschieden — beide Teams erhalten Punkte')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Punkte vergeben & weiter' }));
 
     expect(defaultProps.onAwardPoints).toHaveBeenCalledWith('team1', 4);
     expect(defaultProps.onAwardPoints).toHaveBeenCalledWith('team2', 4);
@@ -163,8 +173,10 @@ describe('BaseGameWrapper - Gaps', () => {
     advanceToGame();
     await user.click(screen.getByTestId('complete'));
 
-    // Clicking Team 1 immediately awards 1 point (default) and navigates
+    // Team 1 wins the default 1 point, stated in the singular before it is booked.
     await user.click(screen.getByText('Team 1'));
+    expect(screen.getByText('+1 Punkt')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Punkte vergeben & weiter' }));
 
     expect(onAwardPoints).toHaveBeenCalledWith('team1', 1);
   });

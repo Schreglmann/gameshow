@@ -5,8 +5,27 @@ Each game awards a fixed point value to the winning team(s); points accumulate a
 
 ## Acceptance criteria
 - [x] Each game is worth `currentIndex + 1` points (game 0 = 1pt, game 1 = 2pt, …)
-- [x] After a game completes, the host sees `AwardPoints` UI to select which team(s) won
-- [x] The host can award points to team 1, team 2, or both (draw)
+- [x] After a game completes, the host sees the `AwardPoints` screen: one card per team, each a
+      toggle, and a single "Punkte vergeben & weiter" button below them. Selecting a team and
+      confirming are two separate presses — nothing is booked by a mis-tap on a card
+- [x] The host can award points to team 1, team 2, or both — **both selected is the draw**; there is
+      no separate "Unentschieden" button
+- [x] The confirm button is disabled while no team is selected
+- [x] Each card states the points that team would receive (`+3 Punkte` / `0 Punkte`), computed from the
+      same value the award books, Aufholjoker ×2 included. The points appear only **once something is
+      selected** — before that nobody knows who gets what
+- [x] The screen opens **preselected** where the outcome is already known: a verdict the game worked out
+      itself (guessing-game's automatic scoring), else whoever leads the gamemaster's correct-answer
+      tally for this game (`tallyLeader`), both teams on an equal non-zero count. Nothing tallied and no
+      verdict → nothing preselected. The preselection is derived, not seeded into state, so a tally edit
+      from another device still moves it — until the host toggles a card, which pins the selection
+- [x] A third card line states where the preselection comes from: `2 gewonnene Fragen` from a verdict,
+      otherwise `3 richtige Antworten` from the tally. With nothing tallied the line is dropped from both
+      cards rather than reading "0 richtige Antworten" twice
+- [x] The gamemaster mirrors the same screen: an `award-selection` button-group of team toggles
+      (`award-toggle-team1` / `award-toggle-team2`, `active` mirroring the show) plus an
+      `award-confirm` button, disabled while nothing is selected. Either surface can select and either
+      can confirm
 - [x] Points are added to the team's running total via `AWARD_POINTS` action
 - [x] Points can never go below 0 (enforced in reducer)
 - [x] Points are persisted to `localStorage` under keys `team1Points` and `team2Points`
@@ -39,7 +58,11 @@ Each game awards a fixed point value to the winning team(s); points accumulate a
 
 ## UI behaviour
 - `AwardPoints` component: shown inside `BaseGameWrapper` after game phase completes (if point system enabled)
-- Displays current game's point value; three buttons: Team 1 wins, Team 2 wins, Draw
+- Two selectable team cards (`.award-team-card`, gold accent + `aria-pressed` when selected) above one
+  `.award-confirm` button; the hint above them reads `Welches Team hat gewonnen?`, `<Team> hat gewonnen`
+  or `Unentschieden — beide Teams erhalten Punkte` as the selection changes
+- Rendered `inline` (without its own `#awardPointsContainer` surface) by wer-kennt-mehr's standard-mode
+  summary, which embeds it in the game's own card — see [games/wer-kennt-mehr.md](games/wer-kennt-mehr.md)
 - `Header`: shows running point totals for both teams at all times
 - `SummaryScreen`: announces winner with confetti animation (5 seconds); or "Unentschieden" on a draw
 - `AdminScreen`: direct numeric input for each team's points + reset button

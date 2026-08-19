@@ -224,7 +224,7 @@ Full field semantics + config examples for every type: [GAME_TYPES.md](GAME_TYPE
 |------|-----------------|-------------------|
 | `simple-quiz` | JSON `questions[]` | `AwardPoints` (host picks winner) |
 | `bet-quiz` | JSON `questions[]` (with `category`) | Inline per-question (±bet, one team per question); `scoringMode`: `standard` (default — only the answering team) or `transfer` (zero-sum — opponent moves opposite) |
-| `guessing-game` | JSON `questions[]` | `AwardPoints`; `scoringMode`: `auto` (**default** — the show counts the closer team per question and the award screen states the verdict; one press books the positional points) or `standard` (host picks the winner) |
+| `guessing-game` | JSON `questions[]` | `AwardPoints`; `scoringMode`: `auto` (**default** — the show counts the closer team per question and the award screen opens with that team preselected; one press books the positional points) or `standard` (host picks the winner) |
 | `q1` | JSON `questions[]` (3 true + 1 false) | `AwardPoints` |
 | `four-statements` | JSON `questions[]` (up to 4 clues → text/image answer) | `AwardPoints` |
 | `fact-or-fake` | JSON `questions[]` | `AwardPoints` |

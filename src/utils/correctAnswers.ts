@@ -45,3 +45,17 @@ export function highestTalliedQuestion(byQuestion: CorrectAnswersByQuestion | un
   }
   return max;
 }
+
+/**
+ * Which team leads a game's tally — the award screen's preselection. `null` when
+ * nothing was tallied at all (nobody kept score), so the host gets an empty
+ * selection instead of a made-up winner. An equal non-zero count returns BOTH,
+ * which the award screen reads as a draw. See specs/point-system.md.
+ */
+export function tallyLeader(
+  byQuestion: CorrectAnswersByQuestion | undefined,
+): { team1: boolean; team2: boolean } | null {
+  const { team1, team2 } = tallyTotals(byQuestion);
+  if (team1 === 0 && team2 === 0) return null;
+  return { team1: team1 >= team2, team2: team2 >= team1 };
+}

@@ -16,90 +16,136 @@ vi.mock('@/services/api', () => ({
   }),
 }));
 
-function renderAward(onComplete: (w: { team1: boolean; team2: boolean }) => void): void {
+function renderAward(props: Partial<Parameters<typeof AwardPoints>[0]> = {}) {
+  const handlers = { onToggle: vi.fn(), onConfirm: vi.fn() };
   const Wrapped = ({ children }: { children: ReactNode }) => <GameProvider>{children}</GameProvider>;
-  render(<AwardPoints onComplete={onComplete} />, { wrapper: Wrapped });
+  render(
+    <AwardPoints
+      selected={{ team1: false, team2: false }}
+      points={{ team1: 3, team2: 3 }}
+      onToggle={handlers.onToggle}
+      onConfirm={handlers.onConfirm}
+      {...props}
+    />,
+    { wrapper: Wrapped },
+  );
+  return handlers;
 }
 
+const confirmButton = () => screen.getByRole('button', { name: 'Punkte vergeben & weiter' });
+
 describe('AwardPoints', () => {
-  it('renders the heading and hint', () => {
-    renderAward(vi.fn());
+  it('opens with nothing selected: no points, confirm disabled', () => {
+    renderAward();
     expect(screen.getByText('Punkte vergeben')).toBeInTheDocument();
     expect(screen.getByText('Welches Team hat gewonnen?')).toBeInTheDocument();
+    expect(screen.queryByText(/Punkte$/)).not.toBeInTheDocument();
+    expect(confirmButton()).toBeDisabled();
   });
 
-  it('renders all three outcome buttons', () => {
-    renderAward(vi.fn());
+  it('renders one card per team', () => {
+    renderAward();
     expect(screen.getByText('Team 1')).toBeInTheDocument();
     expect(screen.getByText('Team 2')).toBeInTheDocument();
-    expect(screen.getByText('Unentschieden')).toBeInTheDocument();
+    expect(document.querySelectorAll('.award-team-card')).toHaveLength(2);
   });
 
-  it('calls onComplete with team1 win when Team 1 is clicked', async () => {
+  it('reports a card press as a toggle, without awarding anything', async () => {
     const user = userEvent.setup();
-    const onComplete = vi.fn();
-    renderAward(onComplete);
+    const { onToggle, onConfirm } = renderAward();
 
     await user.click(screen.getByText('Team 1'));
 
-    expect(onComplete).toHaveBeenCalledWith({ team1: true, team2: false });
+    expect(onToggle).toHaveBeenCalledWith('team1');
+    expect(onConfirm).not.toHaveBeenCalled();
   });
 
-  it('calls onComplete with team2 win when Team 2 is clicked', async () => {
-    const user = userEvent.setup();
-    const onComplete = vi.fn();
-    renderAward(onComplete);
-
-    await user.click(screen.getByText('Team 2'));
-
-    expect(onComplete).toHaveBeenCalledWith({ team1: false, team2: true });
+  it('states the winner and the points once a team is selected', () => {
+    renderAward({ selected: { team1: true, team2: false } });
+    expect(screen.getByText('Team 1 hat gewonnen')).toBeInTheDocument();
+    expect(screen.getByText('+3 Punkte')).toBeInTheDocument();
+    expect(screen.getByText('0 Punkte')).toBeInTheDocument();
+    expect(confirmButton()).toBeEnabled();
   });
 
-  it('calls onComplete with both teams when Unentschieden is clicked', async () => {
-    const user = userEvent.setup();
-    const onComplete = vi.fn();
-    renderAward(onComplete);
-
-    await user.click(screen.getByText('Unentschieden'));
-
-    expect(onComplete).toHaveBeenCalledWith({ team1: true, team2: true });
+  it('treats both teams selected as a draw', () => {
+    renderAward({ selected: { team1: true, team2: true } });
+    expect(screen.getByText('Unentschieden — beide Teams erhalten Punkte')).toBeInTheDocument();
+    expect(screen.getAllByText('+3 Punkte')).toHaveLength(2);
   });
 
-  it('calls onComplete immediately on first click with no prior interaction required', async () => {
+  it('uses the singular for a one-point game', () => {
+    renderAward({ selected: { team1: true, team2: false }, points: { team1: 1, team2: 1 } });
+    expect(screen.getByText('+1 Punkt')).toBeInTheDocument();
+  });
+
+  it('marks the selected card and exposes it as pressed', () => {
+    renderAward({ selected: { team1: false, team2: true } });
+    const cards = document.querySelectorAll('.award-team-card');
+    expect(cards[0]).not.toHaveClass('is-selected');
+    expect(cards[1]).toHaveClass('is-selected');
+    expect(cards[1]).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('confirms the current selection', async () => {
     const user = userEvent.setup();
-    const onComplete = vi.fn();
-    renderAward(onComplete);
+    const { onConfirm } = renderAward({ selected: { team1: true, team2: false } });
 
-    await user.click(screen.getByText('Team 1'));
+    await user.click(confirmButton());
 
-    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders the count line only when counts are supplied', () => {
+    renderAward({ counts: { team1: '3 richtige Antworten', team2: '1 richtige Antwort' } });
+    expect(screen.getByText('3 richtige Antworten')).toBeInTheDocument();
+    expect(screen.getByText('1 richtige Antwort')).toBeInTheDocument();
+
+    document.body.innerHTML = '';
+    renderAward();
+    expect(document.querySelector('.award-team-card-count')).not.toBeInTheDocument();
+  });
+
+  it('shows a supplied hint instead of the derived one', () => {
+    renderAward({ selected: { team1: true, team2: false }, hint: 'Team 1 hat mehr Fragen gewonnen' });
+    expect(screen.getByText('Team 1 hat mehr Fragen gewonnen')).toBeInTheDocument();
+    expect(screen.queryByText('Team 1 hat gewonnen')).not.toBeInTheDocument();
+  });
+
+  it('renders a note under the hint', () => {
+    renderAward({ note: 'Rundenstand: Team 1 2 – 1 Team 2' });
+    expect(screen.getByText('Rundenstand: Team 1 2 – 1 Team 2')).toBeInTheDocument();
   });
 
   it('renders custom team names from team state', async () => {
     localStorage.setItem('team1Name', 'Die Adler');
     localStorage.setItem('team2Name', 'Quizfüchse');
-    renderAward(vi.fn());
+    renderAward();
     expect(await screen.findByText('Die Adler')).toBeInTheDocument();
     expect(screen.getByText('Quizfüchse')).toBeInTheDocument();
   });
 
-  it('orders the team buttons by the frontend order when swapped (callbacks unchanged)', async () => {
+  it('orders the team cards by the frontend order when swapped (callbacks unchanged)', async () => {
     localStorage.setItem('teamOrderSwapped', 'true');
     const user = userEvent.setup();
-    const onComplete = vi.fn();
-    renderAward(onComplete);
+    const { onToggle } = renderAward();
 
     // Order depends on teamMirrorEnabled, which loads async from /api/settings.
     await vi.waitFor(() => {
-      const buttons = document.querySelectorAll('.award-team-button');
-      expect(buttons[0]?.textContent).toContain('Team 2');
-      expect(buttons[1]?.textContent).toContain('Team 1');
-      expect(buttons[2]?.textContent).toContain('Unentschieden');
+      const cards = document.querySelectorAll('.award-team-card');
+      expect(cards[0]?.textContent).toContain('Team 2');
+      expect(cards[1]?.textContent).toContain('Team 1');
     });
 
-    // Position changed, but each button still awards the right team.
-    const buttons = document.querySelectorAll('.award-team-button');
-    await user.click(buttons[0] as HTMLElement);
-    expect(onComplete).toHaveBeenCalledWith({ team1: false, team2: true });
+    // Position changed, but each card still toggles its own team.
+    const cards = document.querySelectorAll('.award-team-card');
+    await user.click(cards[0] as HTMLElement);
+    expect(onToggle).toHaveBeenCalledWith('team2');
+  });
+
+  it('renders without its own card surface when inline', () => {
+    renderAward({ inline: true });
+    expect(document.querySelector('#awardPointsContainer')).not.toBeInTheDocument();
+    expect(document.querySelectorAll('.award-team-card')).toHaveLength(2);
   });
 });

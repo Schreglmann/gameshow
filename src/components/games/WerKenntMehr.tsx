@@ -11,6 +11,10 @@ import { EXAMPLE_SLOT_ID } from '@/utils/questionOrder';
 import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
 import BaseGameWrapper from './BaseGameWrapper';
 import QuizQuestionView from './QuizQuestionView';
+import AwardPoints, { type AwardPointsWinners } from '@/components/common/AwardPoints';
+
+/** Nothing picked yet on the summary reward screen. Module-level for a stable identity. */
+const NO_WINNERS: AwardPointsWinners = { team1: false, team2: false };
 
 export default function WerKenntMehr(props: GameComponentProps) {
   const config = props.config as WerKenntMehrConfig;
@@ -276,19 +280,50 @@ function WerKenntMehrInner({
     advanceToNext();
   }, [pointSystemEnabled, isExample, isPenalty, onAwardPoints, advanceToNext]);
 
+  // Aufholjoker: the armed team's positional points double on the reward screen,
+  // mirroring BaseGameWrapper.handleComplete. Multiply the positional value (never a
+  // hardcoded 2). The armed flag itself is cleared afterwards by
+  // BaseGameWrapper.onGameComplete's inline-scored branch. Hoisted out of
+  // `finishGame` so the screen previews exactly what it books.
+  const armedTeam = state.teams.doubleNextGame;
+  const ptsFor = useCallback(
+    (team: 'team1' | 'team2') => (armedTeam === team ? pointValue * 2 : pointValue),
+    [armedTeam, pointValue],
+  );
+
   // Standard mode: award the positional game points on the final reward screen,
   // then complete the game (BaseGameWrapper skips its own points screen).
-  const finishGame = useCallback((winners: { team1: boolean; team2: boolean }) => {
-    // Aufholjoker: the armed team's positional points double on this reward
-    // screen, mirroring BaseGameWrapper.handleComplete. Multiply the positional
-    // value (never a hardcoded 2). The armed flag itself is cleared afterwards by
-    // BaseGameWrapper.onGameComplete's inline-scored branch.
-    const armed = state.teams.doubleNextGame;
-    const ptsFor = (team: 'team1' | 'team2') => (armed === team ? pointValue * 2 : pointValue);
+  const finishGame = useCallback((winners: AwardPointsWinners) => {
     if (winners.team1) onAwardPoints('team1', ptsFor('team1'));
     if (winners.team2) onAwardPoints('team2', ptsFor('team2'));
     onGameComplete();
-  }, [onAwardPoints, pointValue, onGameComplete, state.teams.doubleNextGame]);
+  }, [onAwardPoints, ptsFor, onGameComplete]);
+
+  // The host's pick on the reward screen. Untouched (`null`) it follows the recorded
+  // round wins, so the screen opens on the team that actually led; an equal count
+  // preselects both, i.e. a draw.
+  const [finalPick, setFinalPick] = useState<AwardPointsWinners | null>(null);
+  // Memoised: this object feeds the gamemaster-controls effect, which would otherwise
+  // re-publish the controls on every render.
+  const finalPreselect = useMemo(
+    () => (roundTally.t1Wins === 0 && roundTally.t2Wins === 0
+      ? null
+      : { team1: roundTally.t1Wins >= roundTally.t2Wins, team2: roundTally.t2Wins >= roundTally.t1Wins }),
+    [roundTally],
+  );
+  const finalWinners = finalPick ?? finalPreselect ?? NO_WINNERS;
+  const toggleFinalWinner = useCallback((team: 'team1' | 'team2') => {
+    // Toggling against what is currently shown, so the first press after a
+    // preselection deselects that team instead of starting from an empty pick.
+    setFinalPick(prev => {
+      const base = prev ?? finalPreselect ?? NO_WINNERS;
+      return { ...base, [team]: !base[team] };
+    });
+  }, [finalPreselect]);
+  const confirmFinal = useCallback(() => {
+    if (!finalWinners.team1 && !finalWinners.team2) return;
+    finishGame(finalWinners);
+  }, [finalWinners, finishGame]);
 
   // Keyboard / nav forward: question → answer (reveal). In standard mode (no
   // per-round scoring) and on the non-scoring example, nav-forward advances to the
@@ -398,11 +433,21 @@ function WerKenntMehrInner({
       controls.push({
         type: 'button-group',
         id: 'final-winner',
-        label: 'Spielpunkte vergeben',
-        buttons: [
-          ...gmOrder.map(k => ({ id: `final-${k}`, label: labelFor(k), sublabel: subs[k], variant: 'primary' as const })),
-          { id: 'final-draw', label: 'Unentschieden', variant: 'primary' },
-        ],
+        label: 'Spielpunkte vergeben (beide = unentschieden)',
+        buttons: gmOrder.map(k => ({
+          id: `final-toggle-${k}`,
+          label: labelFor(k),
+          sublabel: subs[k],
+          variant: 'primary' as const,
+          active: finalWinners[k],
+        })),
+      });
+      controls.push({
+        type: 'button',
+        id: 'final-confirm',
+        label: 'Punkte vergeben & weiter',
+        variant: 'primary',
+        disabled: !finalWinners.team1 && !finalWinners.team2,
       });
       // Show the accumulated round-win tally as guidance for the winner pick.
       controls.push({ type: 'info', id: 'final-tally', text: tallyText });
@@ -410,7 +455,7 @@ function WerKenntMehrInner({
       setNavState({});
     }
     setGamemasterControls(controls);
-  }, [phase, qIdx, qKey, count, team1Sel, team2Sel, isExample, isStandard, pointSystemEnabled, team1Members, team2Members, t1, t2, roundWins, tallyText, state.teams.orderSwapped, state.settings.teamMirrorEnabled, setGamemasterControls, setNavState]);
+  }, [phase, qIdx, qKey, count, team1Sel, team2Sel, isExample, isStandard, pointSystemEnabled, team1Members, team2Members, t1, t2, roundWins, tallyText, finalWinners, state.teams.orderSwapped, state.settings.teamMirrorEnabled, setGamemasterControls, setNavState]);
 
   // Gamemaster command routing.
   const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
@@ -429,6 +474,11 @@ function WerKenntMehrInner({
         return { ...prev, [qKey]: pick };
       });
     }
+    else if (cmd.controlId === 'final-toggle-team1') toggleFinalWinner('team1');
+    else if (cmd.controlId === 'final-toggle-team2') toggleFinalWinner('team2');
+    else if (cmd.controlId === 'final-confirm') confirmFinal();
+    // Pre-toggle ids: a gamemaster on an older cached bundle still emits these, so
+    // honour them as an immediate award instead of dropping the host's press.
     else if (cmd.controlId === 'final-team1') finishGame({ team1: true, team2: false });
     else if (cmd.controlId === 'final-team2') finishGame({ team1: false, team2: true });
     else if (cmd.controlId === 'final-draw') finishGame({ team1: true, team2: true });
@@ -441,7 +491,7 @@ function WerKenntMehrInner({
       setCount(next);
       awardAndAdvance(next);
     }
-  }, [awardAndAdvance, finishGame, qKey]);
+  }, [awardAndAdvance, finishGame, toggleFinalWinner, confirmFinal, qKey]);
 
   useEffect(() => {
     setCommandHandler(commandHandlerFn);
@@ -481,14 +531,6 @@ function WerKenntMehrInner({
   if (!q) return null;
 
   const onScreenCanAward = isExample || team1Sel || team2Sel;
-
-  // Aufholjoker: badge the armed team's summary award button so the host sees the
-  // ×2 before picking a winner — mirrors the shared AwardPoints screen (which this
-  // standard-mode summary replaces because the game sets skipPointsScreen).
-  const comebackBadge = (team: 'team1' | 'team2') =>
-    state.teams.doubleNextGame === team
-      ? <span className="award-double-badge" title="Aufholjoker: Punkte zählen doppelt">×2 Aufholjoker</span>
-      : null;
 
   return (
     <>
@@ -581,39 +623,21 @@ function WerKenntMehrInner({
 
       {phase === 'summary' && (
         <div className="wkm-summary">
-          {/* End-of-game point reward screen (no per-round scoring in standard mode).
-              Rendered as on-card content — a plain `<h2>`, a `.bet-quiz-host-hint`
-              prompt and the `.award-points-teams` buttons — NOT a nested
-              `#awardPointsContainer`, whose text colour assumes the dark page bg.
-              `.wkm-summary` supplies the vertical rhythm the bare elements lack. */}
-          <h2>Punkte vergeben</h2>
-          <div className="bet-quiz-host-hint">Welches Team hat insgesamt mehr genannt?</div>
-          {roundTally.t1Wins + roundTally.t2Wins + roundTally.draws > 0 && (
-            <div className="bet-quiz-host-hint wkm-tally">
-              Rundenstand: {t1} {roundTally.t1Wins} – {roundTally.t2Wins} {t2}
-              {roundTally.draws > 0 ? ` · ${roundTally.draws}× Unentschieden` : ''}
-            </div>
-          )}
-          <div className="button-row award-points-teams">
-            {teamDisplayOrder(state.teams.orderSwapped, false, state.settings.teamMirrorEnabled).map(teamKey => (
-              <button
-                key={teamKey}
-                type="button"
-                className="quiz-button award-team-button"
-                onClick={() => finishGame({ team1: teamKey === 'team1', team2: teamKey === 'team2' })}
-              >
-                {teamKey === 'team1' ? t1 : t2}
-                {comebackBadge(teamKey)}
-              </button>
-            ))}
-            <button
-              type="button"
-              className="quiz-button award-team-button"
-              onClick={() => finishGame({ team1: true, team2: true })}
-            >
-              Unentschieden
-            </button>
-          </div>
+          {/* End-of-game point reward screen (no per-round scoring in standard mode):
+              the shared award screen, rendered `inline` as on-card content — NOT a
+              nested `#awardPointsContainer`, whose text colour assumes the dark page
+              bg. `.wkm-summary` supplies the vertical rhythm the bare elements lack. */}
+          <AwardPoints
+            inline
+            selected={finalWinners}
+            points={{ team1: ptsFor('team1'), team2: ptsFor('team2') }}
+            hint="Welches Team hat insgesamt mehr genannt?"
+            note={roundTally.t1Wins + roundTally.t2Wins + roundTally.draws > 0
+              ? `Rundenstand: ${t1} ${roundTally.t1Wins} – ${roundTally.t2Wins} ${t2}${roundTally.draws > 0 ? ` · ${roundTally.draws}× Unentschieden` : ''}`
+              : undefined}
+            onToggle={toggleFinalWinner}
+            onConfirm={confirmFinal}
+          />
         </div>
       )}
     </>

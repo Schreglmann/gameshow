@@ -407,14 +407,16 @@ describe('WerKenntMehr — standard scoring mode', () => {
     await waitFor(() => expect(screen.getByText('Punkte vergeben')).toBeInTheDocument());
     expect(defaultProps.onAwardPoints).not.toHaveBeenCalled();
 
-    // Host picks the overall winner -> the game's positional points (4), once.
-    await user.click(screen.getByRole('button', { name: 'Team 1' }));
+    // Host picks the overall winner and confirms -> the game's positional points (4), once.
+    await user.click(screen.getByRole('button', { name: /Team 1/ }));
+    expect(screen.getByText('+4 Punkte')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Punkte vergeben & weiter' }));
     expect(defaultProps.onAwardPoints).toHaveBeenCalledWith('team1', 4);
     expect(defaultProps.onAwardPoints).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(defaultProps.onNextGame).toHaveBeenCalled());
   });
 
-  it('awards positional points to both teams when the host picks Unentschieden', async () => {
+  it('awards positional points to both teams when the host picks both (draw)', async () => {
     const user = userEvent.setup();
     renderStandard(2); // pointValue = 3
     await waitFor(() => expect(screen.getByText('Test WKM')).toBeInTheDocument());
@@ -430,7 +432,9 @@ describe('WerKenntMehr — standard scoring mode', () => {
     await navForward(user); // -> reward screen
 
     await waitFor(() => expect(screen.getByText('Punkte vergeben')).toBeInTheDocument());
-    await user.click(screen.getByRole('button', { name: 'Unentschieden' }));
+    await user.click(screen.getByRole('button', { name: /Team 1/ }));
+    await user.click(screen.getByRole('button', { name: /Team 2/ }));
+    await user.click(screen.getByRole('button', { name: 'Punkte vergeben & weiter' }));
     expect(defaultProps.onAwardPoints).toHaveBeenCalledWith('team1', 3);
     expect(defaultProps.onAwardPoints).toHaveBeenCalledWith('team2', 3);
     expect(defaultProps.onAwardPoints).toHaveBeenCalledTimes(2);
@@ -660,12 +664,14 @@ describe('WerKenntMehr — standard mode: Aufholjoker + round-win tally', () => 
     renderStd(3); // pointValue = currentIndex + 1 = 4
     await playToSummary(user);
 
-    // The armed team's award button carries the ×2 badge; the other team's does not.
+    // The armed team's card carries the ×2 badge; the other team's does not.
     const team1Btn = screen.getByRole('button', { name: /Team 1/ });
     expect(team1Btn).toHaveTextContent('×2 Aufholjoker');
     expect(screen.getByRole('button', { name: /Team 2/ })).not.toHaveTextContent('×2 Aufholjoker');
 
     await user.click(team1Btn);
+    expect(screen.getByText('+8 Punkte')).toBeInTheDocument(); // stated before it is booked
+    await user.click(screen.getByRole('button', { name: 'Punkte vergeben & weiter' }));
     expect(defaultProps.onAwardPoints).toHaveBeenCalledWith('team1', 8); // 4 * 2
     expect(defaultProps.onAwardPoints).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(defaultProps.onNextGame).toHaveBeenCalled());
@@ -679,7 +685,8 @@ describe('WerKenntMehr — standard mode: Aufholjoker + round-win tally', () => 
     renderStd(3); // pointValue = 4
     await playToSummary(user);
 
-    await user.click(screen.getByRole('button', { name: 'Team 1' }));
+    await user.click(screen.getByRole('button', { name: /Team 1/ }));
+    await user.click(screen.getByRole('button', { name: 'Punkte vergeben & weiter' }));
     expect(defaultProps.onAwardPoints).toHaveBeenCalledWith('team1', 4); // not doubled
     expect(defaultProps.onAwardPoints).toHaveBeenCalledTimes(1);
   });
@@ -690,7 +697,9 @@ describe('WerKenntMehr — standard mode: Aufholjoker + round-win tally', () => 
     renderStd(2); // pointValue = 3
     await playToSummary(user);
 
-    await user.click(screen.getByRole('button', { name: 'Unentschieden' }));
+    await user.click(screen.getByRole('button', { name: /Team 1/ }));
+    await user.click(screen.getByRole('button', { name: /Team 2/ }));
+    await user.click(screen.getByRole('button', { name: 'Punkte vergeben & weiter' }));
     expect(defaultProps.onAwardPoints).toHaveBeenCalledWith('team1', 6); // 3 * 2
     expect(defaultProps.onAwardPoints).toHaveBeenCalledWith('team2', 3); // unchanged
     expect(defaultProps.onAwardPoints).toHaveBeenCalledTimes(2);
@@ -714,7 +723,7 @@ describe('WerKenntMehr — standard mode: Aufholjoker + round-win tally', () => 
     await navForward(user); // -> summary
     await waitFor(() => expect(screen.getByText('Punkte vergeben')).toBeInTheDocument());
 
-    const tally = document.querySelector('.wkm-tally');
+    const tally = document.querySelector('.award-points-note');
     expect(tally).toBeInTheDocument();
     expect(tally?.textContent?.replace(/\s+/g, ' ').trim()).toBe('Rundenstand: Team 1 2 – 0 Team 2');
   });
@@ -741,6 +750,6 @@ describe('WerKenntMehr — standard mode: Aufholjoker + round-win tally', () => 
     await waitFor(() => expect(screen.getByText('Punkte vergeben')).toBeInTheDocument());
 
     // Nothing recorded → the guidance tally line is not rendered at all.
-    expect(document.querySelector('.wkm-tally')).not.toBeInTheDocument();
+    expect(document.querySelector('.award-points-note')).not.toBeInTheDocument();
   });
 });

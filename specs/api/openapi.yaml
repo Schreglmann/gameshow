@@ -3485,10 +3485,10 @@ components:
               description: >-
                 'auto' (the default, also when absent): the show records the closer team
                 per question (equidistant guesses count for both teams, the example
-                question never counts) and the award screen states the verdict —
-                confirming it books the positional game points (currentIndex + 1) for the
-                team that won more questions, or for both on an overall tie. 'standard'
-                opts out: the host picks the winner on the award-points screen by hand.
+                question never counts) and the award screen opens with the team that won
+                more questions preselected (both on an overall tie) — confirming books the
+                positional game points (currentIndex + 1). 'standard' opts out: the award
+                screen opens unselected and the host picks the winner by hand.
 
     FinalQuizConfig:
       allOf:

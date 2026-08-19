@@ -31,13 +31,15 @@ Both teams submit a numeric guess; the team whose answer is closest to the corre
 - [x] The write is a **diff against what the question already holds**, so re-judging a question — or a
       host correction in the score boxes — overwrites that question rather than counting it twice
 - [x] Equidistant guesses count as a win for **both** teams; the example question (slot 0) never counts
-- [x] The award screen states the verdict instead of asking: `"<Team> hat mehr Fragen gewonnen"` (or
-      `"Unentschieden — beide Teams erhalten Punkte"`), one card per team showing the points it is
-      about to receive (`+4 Punkte`, `0 Punkte` — a number for both teams) above the questions it won
-      as a plain count (`2 gewonnene Fragen`), plus a single "Punkte vergeben & weiter" button.
-      Deliberately **not** "x von y Fragen": a drawn question counts for both teams, so a fraction of
-      the questions played stops adding up. No winner selection — pressing it books the points and
-      advances, exactly as picking a winner by hand does
+- [x] The award screen opens on the verdict instead of asking: the winning team's card is already
+      selected, the hint reads `"<Team> hat mehr Fragen gewonnen"` (or
+      `"Unentschieden — beide Teams erhalten Punkte"`), each card shows the points it is about to
+      receive (`+4 Punkte`, `0 Punkte` — a number for both teams) above the questions it won as a plain
+      count (`2 gewonnene Fragen`), and "Punkte vergeben & weiter" books it. Deliberately **not**
+      "x von y Fragen": a drawn question counts for both teams, so a fraction of the questions played
+      stops adding up. The host can still toggle a card to override the verdict — the hint then falls
+      back to the generic wording, and the tally is left untouched, so "Wertung pro Frage" keeps stating
+      who was actually closer while the points follow the host. See [../point-system.md](../point-system.md)
 - [x] The verdict is **derived from the tally**, not from component state: a team won a question when
       its bucket there is non-zero. So the host correcting a cell (a mistyped guess) moves the verdict,
       and back-navigating out of the game no longer loses the standing
@@ -52,21 +54,22 @@ Both teams submit a numeric guess; the team whose answer is closest to the corre
 - [x] Points are the **positional** game value (`currentIndex + 1`), awarded to the team with more
       question wins, or to both on an equal count. The Aufholjoker ×2 still applies: the wrapper's
       `ptsFor` computes what the screen states AND what it awards, so the two cannot diverge
-- [x] With nothing judged yet (only the example played) there is no verdict — the host gets the normal
-      manual winner selection
+- [x] With nothing judged yet (only the example played) there is no verdict — the award screen opens
+      with nothing selected, exactly as for a game that never scored itself
 - [x] The gamemaster keeps its familiar surfaces, now filled in automatically instead of by hand: the
       `CorrectAnswersTracker` boxes show the running standing per team (the game does NOT set
       `hideCorrectTracker`), and "Wertung pro Frage" lists every judged question — which is what that
       panel is for, and why the auto verdicts had to go into the tally rather than a private record.
       The GM's award screen shows the standing as one `info` line
-      (`<T1>: 2 · <T2>: 0 → <T1> gewinnt`) plus a single "Punkte vergeben" button
+      (`<T1>: 2 · <T2>: 0 → <T1> gewinnt`) above the shared team toggles + confirm button
 - [x] Both surfaces are **read-only while an auto-scored game plays**: the game sets `autoScored`, the
       wrapper mirrors it as `tallyReadOnly` on the `gamemaster-controls` channel, and the `+`/`−` are
       **left out entirely** (not merely disabled — a dead button still invites the question of whether
       the host or the show awards a question). The counts themselves stay: they are the standing
-- [x] A mis-entered guess is fixed by submitting the question again (its record is overwritten), or —
-      once the points are booked — with the per-entry undo in "Letzte Wertungen". There is deliberately
-      no override on the award screen and none in the read-only tally
+- [x] A mis-entered guess is fixed by submitting the question again (its record is overwritten); the
+      award screen can override who gets the points without touching the record, and once the points are
+      booked the per-entry undo in "Letzte Wertungen" takes over. The read-only tally itself is never
+      hand-edited while an auto-scored game plays
 
 ## State / data changes
 - No new `AppState` fields — guess values stay local component state, and the per-question winners live
@@ -92,11 +95,12 @@ Both teams submit a numeric guess; the team whose answer is closest to the corre
 - Result layout (`.guess-result`): the correct answer in a card on top, both teams side by side in a two-column grid below it, then the optional `answerImage`, then "Nächste Frage". The verdict is a gold "Näher dran!" badge on the winning team's card (a neutral "Gleichstand!" badge on both cards when the guesses are equidistant) — there is no separate winner banner, so the guesses are never sandwiched between two result blocks
 - Visual indicator (colour/border) on the winning team's result card
 - With `questionAudio`: the standard `.audio-controls` bar (timestamp / play-pause / restart) renders between question and inputs; playback uses `safePlay` + `watchMediaLoad` (asset resilience) and preloads the next question's audio via `usePreloadAsset`
-- Auto scoring (the default) changes nothing on the projector during play — the existing "Näher dran!" / "Gleichstand!" badges already state each question's verdict. Only the award screen differs: `.award-auto-teams` renders both teams as result cards (same two-column shape as `.guess-result-teams`, gold accent on the winner) with the team name and its points, above the single `.award-auto-confirm` button
+- Auto scoring (the default) changes nothing on the projector during play — the existing "Näher dran!" / "Gleichstand!" badges already state each question's verdict. It only changes how the shared award screen opens: the winner's `.award-team-card` is preselected (gold accent) and each card carries its won-question count, instead of the screen starting empty
 
 ## Out of scope
 - Accepting non-numeric answers
-- Overriding an automatic verdict on the award screen (corrections go through the gamemaster's per-entry undo)
+- Editing the per-question tally by hand while an auto-scored game plays (the award screen's override
+  changes who gets the points, never the record of who was closer)
 - Allowing teams to change their guess after submission
 
 ## Known limitations

@@ -184,7 +184,7 @@ describe('GuessingGame - Gaps', () => {
     });
   });
 
-  it('keeps the manual winner selection under scoringMode "standard"', async () => {
+  it('opens the award screen unselected under scoringMode "standard"', async () => {
     const user = userEvent.setup();
     renderGame(makeConfig({ scoringMode: 'standard' }));
     await waitFor(() => expect(screen.getByText('Test Guessing')).toBeInTheDocument());
@@ -200,12 +200,14 @@ describe('GuessingGame - Gaps', () => {
     await user.click(screen.getByText('Tipp Abgeben'));
     await clickForward(user);
 
+    // No verdict was recorded, so nothing is preselected and no points are stated yet.
     await waitFor(() => expect(screen.getByText('Welches Team hat gewonnen?')).toBeInTheDocument());
-    expect(screen.getByText('Unentschieden')).toBeInTheDocument();
-    expect(screen.queryByText('Punkte vergeben & weiter')).not.toBeInTheDocument();
+    expect(document.querySelector('.award-team-card.is-selected')).not.toBeInTheDocument();
+    expect(document.querySelector('.award-team-card-points')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Punkte vergeben & weiter' })).toBeDisabled();
   });
 
-  it('falls back to the manual selection when automatic scoring judged no real question', async () => {
+  it('preselects nothing when automatic scoring judged no real question', async () => {
     const user = userEvent.setup();
     // Only the example question — nothing counts, so there is no verdict to state.
     const config = makeConfig({
@@ -221,7 +223,7 @@ describe('GuessingGame - Gaps', () => {
     await clickForward(user);
 
     await waitFor(() => expect(screen.getByText('Welches Team hat gewonnen?')).toBeInTheDocument());
-    expect(screen.getByText('Unentschieden')).toBeInTheDocument();
+    expect(document.querySelector('.award-team-card.is-selected')).not.toBeInTheDocument();
   });
 
   it('handles zero guesses gracefully', async () => {

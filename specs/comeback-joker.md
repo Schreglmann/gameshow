@@ -32,9 +32,10 @@ killing late-show tension without any house-ruling.
       `pointValue * 2` for the armed team (the wrapper's `handleComplete` multiplier is never reached
       under `skipPointsScreen`); the flag is then cleared by the wrapper's inline `onGameComplete`
       branch. `count` / `count-penalty` modes remain out of scope.
-- [x] The `AwardPoints` screen shows a "×2 Aufholjoker" badge on the armed team's button while the
-      flag is set. Standard-mode `wer-kennt-mehr`'s own summary reward screen shows the same
-      `award-double-badge` on the armed team's button (it replaces the `AwardPoints` screen).
+- [x] The `AwardPoints` screen shows a "×2 Aufholjoker" badge on the armed team's card while the
+      flag is set, and — once that team is selected — the doubled value in its points line, which is
+      the same number the award books. Standard-mode `wer-kennt-mehr`'s summary renders the same
+      screen (`inline`), so it carries the badge too.
 - [x] `doubleNextGame` rides the cached `gamemaster-team-state` channel (cross-device + reconnect),
       is persisted to localStorage, and is cleared by `RESET_POINTS`, `RESET_JOKERS`, and `CLEAR_ALL`.
 

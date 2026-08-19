@@ -686,41 +686,42 @@ function FrontendShowcase() {
         </div>
       </Section>
 
-      <Section title="Award Points">
+      <Section title="Award Points (Auswahl)">
         <GlassCard>
           <h2 style={{ fontSize: '1.6em', marginBottom: 4 }}>Punkte vergeben</h2>
-          <p className="award-points-hint">Wer hat diese Runde gewonnen?</p>
-          <div className="button-row" style={{ marginBottom: 8 }}>
-            <button className="award-team-button">
-              Team 1
-              <span className="award-double-badge" title="Aufholjoker: Punkte zählen doppelt">×2 Aufholjoker</span>
-            </button>
-            <button className="award-team-button active">Team 2</button>
-          </div>
-          <p className="award-points-warning">3 Punkte werden vergeben</p>
-        </GlassCard>
-      </Section>
-
-      <Section title="Award Points (automatische Wertung)">
-        <GlassCard>
-          <h2 style={{ fontSize: '1.6em', marginBottom: 4 }}>Punkte vergeben</h2>
-          <p className="award-points-hint">Team 1 hat mehr Fragen gewonnen</p>
-          <div className="award-auto-teams">
-            <div className="award-auto-team is-winner" style={{ animation: 'none' }}>
-              <span className="award-auto-team-name">
+          <p className="award-points-hint">Team 1 hat gewonnen</p>
+          <div className="award-teams">
+            <button type="button" className="award-team-card is-selected" aria-pressed={true} style={{ animation: 'none' }}>
+              <span className="award-team-card-name">
                 Team 1
                 <span className="award-double-badge" title="Aufholjoker: Punkte zählen doppelt">×2 Aufholjoker</span>
               </span>
-              <span className="award-auto-points">+6 Punkte</span>
-              <span className="award-auto-wins">3 gewonnene Fragen</span>
-            </div>
-            <div className="award-auto-team" style={{ animation: 'none' }}>
-              <span className="award-auto-team-name">Team 2</span>
-              <span className="award-auto-points">0 Punkte</span>
-              <span className="award-auto-wins">2 gewonnene Fragen</span>
-            </div>
+              <span className="award-team-card-points">+6 Punkte</span>
+              <span className="award-team-card-count">3 richtige Antworten</span>
+            </button>
+            <button type="button" className="award-team-card" aria-pressed={false} style={{ animation: 'none' }}>
+              <span className="award-team-card-name">Team 2</span>
+              <span className="award-team-card-points">0 Punkte</span>
+              <span className="award-team-card-count">2 richtige Antworten</span>
+            </button>
           </div>
-          <button className="quiz-button award-auto-confirm">Punkte vergeben &amp; weiter</button>
+          <button className="quiz-button award-confirm">Punkte vergeben &amp; weiter</button>
+        </GlassCard>
+      </Section>
+
+      <Section title="Award Points (nichts ausgewählt)">
+        <GlassCard>
+          <h2 style={{ fontSize: '1.6em', marginBottom: 4 }}>Punkte vergeben</h2>
+          <p className="award-points-hint">Welches Team hat gewonnen?</p>
+          <div className="award-teams">
+            <button type="button" className="award-team-card" aria-pressed={false} style={{ animation: 'none' }}>
+              <span className="award-team-card-name">Team 1</span>
+            </button>
+            <button type="button" className="award-team-card" aria-pressed={false} style={{ animation: 'none' }}>
+              <span className="award-team-card-name">Team 2</span>
+            </button>
+          </div>
+          <button className="quiz-button award-confirm" disabled>Punkte vergeben &amp; weiter</button>
         </GlassCard>
       </Section>
 

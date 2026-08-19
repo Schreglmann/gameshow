@@ -9,37 +9,51 @@ export interface AwardPointsWinners {
 
 /**
  * A verdict the game computed itself (guessing-game's `scoringMode: 'auto'`). The
- * award screen then states who won instead of asking, and the host only confirms.
- * Wins are the reason for the award, never the point value.
+ * award screen preselects the winner(s) instead of asking, and the host confirms —
+ * or overrides by toggling a card. Wins are the reason for the award, never the
+ * point value.
  */
 export interface AutoAwardVerdict {
   /** Questions won per team. A tied question counts for BOTH teams, so these need not
-   *  add up to `scoredQuestions` — which is why the award screen states the points and
-   *  the verdict, not an "x of y" fraction. Surfaced as the gamemaster's standing. */
+   *  add up to `scoredQuestions` — which is why the award screen states a plain count,
+   *  not an "x of y" fraction. Surfaced as the gamemaster's standing. */
   team1Wins: number;
   team2Wins: number;
   /** Questions that counted (the example question never does). Zero means "no verdict" —
-   *  the wrapper then falls back to the manual winner selection. */
+   *  the wrapper then preselects nothing. */
   scoredQuestions: number;
   /** Who receives points — both true on an overall tie. */
   winners: AwardPointsWinners;
 }
 
-/**
- * The verdict plus the points the wrapper will actually award — the positional
- * value, already doubled for an armed Aufholjoker — so what the screen states and
- * what gets booked cannot diverge.
- */
-export interface AwardPointsAuto extends AutoAwardVerdict {
-  points: { team1: number; team2: number };
-}
-
 interface AwardPointsProps {
-  onComplete: (winners: AwardPointsWinners) => void;
-  auto?: AwardPointsAuto | null;
+  /** The teams currently marked as winners. Both = draw, neither = nothing picked yet. */
+  selected: AwardPointsWinners;
+  /** What each team would receive — positional value, Aufholjoker already applied. */
+  points: { team1: number; team2: number };
+  onToggle: (team: 'team1' | 'team2') => void;
+  onConfirm: () => void;
+  /** Third card line per team, already formatted ("2 gewonnene Fragen" /
+   *  "3 richtige Antworten"). `null` hides the line on both cards. */
+  counts?: { team1: string; team2: string } | null;
+  /** Replaces the generic hint (an untouched auto verdict, WerKenntMehr's prompt). */
+  hint?: string;
+  /** Extra line under the hint (WerKenntMehr's round tally). */
+  note?: string;
+  /** Render without the own card surface — for a game embedding the screen in its
+   *  own card (WerKenntMehr's summary), where a nested `#awardPointsContainer`
+   *  would stack a second surface with the wrong text colour. */
+  inline?: boolean;
 }
 
-export default function AwardPoints({ onComplete, auto }: AwardPointsProps) {
+/**
+ * The shared point-award screen: one card per team, each toggled on or off by the
+ * host (on the show or from the gamemaster), then a single confirm press books the
+ * points and advances. Nothing is selected until the host picks — or until a
+ * preselection (an auto verdict, the gamemaster's tally) fills it in.
+ * See specs/point-system.md.
+ */
+export default function AwardPoints({ selected, points, onToggle, onConfirm, counts, hint, note, inline }: AwardPointsProps) {
   const { state } = useGameContext();
   const armed = state.teams.doubleNextGame;
   // The armed team's positional points double for this award (Aufholjoker).
@@ -47,73 +61,60 @@ export default function AwardPoints({ onComplete, auto }: AwardPointsProps) {
     armed === team ? <span className="award-double-badge" title="Aufholjoker: Punkte zählen doppelt">×2 Aufholjoker</span> : null;
   // Crowd-facing surface → follow the frontend team order (see specs/team-order-mirror.md).
   const order = teamDisplayOrder(state.teams.orderSwapped, false, state.settings.teamMirrorEnabled);
+  const anySelected = selected.team1 || selected.team2;
 
-  if (auto) {
-    const isDraw = auto.winners.team1 && auto.winners.team2;
-    const winner = auto.winners.team1 ? 'team1' : 'team2';
-    return (
-      <div id="awardPointsContainer" className="quiz-container">
-        <h2>Punkte vergeben</h2>
-        <p className="award-points-hint">
-          {isDraw
-            ? 'Unentschieden — beide Teams erhalten Punkte'
-            : `${teamName(state.teams, winner === 'team1' ? 1 : 2)} hat mehr Fragen gewonnen`}
-        </p>
-        <div className="award-auto-teams">
-          {order.map(team => {
-            const points = auto.points[team];
-            const wins = team === 'team1' ? auto.team1Wins : auto.team2Wins;
-            const isWinner = auto.winners[team];
-            return (
-              <div className={`award-auto-team${isWinner ? ' is-winner' : ''}`} key={team}>
-                <span className="award-auto-team-name">
-                  {teamName(state.teams, team === 'team1' ? 1 : 2)}
-                  {badge(team)}
+  const defaultHint = !anySelected
+    ? 'Welches Team hat gewonnen?'
+    : selected.team1 && selected.team2
+      ? 'Unentschieden — beide Teams erhalten Punkte'
+      : `${teamName(state.teams, selected.team1 ? 1 : 2)} hat gewonnen`;
+
+  const body = (
+    <>
+      <h2>Punkte vergeben</h2>
+      <p className="award-points-hint">{hint ?? defaultHint}</p>
+      {note && <p className="award-points-note">{note}</p>}
+      <div className="award-teams">
+        {order.map(team => {
+          const isSelected = selected[team];
+          const pts = points[team];
+          return (
+            <button
+              type="button"
+              key={team}
+              className={`award-team-card${isSelected ? ' is-selected' : ''}`}
+              aria-pressed={isSelected}
+              onClick={() => onToggle(team)}
+            >
+              <span className="award-team-card-name">
+                {teamName(state.teams, team === 'team1' ? 1 : 2)}
+                {badge(team)}
+              </span>
+              {/* No points before anything is picked — until then nobody knows who gets what. */}
+              {anySelected && (
+                <span className="award-team-card-points">
+                  {isSelected && pts > 0 ? `+${pts} ${pts === 1 ? 'Punkt' : 'Punkte'}` : '0 Punkte'}
                 </span>
-                <span className="award-auto-points">
-                  {points > 0 ? `+${points} ${points === 1 ? 'Punkt' : 'Punkte'}` : '0 Punkte'}
-                </span>
-                {/* A plain count, never "x von y": a drawn question counts for both teams,
-                    so a fraction of the questions played would not add up. */}
-                <span className="award-auto-wins">
-                  {wins} {wins === 1 ? 'gewonnene Frage' : 'gewonnene Fragen'}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-        <button
-          className="quiz-button award-auto-confirm"
-          onClick={() => onComplete(auto.winners)}
-        >
-          Punkte vergeben &amp; weiter
-        </button>
+              )}
+              {counts && <span className="award-team-card-count">{counts[team]}</span>}
+            </button>
+          );
+        })}
       </div>
-    );
-  }
+      <button
+        className="quiz-button award-confirm"
+        disabled={!anySelected}
+        onClick={onConfirm}
+      >
+        Punkte vergeben &amp; weiter
+      </button>
+    </>
+  );
 
+  if (inline) return body;
   return (
     <div id="awardPointsContainer" className="quiz-container">
-      <h2>Punkte vergeben</h2>
-      <p className="award-points-hint">Welches Team hat gewonnen?</p>
-      <div className="button-row award-points-teams">
-        {order.map(team => (
-          <button
-            key={team}
-            className="quiz-button award-team-button"
-            onClick={() => onComplete({ team1: team === 'team1', team2: team === 'team2' })}
-          >
-            {teamName(state.teams, team === 'team1' ? 1 : 2)}
-            {badge(team)}
-          </button>
-        ))}
-        <button
-          className="quiz-button award-team-button"
-          onClick={() => onComplete({ team1: true, team2: true })}
-        >
-          Unentschieden
-        </button>
-      </div>
+      {body}
     </div>
   );
 }

@@ -36,12 +36,12 @@ The whole feature is **opt-in**: `GlobalSettings.teamMirrorEnabled` (from `confi
 ### Frontend order (mirror = false)
 - [x] `Header` shows the two team cells in `teamDisplayOrder(swapped)` order; the mirror-image cell layout (label/joker order, border side, tooltip direction) is **position-based** (left vs right), so a swapped team on the left still gets the left-cell layout. The team's data/jokers follow its identity.
 - [x] `HomeScreen` `#teams` renders both team cards in swapped order.
-- [x] `AwardPoints` orders the two team buttons in swapped order; "Unentschieden" stays last.
+- [x] `AwardPoints` orders the two team cards in swapped order; each card keeps toggling its own team.
 - [x] `BetQuiz` (category host panel team-choice), `FinalQuiz` (bet inputs + judgment groups), `GuessingGame` (guess inputs + result rows) and `WerKenntMehr` (host-panel team-choice + summary buttons) render their two-team columns in swapped order.
 
 ### Gamemaster order (mirror = true)
 - [x] `GamemasterView` joker cards and `CorrectAnswersTracker` render the two teams in mirrored order.
-- [x] The GM **control panels** built by `BetQuiz` (`team-selection`), `FinalQuiz` (`betting-submit` inputs + the two judgment button-groups), `GuessingGame` (`guess-submit` inputs), `WerKenntMehr` (`round-winner` + `winner-selection` + `final-winner`) and `BaseGameWrapper` (the end-of-game `award` button-group) list their team entries in mirrored order; non-team entries ("Unentschieden"/draw) stay last.
+- [x] The GM **control panels** built by `BetQuiz` (`team-selection`), `FinalQuiz` (`betting-submit` inputs + the two judgment button-groups), `GuessingGame` (`guess-submit` inputs), `WerKenntMehr` (`round-winner` + `winner-selection` + `final-winner`) and `BaseGameWrapper` (the end-of-game `award-selection` button-group) list their team entries in mirrored order; non-team entries ("Unentschieden"/draw) stay last.
 - [x] The gamemaster **team-setup controls** in `HomeScreen` mirror too: the "Teamname ändern" buttons (`edit-team1`/`edit-team2`) and, in manual mode, the per-team add-player inputs + tap-to-remove member lists.
 - [x] `Quizjagd` is unchanged (turn-based — one team at a time, no side-by-side layout).
 

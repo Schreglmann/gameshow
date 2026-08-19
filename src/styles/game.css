@@ -877,15 +877,29 @@
     letter-spacing: 1px;
 }
 
-.award-points-teams {
-    margin-bottom: 10px;
+.award-points-hint:has(+ .award-points-note) {
+    margin-bottom: 8px;
 }
 
-/* WerKenntMehr end-of-game reward screen. It renders directly inside the
-   BaseGameWrapper card (not a nested #awardPointsContainer, which would stack a
-   second card surface), so the bare <h2> + prompt + buttons carry no margins of
-   their own. This wrapper supplies the vertical rhythm — title, prompt, team
-   buttons — mirroring the shared AwardPoints spacing. */
+/* Guidance under the hint (wer-kennt-mehr's round tally). */
+.award-points-note {
+    font-size: 0.95em;
+    color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.55, var(--text-fade-floor, 0)));
+    margin-bottom: 30px;
+    letter-spacing: 0.5px;
+}
+
+/* Embedded in a game's own card (`inline`), where the host supplies the vertical
+   rhythm with a flex `gap` — the screen's own margins would add to it. */
+.wkm-summary .award-points-hint,
+.wkm-summary .award-points-note {
+    margin-bottom: 0;
+}
+
+/* WerKenntMehr end-of-game reward screen. It renders the shared award screen
+   `inline` — directly inside the BaseGameWrapper card, not a nested
+   #awardPointsContainer, which would stack a second card surface. This wrapper
+   supplies the vertical rhythm the bare elements then lack. */
 .wkm-summary {
     display: flex;
     flex-direction: column;
@@ -900,29 +914,11 @@
     color: var(--card-text, var(--text-primary));
 }
 
-.award-points-warning {
-    font-size: 0.85em;
-    color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.5, var(--text-fade-floor, 0)));
-    margin-top: 10px;
-    letter-spacing: 0.5px;
-}
-
-.award-team-button {
-    font-size: clamp(1em, 2.5vw, 1.4em);
-    padding: clamp(14px, 2vw, 22px) clamp(24px, 4vw, 55px);
-    min-width: clamp(120px, 20vw, 170px);
-}
-
-.award-team-button.active {
-    background: linear-gradient(135deg, var(--success-from) 0%, var(--success-to) 100%);
-    box-shadow: 0 8px 30px rgba(var(--success-rgb), 0.7);
-}
-
-/* Auto-scored award screen (guessing-game `scoringMode: 'auto'`): the verdict is
-   already decided, so instead of team buttons both teams appear as result cards —
-   same two-column shape as the game's own `.guess-result-teams`, so the numbers the
-   audience just saw carry over — followed by a single confirm button. */
-.award-auto-teams {
+/* Award screen: both teams as selectable result cards — same two-column shape as
+   guessing-game's own `.guess-result-teams`, so the numbers the audience just saw
+   carry over — followed by one confirm button. A card is a toggle: the host picks
+   the winner (or both, for a draw) and only then are the points spelled out. */
+.award-teams {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: clamp(10px, 2.5vw, 24px);
@@ -930,7 +926,7 @@
     margin-bottom: clamp(10px, 2vw, 20px);
 }
 
-.award-auto-team {
+.award-team-card {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -940,15 +936,29 @@
     border: 2px solid rgba(var(--card-text-rgb, var(--text-rgb)), 0.14);
     border-radius: 15px;
     animation: fadeIn 0.5s ease-out;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
-.award-auto-team.is-winner {
+.award-team-card:hover {
+    border-color: rgba(var(--card-text-rgb, var(--text-rgb)), 0.3);
+    transform: translateY(-2px);
+}
+
+.award-team-card:focus-visible {
+    outline: 2px solid rgba(var(--card-text-rgb, var(--text-rgb)), 0.7);
+    outline-offset: 3px;
+}
+
+.award-team-card.is-selected {
     background: rgba(var(--card-gold-rgb, var(--gold-warm-rgb)), 0.18);
     border-color: rgba(var(--card-gold-rgb, var(--gold-warm-rgb)), 0.75);
     box-shadow: 0 8px 32px rgba(var(--card-gold-rgb, var(--gold-warm-rgb)), 0.25);
 }
 
-.award-auto-team-name {
+.award-team-card-name {
     font-size: clamp(0.85em, 1.8vw, 1.05em);
     font-weight: 600;
     text-transform: uppercase;
@@ -957,7 +967,7 @@
     color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.7, var(--text-fade-floor, 0)));
 }
 
-.award-auto-points {
+.award-team-card-points {
     font-family: var(--font-heading, var(--font-primary));
     font-size: clamp(1.1em, 2.6vw, 1.5em);
     font-weight: 700;
@@ -966,23 +976,23 @@
     color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.6, var(--text-fade-floor, 0)));
 }
 
-.award-auto-wins {
+.award-team-card-count {
     font-size: clamp(0.8em, 1.6vw, 1em);
     font-weight: 500;
     text-align: center;
     color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.55, var(--text-fade-floor, 0)));
 }
 
-.award-auto-team.is-winner .award-auto-points {
+.award-team-card.is-selected .award-team-card-points {
     color: var(--card-gold, var(--gold-warm));
 }
 
-.award-auto-confirm {
+.award-confirm {
     font-size: clamp(1em, 2.5vw, 1.4em);
     padding: clamp(14px, 2vw, 22px) clamp(24px, 4vw, 55px);
 }
 
-/* Aufholjoker ×2 badge on the armed team's award button. */
+/* Aufholjoker ×2 badge on the armed team's award card. */
 .award-double-badge {
     display: block;
     margin-top: 0.4em;

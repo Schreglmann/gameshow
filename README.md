@@ -188,7 +188,7 @@ The host picks a video; players see a **single random still frame** pulled from 
 
 ### 5. Awarding Points
 
-After most game types, the host sees a points screen. Click the winning team — or **Unentschieden** for a draw — to add the points and move to the next game.
+After most game types, the host sees a points screen with one card per team. Tap the winning team — or both, for a draw — and the card shows the points it would get; **Punkte vergeben & weiter** then books them and moves to the next game. Where the score is already known (the gamemaster's tally, or a game that scored itself) the winner is preselected, so it is one press.
 
 ![Award Points](./docs/screenshots/award-points.png)
 

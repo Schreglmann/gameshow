@@ -267,7 +267,7 @@ Question fields match `simple-quiz` (image, audio, list, colors, timer, replaceI
 - Automatic number formatting (e.g., 1.000.000)
 - Calculates which team is closer
 - Displays both guesses and the correct answer
-- `scoringMode` (`"auto"` is the **default**, also when the field is absent; `"standard"` opts out): with automatic scoring the show counts the won questions itself (equidistant guesses count for both teams, the example question never counts). The award screen then states the verdict and the counts, and one press books the positional points for the team that won more questions — both teams on an equal count. The gamemaster's per-question tally fills itself: the score boxes show the running standing and "Wertung pro Frage" lists every judged question, both read-only (no `+`/`−` at all — the show awards the points). Starting the game again from its title screen clears that standing, so a restart begins at 0–0. Set it in admin via the "Punktevergabe" dropdown
+- `scoringMode` (`"auto"` is the **default**, also when the field is absent; `"standard"` opts out): with automatic scoring the show counts the won questions itself (equidistant guesses count for both teams, the example question never counts). The award screen then opens with that team's card already selected (both on an equal count) and each card showing its won-question count, so one press books the positional points — and the host can still pick a different team before confirming. The gamemaster's per-question tally fills itself: the score boxes show the running standing and "Wertung pro Frage" lists every judged question, both read-only (no `+`/`−` at all — the show awards the points). Starting the game again from its title screen clears that standing, so a restart begins at 0–0. Set it in admin via the "Punktevergabe" dropdown
 - Optional `questionAudio`: auto-plays while the question is shown (with play/pause + restart controls, mirrored to the gamemaster) — e.g. "guess the release year of this song". Keeps playing through the result phase; stops on the next question
 - Optional `questionAudioStart` / `questionAudioEnd` / `questionAudioLoop`: trim the section that plays (same semantics as simple-quiz; pick the points on the waveform in admin)
 - Optional `answerImage`: shown after the reveal
@@ -723,7 +723,7 @@ Both teams compete to name *more* of a given thing than the other team (e.g. "Ne
 
 Three **scoring modes** (config `scoringMode`, default `standard`):
 
-- **`standard`** (default — a **mid-show** game like any other): no points are awarded per round, but the gamemaster can record who named more each round ("Wer hatte mehr?" → Team 1 / Team 2 / Unentschieden); a running **round-win tally** is shown on the GM as scorekeeping guidance (the show frontend stays clean). After the last question a reward screen (Team 1 / Team 2 / Unentschieden) shows the tally and awards the **positional game points** (`currentIndex + 1`) to the team the host picks. Honors the **Aufholjoker** (×2 for the armed team), like every other positional-points game.
+- **`standard`** (default — a **mid-show** game like any other): no points are awarded per round, but the gamemaster can record who named more each round ("Wer hatte mehr?" → Team 1 / Team 2 / Unentschieden); a running **round-win tally** is shown on the GM as scorekeeping guidance (the show frontend stays clean). After the last question a reward screen shows the tally and awards the **positional game points** (`currentIndex + 1`) to the team the host selects (both cards = a draw) and confirms — the shared award screen, rendered inside the game's card. Honors the **Aufholjoker** (×2 for the armed team), like every other positional-points game.
 - **`count`** (a **final** game): the team that named more wins the round and is awarded **points equal to that count** — so a strong round can swing the global score hard. A tie (both teams selected) splits the points (`floor(count / 2)` each).
 - **`count-penalty`** (a **final** game, high stakes): like `count`, but the losing team also **loses** that count (floored at 0). A tie changes nothing.
 
@@ -785,7 +785,7 @@ There is no correct answer in this game type, so **both example fields are optio
 3. The host advances to reveal the example answers
 4. The host toggles the **winning team** (selecting both teams = tie)
 5. **`count` mode:** the host enters the **higher count**; "Punkte vergeben" awards that count to the winner — a tie splits it (`floor(count / 2)` each) — and advances to the next round
-6. **`standard` mode:** no per-round scoring — each round is just reveal the answer and press forward to the next question. After the last question a reward screen appears and the host picks the overall winner (Team 1 / Team 2 / Unentschieden) to award the game's positional points (tie → both teams)
+6. **`standard` mode:** no per-round scoring — each round is just reveal the answer and press forward to the next question. After the last question a reward screen appears; the host selects the overall winner (or both cards for a tie — the recorded round wins are preselected) and confirms to award the game's positional points
 
 ---
 

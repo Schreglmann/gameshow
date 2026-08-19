@@ -7,6 +7,7 @@ import AwardPoints, { type AwardPointsWinners, type AutoAwardVerdict } from '@/c
 import { useGameContext } from '@/context/GameContext';
 import { teamName } from '@/utils/teamNames';
 import { teamDisplayOrder } from '@/utils/teamOrder';
+import { tallyLeader, tallyTotals } from '@/utils/correctAnswers';
 import { detectShowScrollAnchors, scrollShowToAnchor } from '@/utils/scrollToCardAnchor';
 import { FullscreenProvider, type FullscreenMedia } from '@/context/FullscreenContext';
 import { Lightbox, VideoLightbox } from '@/components/layout/Lightbox';
@@ -16,6 +17,9 @@ import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand, Gamema
 import { PHASE_SCREEN_LABELS } from '@/types/game';
 
 type Phase = GamePhase;
+
+/** Nothing picked yet on the award screen. Module-level so the identity is stable. */
+const NO_WINNERS: AwardPointsWinners = { team1: false, team2: false };
 
 interface BaseGameWrapperProps {
   title: string;
@@ -174,8 +178,11 @@ export default function BaseGameWrapper({
   const expiryClearTimerRef = useRef<number | null>(null);
   const [answerRevealed, setAnswerRevealedState] = useState(false);
   // A verdict the game computed itself (guessing-game's auto scoring). When set, the
-  // award screen states who won instead of asking, and the host only confirms.
+  // award screen preselects those winners instead of starting empty.
   const [autoAward, setAutoAwardState] = useState<AutoAwardVerdict | null>(null);
+  // The host's winner pick on the award screen. `null` means untouched, so a
+  // preselection still shows through; the first toggle pins the selection.
+  const [pickedWinners, setPickedWinners] = useState<AwardPointsWinners | null>(null);
   // GM Pause/Resume affects both the deadline timer (above) AND the
   // per-question q.timer in SimpleQuiz / BetQuiz. The flag is set by the
   // `timer-pause` / `timer-resume` commands.
@@ -442,18 +449,65 @@ export default function BaseGameWrapper({
     [onAwardPoints, ptsFor, onNextGame, gameState.teams.doubleNextGame, gameDispatch]
   );
 
-  // The verdict as the award screen shows it: wins from the game, points from the
-  // wrapper. Teams that get nothing still show a 0 so the reason stays legible.
-  const autoAwardView = useMemo(
-    () => autoAward && {
-      ...autoAward,
-      points: {
-        team1: autoAward.winners.team1 ? ptsFor('team1') : 0,
-        team2: autoAward.winners.team2 ? ptsFor('team2') : 0,
-      },
-    },
-    [autoAward, ptsFor],
+  // What the award screen starts with: a verdict the game worked out, else whoever
+  // leads the gamemaster's correct-answer tally, else nothing. Derived (not seeded
+  // into state) so a tally edit arriving from another device still moves it — until
+  // the host picks, which pins the selection.
+  const gameTally = gameState.correctAnswersByGame[String(currentIndex)];
+  const preselectedWinners = useMemo(
+    () => autoAward?.winners ?? tallyLeader(gameTally),
+    [autoAward, gameTally],
   );
+  const selectedWinners = pickedWinners ?? preselectedWinners ?? NO_WINNERS;
+  const anyWinnerSelected = selectedWinners.team1 || selectedWinners.team2;
+
+  // What each team would receive, from the same `ptsFor` the award books with — so
+  // the preview and the booked points cannot diverge.
+  const awardPointsPreview = useMemo(
+    () => ({ team1: ptsFor('team1'), team2: ptsFor('team2') }),
+    [ptsFor],
+  );
+
+  // The cards' third line: won questions from an auto verdict, otherwise the
+  // gamemaster's tally. Dropped entirely when nothing was tallied — "0 richtige
+  // Antworten" on both cards states nothing.
+  const awardCounts = useMemo(() => {
+    if (autoAward) {
+      const won = (n: number) => `${n} ${n === 1 ? 'gewonnene Frage' : 'gewonnene Fragen'}`;
+      return { team1: won(autoAward.team1Wins), team2: won(autoAward.team2Wins) };
+    }
+    const totals = tallyTotals(gameTally);
+    if (totals.team1 === 0 && totals.team2 === 0) return null;
+    const correct = (n: number) => `${n} ${n === 1 ? 'richtige Antwort' : 'richtige Antworten'}`;
+    return { team1: correct(totals.team1), team2: correct(totals.team2) };
+  }, [autoAward, gameTally]);
+
+  // An untouched auto verdict states its own reason; once the host overrides it, the
+  // screen falls back to its generic wording.
+  const awardHint = pickedWinners === null && autoAward
+    ? (autoAward.winners.team1 && autoAward.winners.team2
+      ? 'Unentschieden — beide Teams erhalten Punkte'
+      : `${teamName(gameState.teams, autoAward.winners.team1 ? 1 : 2)} hat mehr Fragen gewonnen`)
+    : undefined;
+
+  const toggleWinner = useCallback((team: 'team1' | 'team2') => {
+    // Toggling against what is currently SHOWN, so the first press after a
+    // preselection deselects that team instead of starting from an empty pick.
+    setPickedWinners(prev => {
+      const base = prev ?? preselectedWinners ?? NO_WINNERS;
+      return { ...base, [team]: !base[team] };
+    });
+  }, [preselectedWinners]);
+
+  const confirmAward = useCallback(() => {
+    if (!(selectedWinners.team1 || selectedWinners.team2)) return;
+    handleComplete(selectedWinners);
+  }, [selectedWinners, handleComplete]);
+
+  // Leaving the award screen drops the pick so it can't leak into the next game.
+  useEffect(() => {
+    if (phase !== 'points') setPickedWinners(null);
+  }, [phase]);
 
   // Build controls based on current phase
   const allControls = useMemo((): GamemasterControl[] => {
@@ -470,42 +524,47 @@ export default function BaseGameWrapper({
       ];
     }
     if (phase === 'points') {
-      // Auto-scored games decided the winner themselves — the GM gets the verdict as
-      // a read-only line plus a single confirm button, never a winner choice.
-      if (autoAwardView) {
+      const controls: GamemasterControl[] = [];
+      // An auto-scored game states its standing as a read-only line; the winner it
+      // worked out is preselected below, where the host can still override it.
+      if (autoAward) {
         const t1 = teamName(gameState.teams, 1);
         const t2 = teamName(gameState.teams, 2);
-        const isDraw = autoAwardView.winners.team1 && autoAwardView.winners.team2;
+        const isDraw = autoAward.winners.team1 && autoAward.winners.team2;
         const winnerLabel = isDraw
           ? 'Unentschieden'
-          : `${autoAwardView.winners.team1 ? t1 : t2} gewinnt`;
-        return [
-          {
-            type: 'info',
-            id: 'award-auto-summary',
-            text: `${t1}: ${autoAwardView.team1Wins} · ${t2}: ${autoAwardView.team2Wins} → ${winnerLabel}`,
-          },
-          { type: 'button', id: 'award-auto', label: 'Punkte vergeben', variant: 'primary' },
-        ];
+          : `${autoAward.winners.team1 ? t1 : t2} gewinnt`;
+        controls.push({
+          type: 'info',
+          id: 'award-auto-summary',
+          text: `${t1}: ${autoAward.team1Wins} · ${t2}: ${autoAward.team2Wins} → ${winnerLabel}`,
+        });
       }
-      // GM control panel → mirror the frontend order (GM faces the crowd). IDs stay
-      // team-keyed, so only display order changes; "Unentschieden" stays last.
-      return [{
+      // Toggles mirroring the show's cards, then one confirm — the same shape
+      // wer-kennt-mehr's count mode uses. GM control panel → mirror the frontend
+      // order (GM faces the crowd); IDs stay team-keyed, so only display order changes.
+      controls.push({
         type: 'button-group',
-        id: 'award',
-        label: 'Punkte vergeben',
-        buttons: [
-          ...teamDisplayOrder(gameState.teams.orderSwapped, true, gameState.settings.teamMirrorEnabled).map(teamKey => ({
-            id: `award-${teamKey}`,
-            label: teamName(gameState.teams, teamKey === 'team1' ? 1 : 2),
-            variant: 'primary' as const,
-          })),
-          { id: 'award-draw', label: 'Unentschieden', variant: 'primary' },
-        ],
-      }];
+        id: 'award-selection',
+        label: 'Welches Team hat gewonnen? (beide = unentschieden)',
+        buttons: teamDisplayOrder(gameState.teams.orderSwapped, true, gameState.settings.teamMirrorEnabled).map(teamKey => ({
+          id: `award-toggle-${teamKey}`,
+          label: teamName(gameState.teams, teamKey === 'team1' ? 1 : 2),
+          variant: 'primary' as const,
+          active: selectedWinners[teamKey],
+        })),
+      });
+      controls.push({
+        type: 'button',
+        id: 'award-confirm',
+        label: 'Punkte vergeben & weiter',
+        variant: 'primary',
+        disabled: !anyWinnerSelected,
+      });
+      return controls;
     }
     return [];
-  }, [phase, gameControls, navState.hideForward, navState.hideBack, gameState.teams, gameState.settings.teamMirrorEnabled, autoAwardView]);
+  }, [phase, gameControls, navState.hideForward, navState.hideBack, gameState.teams, gameState.settings.teamMirrorEnabled, autoAward, selectedWinners, anyWinnerSelected]);
 
   useGamemasterControlsSync(allControls, phase, currentIndex, hideCorrectTracker, gameState.currentGame?.totalGames, deadlineActive, timerActive, timerPaused, answerRevealed, scrollAnchors, fullscreenMedia !== null, fullscreenOpen, broadcastRemainingMs ?? undefined, activeTotalSeconds ?? undefined, activeKind ?? undefined, tickMuted, autoScored);
 
@@ -735,15 +794,21 @@ export default function BaseGameWrapper({
       }
     } else if (cmd.controlId === 'nav-back') {
       handleBackNav();
-    } else if (cmd.controlId === 'award-team1') {
-      handleComplete({ team1: true, team2: false });
-    } else if (cmd.controlId === 'award-team2') {
-      handleComplete({ team1: false, team2: true });
-    } else if (cmd.controlId === 'award-draw') {
-      handleComplete({ team1: true, team2: true });
-    } else if (cmd.controlId === 'award-auto') {
-      // Confirm an auto verdict. Guarded: without one there is nothing to award.
-      if (autoAward) handleComplete(autoAward.winners);
+    } else if (cmd.controlId === 'award-toggle-team1' || cmd.controlId === 'award-toggle-team2') {
+      // Mirrors a tap on the show's team card. Phase-guarded so a late command from a
+      // GM that hasn't caught up can't pick a winner for a game still being played.
+      if (phase === 'points') toggleWinner(cmd.controlId === 'award-toggle-team1' ? 'team1' : 'team2');
+    } else if (cmd.controlId === 'award-confirm') {
+      confirmAward();
+    } else if (cmd.controlId === 'award-team1' || cmd.controlId === 'award-team2' || cmd.controlId === 'award-draw' || cmd.controlId === 'award-auto') {
+      // The pre-toggle award ids. The three PWAs are cached separately, so a
+      // gamemaster running an older bundle still emits these — honour them as an
+      // immediate award rather than dropping the host's press on the floor.
+      if (cmd.controlId === 'award-auto') {
+        if (autoAward) handleComplete(autoAward.winners);
+      } else {
+        handleComplete({ team1: cmd.controlId !== 'award-team2', team2: cmd.controlId !== 'award-team1' });
+      }
     } else if (cmd.controlId === 'use-joker' && cmd.value && typeof cmd.value === 'object') {
       const { team, jokerId, used } = cmd.value as { team?: string; jokerId?: string; used?: string };
       if ((team === 'team1' || team === 'team2') && typeof jokerId === 'string') {
@@ -826,7 +891,7 @@ export default function BaseGameWrapper({
     } else {
       commandHandler?.(cmd);
     }
-  }, [handleNav, handleBackNav, handleComplete, autoAward, commandHandler, gameDispatch, resumePausedAudio, freezeActiveTimer, resumeActiveTimer]));
+  }, [handleNav, handleBackNav, handleComplete, autoAward, phase, toggleWinner, confirmAward, commandHandler, gameDispatch, resumePausedAudio, freezeActiveTimer, resumeActiveTimer]));
 
   return (
     <FullscreenProvider value={fullscreenValue}>
@@ -872,7 +937,14 @@ export default function BaseGameWrapper({
       )}
 
       {phase === 'points' && (
-        <AwardPoints onComplete={handleComplete} auto={autoAwardView} />
+        <AwardPoints
+          selected={selectedWinners}
+          points={awardPointsPreview}
+          counts={awardCounts}
+          hint={awardHint}
+          onToggle={toggleWinner}
+          onConfirm={confirmAward}
+        />
       )}
 
       {/* One countdown ring for BOTH timer kinds: the GM deadline takes
