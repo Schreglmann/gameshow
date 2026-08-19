@@ -101,8 +101,9 @@ Nothing imports the `ffmpeg` package (verified by grep — only `fluent-ffmpeg` 
 
 Superseded by scoped verification: [.githooks/pre-commit](.githooks/pre-commit) now runs
 `node scripts/verify-changed.cjs --staged`, which selects `typecheck` / `lint` / `validate` /
-`contracts:lint` / tests from the staged change set, and [.githooks/pre-push](.githooks/pre-push) runs the
-full sweep once per push. See AGENTS.md §7 (Verification).
+`contracts:lint` / tests from the staged change set. [.githooks/pre-push](.githooks/pre-push) runs
+`validate`, the one gate GitHub Actions cannot run on the git-crypt encrypted config; the full sweep
+runs in [.github/workflows/ci.yml](.github/workflows/ci.yml). See AGENTS.md §7 (Verification).
 
 ---
 
