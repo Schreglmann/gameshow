@@ -217,6 +217,37 @@ describe('GameEditor', () => {
     window.confirm = () => true;
   });
 
+  it('offers the Punktevergabe dropdown for guessing-game and saves the chosen mode', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderEditor({
+      fileName: 'guess.json',
+      initialData: { type: 'guessing-game', title: 'Schätzspiel', rules: [], questions: [] },
+    });
+
+    // Automatic scoring is the default, so an untouched game shows it without the field.
+    const select = screen.getByRole('combobox', { name: 'Punktevergabe' }) as HTMLSelectElement;
+    expect(select.value).toBe('auto');
+
+    await user.selectOptions(select, 'standard');
+    act(() => { vi.advanceTimersByTime(800); });
+    await waitFor(() => {
+      expect(mockSaveGame).toHaveBeenCalledWith('guess.json', expect.objectContaining({ scoringMode: 'standard' }));
+    });
+
+    // Back to automatic: the field is dropped rather than written out as the default.
+    mockSaveGame.mockClear();
+    await user.selectOptions(select, 'auto');
+    act(() => { vi.advanceTimersByTime(800); });
+    await waitFor(() => {
+      expect(mockSaveGame).toHaveBeenCalledWith('guess.json', expect.not.objectContaining({ scoringMode: 'standard' }));
+    });
+  });
+
+  it('offers no Punktevergabe dropdown for a game type without scoring modes', () => {
+    renderEditor();
+    expect(screen.queryByRole('combobox', { name: 'Punktevergabe' })).not.toBeInTheDocument();
+  });
+
   it('auto-saves after 800ms debounce when title changes', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderEditor();

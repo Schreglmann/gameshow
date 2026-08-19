@@ -108,7 +108,7 @@ function sendCommand(controlId: string, value?: string | Record<string,string>) 
 - `info` — read-only text card. No interaction.
 - `nav` — implicit back/next navigation control. Respect `hideBack`.
 
-`data.phase` is one of `landing | rules | game | points`. Use it for contextual UI decisions. `data.gameIndex` is the 0-based game slot. `data.hideCorrectTracker` says whether to show the correct-answer counter bar (some game types track progress via points instead).
+`data.phase` is one of `landing | rules | game | points`. Use it for contextual UI decisions. `data.gameIndex` is the 0-based game slot. `data.hideCorrectTracker` says whether to show the correct-answer counter bar (some game types track progress via points instead). `data.tallyReadOnly` says the playing game fills that tally itself (guessing-game's automatic scoring) - render the counts, but leave out the editing controls.
 
 ## State persistence
 

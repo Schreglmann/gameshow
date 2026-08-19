@@ -46,7 +46,8 @@ of mentally recomputing totals and re-awarding.
 - [x] **Visibility is context-gated** (it's clutter mid-play for normal games): the panel shows only on
       a game's **title (landing) screen**, OR **during** a game whose scoring changes points live
       (bet-quiz / quizjagd / final-quiz / wer-kennt-mehr — detected via the broadcast
-      `hideCorrectTracker` flag, the existing "points already reflected inline" signal). It is hidden
+      `hideCorrectTracker` flag, the existing "points already reflected inline" signal; note that
+      guessing-game does NOT set it: its automatic scoring FILLS the tally rather than replacing it). It is hidden
       during the rules/answer screens, the award-points screen, normal-game play, and when no game is
       active. Gated in `GamemasterView` off `controlsData.phase` + `controlsData.hideCorrectTracker`.
 - [x] `scoreHistory` is cleared by `RESET_POINTS` and `CLEAR_ALL`, persisted/restored by

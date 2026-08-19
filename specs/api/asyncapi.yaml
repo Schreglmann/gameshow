@@ -864,6 +864,9 @@ components:
           enum: [landing, rules, game, points]
         gameIndex: { type: integer }
         hideCorrectTracker: { type: boolean }
+        tallyReadOnly:
+          type: boolean
+          description: "True while the playing game fills the per-question tally itself (guessing-game's automatic scoring). Show the counters and the per-question breakdown, but leave out their +/- controls - the show awards the points."
         deadlineActive:
           type: boolean
           description: "True while a GM-triggered deadline timer has a value set (counting down or showing the 'Zeit abgelaufen!' badge until auto-clear)."

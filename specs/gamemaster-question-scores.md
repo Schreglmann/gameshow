@@ -53,6 +53,12 @@ its "Out of scope: Per-game grouping / full session ledger UI" bullet.
 - [x] One row model, two feeds, selected off the existing `hideCorrectTracker` signal:
       normal games read the per-question tally (counts); inline-scored games aggregate `scoreHistory`
       filtered to the current `gameIndex`, grouped by `questionNumber` (net signed points per team).
+      guessing-game's automatic scoring (its default) writes its per-question winners INTO the tally
+      feed, so the panel shows real rows during play even though the points are awarded only at the end;
+      it also sets `tallyReadOnly` on the controls channel, which drops the rows' `+`/`−` (and the
+      `CorrectAnswersTracker` buttons) so a hand-edit can't compete with the show's own scoring, and it
+      clears its own bucket (`RESET_GAME_TALLY`) when the host starts the game from its title screen.
+      See [games/guessing-game.md](games/guessing-game.md).
 - [x] Rows run `1 … max(current question, highest question holding data)`. Taking the max is what keeps
       a corrected row visible after the host navigates **back** — hiding a just-corrected row would be
       this feature's worst failure mode.
@@ -65,7 +71,8 @@ its "Out of scope: Per-game grouping / full session ledger UI" bullet.
       would render a double award or a reversal-under-clamp as "nothing happened" — masking exactly what
       the host opened the panel to find.
 - [x] Tally rows are editable via compact per-team `−`/`+` (that is how a forgotten question gets fixed
-      where it happened). Point rows are read-only — corrections there go through the existing per-entry
+      where it happened) — except while the playing game scores itself (`tallyReadOnly`), when they are
+      not rendered at all. Point rows are read-only — corrections there go through the existing per-entry
       undo in "Letzte Wertungen".
 - [x] Every write path is suppressed while `GamemasterView`'s `desynced` flag is true: attribution
       depends on both `gamemaster-answer` (question) and `gamemaster-controls` (gameIndex) being fresh.

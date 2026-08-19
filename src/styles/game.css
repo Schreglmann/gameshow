@@ -918,6 +918,70 @@
     box-shadow: 0 8px 30px rgba(var(--success-rgb), 0.7);
 }
 
+/* Auto-scored award screen (guessing-game `scoringMode: 'auto'`): the verdict is
+   already decided, so instead of team buttons both teams appear as result cards —
+   same two-column shape as the game's own `.guess-result-teams`, so the numbers the
+   audience just saw carry over — followed by a single confirm button. */
+.award-auto-teams {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: clamp(10px, 2.5vw, 24px);
+    width: 100%;
+    margin-bottom: clamp(10px, 2vw, 20px);
+}
+
+.award-auto-team {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: clamp(4px, 1vw, 8px);
+    padding: clamp(12px, 2vw, 20px);
+    background: rgba(var(--card-text-rgb, var(--text-rgb)), 0.05);
+    border: 2px solid rgba(var(--card-text-rgb, var(--text-rgb)), 0.14);
+    border-radius: 15px;
+    animation: fadeIn 0.5s ease-out;
+}
+
+.award-auto-team.is-winner {
+    background: rgba(var(--card-gold-rgb, var(--gold-warm-rgb)), 0.18);
+    border-color: rgba(var(--card-gold-rgb, var(--gold-warm-rgb)), 0.75);
+    box-shadow: 0 8px 32px rgba(var(--card-gold-rgb, var(--gold-warm-rgb)), 0.25);
+}
+
+.award-auto-team-name {
+    font-size: clamp(0.85em, 1.8vw, 1.05em);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    text-align: center;
+    color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.7, var(--text-fade-floor, 0)));
+}
+
+.award-auto-points {
+    font-family: var(--font-heading, var(--font-primary));
+    font-size: clamp(1.1em, 2.6vw, 1.5em);
+    font-weight: 700;
+    line-height: 1.2;
+    text-align: center;
+    color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.6, var(--text-fade-floor, 0)));
+}
+
+.award-auto-wins {
+    font-size: clamp(0.8em, 1.6vw, 1em);
+    font-weight: 500;
+    text-align: center;
+    color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.55, var(--text-fade-floor, 0)));
+}
+
+.award-auto-team.is-winner .award-auto-points {
+    color: var(--card-gold, var(--gold-warm));
+}
+
+.award-auto-confirm {
+    font-size: clamp(1em, 2.5vw, 1.4em);
+    padding: clamp(14px, 2vw, 22px) clamp(24px, 4vw, 55px);
+}
+
 /* Aufholjoker ×2 badge on the armed team's award button. */
 .award-double-badge {
     display: block;
@@ -958,8 +1022,8 @@
     align-items: center;
     gap: clamp(8px, 1.5vw, 14px);
     padding: clamp(12px, 2vw, 20px);
-    background: rgba(var(--glass-rgb), 0.05);
-    border: 1px solid rgba(var(--glass-rgb), 0.12);
+    background: rgba(var(--card-text-rgb, var(--text-rgb)), 0.05);
+    border: 1px solid rgba(var(--card-text-rgb, var(--text-rgb)), 0.14);
     border-radius: var(--radius-md, 15px);
 }
 
@@ -982,8 +1046,11 @@
     font-weight: 600;
     text-align: center;
     border-radius: 12px;
-    border: 2px solid rgba(var(--glass-rgb), 0.3);
-    background: rgba(var(--glass-rgb), 0.1);
+    /* Surface + focus ring come from the shared `--input-*` tokens (see base.css); the
+       fallbacks are derived from the card's own text colour, which contrasts with the card
+       by definition — unlike `--glass-rgb`, which is the card's own tint. */
+    border: 2px solid var(--input-border-color, rgba(var(--card-text-rgb, var(--text-rgb)), 0.35));
+    background: var(--input-bg, rgba(var(--card-text-rgb, var(--text-rgb)), 0.08));
     -webkit-backdrop-filter: blur(10px);
     backdrop-filter: blur(10px);
     color: var(--card-text, var(--text-primary));
@@ -992,9 +1059,9 @@
 
 .guess-field input:focus {
     outline: none;
-    border-color: rgba(var(--glass-rgb), 0.6);
-    background: rgba(var(--glass-rgb), 0.15);
-    box-shadow: 0 0 20px rgba(var(--glass-rgb), 0.2);
+    border-color: var(--input-focus-border-color, rgba(var(--card-text-rgb, var(--text-rgb)), 0.65));
+    background: var(--input-focus-bg, rgba(var(--card-text-rgb, var(--text-rgb)), 0.13));
+    box-shadow: var(--input-focus-shadow, 0 0 20px rgba(var(--card-text-rgb, var(--text-rgb)), 0.2));
 }
 
 /* Result: the answer on top, both teams side by side below it. The verdict is a
@@ -1051,8 +1118,8 @@
     align-items: center;
     gap: clamp(4px, 1vw, 8px);
     padding: clamp(12px, 2vw, 20px);
-    background: rgba(var(--glass-rgb), 0.05);
-    border: 2px solid rgba(var(--glass-rgb), 0.12);
+    background: rgba(var(--card-text-rgb, var(--text-rgb)), 0.05);
+    border: 2px solid rgba(var(--card-text-rgb, var(--text-rgb)), 0.14);
     border-radius: 15px;
     animation: fadeIn 0.5s ease-out;
     transition: all 0.3s ease;
@@ -1108,9 +1175,9 @@
 }
 
 .guess-result-badge.is-tie {
-    background: rgba(var(--glass-rgb), 0.12);
+    background: rgba(var(--card-text-rgb, var(--text-rgb)), 0.12);
     color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.8, var(--text-fade-floor, 0)));
-    box-shadow: inset 0 0 0 1px rgba(var(--glass-rgb), 0.3);
+    box-shadow: inset 0 0 0 1px rgba(var(--card-text-rgb, var(--text-rgb)), 0.3);
 }
 
 .guess-result .quiz-image {

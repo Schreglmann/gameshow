@@ -1,8 +1,11 @@
-import { useState, useEffect, useCallback, useRef, type FormEvent } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, type FormEvent } from 'react';
 import type { GameComponentProps } from './types';
 import type { GuessingGameConfig, GuessingGameQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
+import type { AutoAwardVerdict } from '@/components/common/AwardPoints';
 import { formatNumber } from '@/utils/questions';
+import { EXAMPLE_SLOT_ID } from '@/utils/questionOrder';
+import { getHighWater } from '@/utils/gamePlaythroughStore';
 import { useQuestionOrder, type QuestionOrderHandle } from '@/hooks/useQuestionOrder';
 import { useLiveQuestionIndex } from '@/hooks/useLiveQuestionIndex';
 import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
@@ -31,6 +34,11 @@ export default function GuessingGame(props: GameComponentProps) {
 
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
   const hasAudio = questions.some(q => q.questionAudio);
+  // Auto scoring is the DEFAULT here (this game always knows who was closer): on every
+  // reveal the show writes the question's winner into the SHARED per-question tally the
+  // gamemaster used to keep by hand, and the award screen states the verdict derived from
+  // it. `scoringMode: 'standard'` is the explicit opt-out.
+  const autoScoring = config.scoringMode !== 'standard';
 
   // Stop audio when this component unmounts (navigating away)
   useEffect(() => {
@@ -61,20 +69,26 @@ export default function GuessingGame(props: GameComponentProps) {
       pointSystemEnabled={props.pointSystemEnabled}
       pointValue={props.currentIndex + 1}
       currentIndex={props.currentIndex}
+      order={order}
+      autoScored={autoScoring}
       onRulesShow={hasAudio ? () => music.fadeOut(2000) : undefined}
       onNextShow={handleNextShow}
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}
       onPrevGame={props.onPrevGame}
     >
-      {({ onGameComplete, setNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setStopAudioHandler, setNavState, setAnswerRevealed }) => (
+      {({ onGameComplete, setNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setStopAudioHandler, setNavState, setAnswerRevealed, setAutoAward }) => (
         <GuessingInner
           questions={questions}
           order={order}
           gameTitle={config.title}
+          autoScoring={autoScoring}
+          gameIndex={props.currentIndex}
+          gameId={props.gameId}
           questionAudioRef={questionAudioRef}
           skipAudioCleanupRef={skipAudioCleanupRef}
           onGameComplete={onGameComplete}
+          setAutoAward={setAutoAward}
           setNavHandler={setNavHandler}
           setGamemasterData={setGamemasterData}
           setGamemasterControls={setGamemasterControls}
@@ -98,9 +112,18 @@ interface GuessingInnerProps {
   questions: GuessingGameQuestion[];
   order: QuestionOrderHandle;
   gameTitle: string;
+  /** Automatic scoring (the default; off only under `scoringMode: 'standard'`) —
+   * record the closer team per question and hand the wrapper a finished verdict
+   * instead of letting the host pick a winner. */
+  autoScoring: boolean;
+  /** Which game this is, i.e. the key the per-question tally is filed under. */
+  gameIndex: number;
+  /** Stable game ref, used to read how far this playthrough has got. */
+  gameId?: string;
   questionAudioRef: React.RefObject<HTMLAudioElement | null>;
   skipAudioCleanupRef: React.RefObject<boolean>;
   onGameComplete: () => void;
+  setAutoAward: (verdict: AutoAwardVerdict | null) => void;
   setNavHandler: (fn: (() => void) | null) => void;
   setGamemasterData: (data: GamemasterAnswerData | null) => void;
   setGamemasterControls: (controls: GamemasterControl[]) => void;
@@ -110,8 +133,8 @@ interface GuessingInnerProps {
   setAnswerRevealed: (revealed: boolean) => void;
 }
 
-function GuessingInner({ questions, order, gameTitle, questionAudioRef, skipAudioCleanupRef, onGameComplete, setNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setStopAudioHandler, setNavState, setAnswerRevealed }: GuessingInnerProps) {
-  const { state } = useGameContext();
+function GuessingInner({ questions, order, gameTitle, autoScoring, gameIndex, gameId, questionAudioRef, skipAudioCleanupRef, onGameComplete, setAutoAward, setNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setStopAudioHandler, setNavState, setAnswerRevealed }: GuessingInnerProps) {
+  const { state, dispatch } = useGameContext();
   const t1 = teamName(state.teams, 1);
   const t2 = teamName(state.teams, 2);
   const [qIdx, setQIdx, qKey] = useLiveQuestionIndex(order);
@@ -131,6 +154,12 @@ function GuessingInner({ questions, order, gameTitle, questionAudioRef, skipAudi
   const [assetFailed, setAssetFailed] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const gmConnected = useGmConnected();
+
+  // This game's per-question tally — the single source of truth for the auto verdict, so a
+  // host correction in the gamemaster's score boxes moves the verdict with it.
+  const byQuestion = state.correctAnswersByGame[String(gameIndex)];
+  const tallyRef = useRef(byQuestion ?? {});
+  tallyRef.current = byQuestion ?? {};
 
   const q = questions[qIdx];
   const isExample = qIdx === 0;
@@ -191,20 +220,81 @@ function GuessingInner({ questions, order, gameTitle, questionAudioRef, skipAudi
     const t1Val = parseFloat(t1) || 0;
     const t2Val = parseFloat(t2) || 0;
     const answer = q!.answer;
+    const t1Diff = Math.abs(t1Val - answer);
+    const t2Diff = Math.abs(t2Val - answer);
     setResultInfo({
       answer,
       t1Guess: t1Val,
       t2Guess: t2Val,
-      t1Diff: Math.abs(t1Val - answer),
-      t2Diff: Math.abs(t2Val - answer),
+      t1Diff,
+      t2Diff,
     });
+    if (autoScoring && !isExample) {
+      // Record the verdict in the SAME per-question tally the host used to fill by hand:
+      // it persists, syncs to every gamemaster device, and feeds both the score boxes and
+      // "Wertung pro Frage". Equidistant guesses count for BOTH teams. The action takes a
+      // delta, so we diff against what the question already holds — re-judging a question
+      // (or a host correction) is overwritten, never counted twice.
+      const key = String(qIdx);
+      const held = tallyRef.current[key] ?? { team1: 0, team2: 0 };
+      const target = { team1: t1Diff <= t2Diff ? 1 : 0, team2: t2Diff <= t1Diff ? 1 : 0 };
+      for (const team of ['team1', 'team2'] as const) {
+        const delta = target[team] - held[team];
+        if (delta !== 0) dispatch({ type: 'UPDATE_CORRECT_ANSWER', payload: { gameIndex, question: key, team, delta } });
+      }
+    }
     setPhase('result');
-  }, [q]);
+  }, [q, autoScoring, isExample, qIdx, gameIndex, dispatch]);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     doSubmit(team1Guess, team2Guess);
   };
+
+  // Running standing, read back off the tally. A question counts as won by a team when its
+  // bucket is non-zero — a drawn question counts for both, so the two win counts can add up
+  // to more than `scoredQuestions`. The example question (key '0') and the `'none'` bucket
+  // never count.
+  const roundTally = useMemo(() => {
+    // Only questions this playthrough actually reached count. The tally survives for the
+    // whole session, so an earlier playthrough of the same game position could otherwise
+    // contribute wins for questions that were never asked this time — silently changing the
+    // award. `getHighWater` is session-scoped per gameId, so the ceiling survives leaving
+    // and re-entering the game.
+    const reached = Math.max(qIdx, gameId ? getHighWater(gameId) : 0);
+    let t1Wins = 0;
+    let t2Wins = 0;
+    let scoredQuestions = 0;
+    for (const [key, cell] of Object.entries(byQuestion ?? {})) {
+      const n = Number(key);
+      if (!Number.isInteger(n) || n <= EXAMPLE_SLOT_ID || n > reached) continue;
+      if (cell.team1 <= 0 && cell.team2 <= 0) continue;
+      scoredQuestions += 1;
+      if (cell.team1 > 0) t1Wins += 1;
+      if (cell.team2 > 0) t2Wins += 1;
+    }
+    return { t1Wins, t2Wins, scoredQuestions };
+  }, [byQuestion, qIdx, gameId]);
+
+  // Hand the wrapper the finished verdict, so the award screen states it instead of
+  // asking. Until a real question has been judged there is nothing to state — the
+  // host then gets the normal manual selection.
+  useEffect(() => {
+    if (!autoScoring || roundTally.scoredQuestions === 0) {
+      setAutoAward(null);
+      return;
+    }
+    setAutoAward({
+      team1Wins: roundTally.t1Wins,
+      team2Wins: roundTally.t2Wins,
+      scoredQuestions: roundTally.scoredQuestions,
+      // Equal wins → both teams are awarded, like picking "Unentschieden" by hand.
+      winners: {
+        team1: roundTally.t1Wins >= roundTally.t2Wins,
+        team2: roundTally.t2Wins >= roundTally.t1Wins,
+      },
+    });
+  }, [autoScoring, roundTally, setAutoAward]);
 
   const handleNext = useCallback(() => {
     if (phase === 'result') {

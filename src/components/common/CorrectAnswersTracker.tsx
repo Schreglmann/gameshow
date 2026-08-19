@@ -13,11 +13,19 @@ interface CorrectAnswersTrackerProps {
    * a count came from. See specs/gamemaster-question-scores.md.
    */
   question?: string;
+  /**
+   * True when the playing game fills the tally itself (guessing-game's automatic
+   * scoring). The counts still show — they are the running standing — but the `+`/`−`
+   * buttons are left out entirely: a dead button invites the host to wonder whether
+   * they or the show award a question.
+   */
+  readOnly?: boolean;
 }
 
 export default function CorrectAnswersTracker({
   gameIndex,
   question = NO_QUESTION_KEY,
+  readOnly = false,
 }: CorrectAnswersTrackerProps) {
   const { state, dispatch } = useGameContext();
   const byQuestion = state.correctAnswersByGame[String(gameIndex)];
@@ -44,25 +52,29 @@ export default function CorrectAnswersTracker({
         <div className="gm-correct-members">{members.join(', ')}</div>
       )}
       <div className="gm-correct-row">
-        <button
-          className="gm-btn gm-correct-btn"
-          onClick={() => update(team, -1)}
-          aria-label={`${label} minus`}
-          // Gated on THIS question's bucket, not the total: `−` writes to the
-          // current question, and the reducer no-ops at 0 — so gating on the
-          // total would make a tap on a visible non-zero number do nothing.
-          disabled={current[team] === 0}
-        >
-          −
-        </button>
+        {!readOnly && (
+          <button
+            className="gm-btn gm-correct-btn"
+            onClick={() => update(team, -1)}
+            aria-label={`${label} minus`}
+            // Gated on THIS question's bucket, not the total: `−` writes to the
+            // current question, and the reducer no-ops at 0 — so gating on the
+            // total would make a tap on a visible non-zero number do nothing.
+            disabled={current[team] === 0}
+          >
+            −
+          </button>
+        )}
         <div className="gm-correct-count">{total[team]}</div>
-        <button
-          className="gm-btn gm-correct-btn"
-          onClick={() => update(team, 1)}
-          aria-label={`${label} plus`}
-        >
-          +
-        </button>
+        {!readOnly && (
+          <button
+            className="gm-btn gm-correct-btn"
+            onClick={() => update(team, 1)}
+            aria-label={`${label} plus`}
+          >
+            +
+          </button>
+        )}
       </div>
       {/* Names the question the buttons write to and what it already holds — this
           is what makes both the attribution and a disabled `−` legible without

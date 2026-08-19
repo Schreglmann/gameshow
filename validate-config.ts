@@ -317,7 +317,8 @@ function validateGame(gameRef: string, game: GameConfig, validPresetIds: Set<str
     errors.push(`Game "${gameRef}": "disabled" must be a boolean`);
   }
 
-  // `scoringMode` is only valid on wer-kennt-mehr and bet-quiz, each with its own allowed values.
+  // `scoringMode` is only valid on wer-kennt-mehr, bet-quiz and guessing-game, each with
+  // its own allowed values.
   if ('scoringMode' in gameRaw) {
     if (game.type === 'wer-kennt-mehr') {
       if (!['count', 'standard', 'count-penalty'].includes(gameRaw.scoringMode)) {
@@ -327,8 +328,12 @@ function validateGame(gameRef: string, game: GameConfig, validPresetIds: Set<str
       if (!['standard', 'transfer'].includes(gameRaw.scoringMode)) {
         errors.push(`Game "${gameRef}": "scoringMode" must be "standard" or "transfer"`);
       }
+    } else if (game.type === 'guessing-game') {
+      if (!['standard', 'auto'].includes(gameRaw.scoringMode)) {
+        errors.push(`Game "${gameRef}": "scoringMode" must be "standard" or "auto"`);
+      }
     } else {
-      errors.push(`Game "${gameRef}": "scoringMode" is only supported on wer-kennt-mehr and bet-quiz games`);
+      errors.push(`Game "${gameRef}": "scoringMode" is only supported on wer-kennt-mehr, bet-quiz and guessing-game games`);
     }
   }
 

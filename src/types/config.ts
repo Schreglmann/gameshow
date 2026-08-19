@@ -301,6 +301,13 @@ export interface BetQuizConfig extends BaseGameConfig {
 export interface GuessingGameConfig extends BaseGameConfig {
   type: 'guessing-game';
   questions: GuessingGameQuestion[];
+  /** 'auto' (the DEFAULT, also when the field is absent): the show records the closer
+   *  team per question (equidistant guesses count for both teams, the example question
+   *  never counts) and the award screen states the verdict — confirming it books the
+   *  positional game points (currentIndex + 1) for the team that won more questions, or
+   *  for both on an overall tie. 'standard' opts out: the host picks the winner on the
+   *  AwardPoints screen by hand, as in every other game. */
+  scoringMode?: 'standard' | 'auto';
 }
 
 export interface FinalQuizConfig extends BaseGameConfig {

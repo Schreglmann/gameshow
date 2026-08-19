@@ -267,6 +267,7 @@ Question fields match `simple-quiz` (image, audio, list, colors, timer, replaceI
 - Automatic number formatting (e.g., 1.000.000)
 - Calculates which team is closer
 - Displays both guesses and the correct answer
+- `scoringMode` (`"auto"` is the **default**, also when the field is absent; `"standard"` opts out): with automatic scoring the show counts the won questions itself (equidistant guesses count for both teams, the example question never counts). The award screen then states the verdict and the counts, and one press books the positional points for the team that won more questions — both teams on an equal count. The gamemaster's per-question tally fills itself: the score boxes show the running standing and "Wertung pro Frage" lists every judged question, both read-only (no `+`/`−` at all — the show awards the points). Starting the game again from its title screen clears that standing, so a restart begins at 0–0. Set it in admin via the "Punktevergabe" dropdown
 - Optional `questionAudio`: auto-plays while the question is shown (with play/pause + restart controls, mirrored to the gamemaster) — e.g. "guess the release year of this song". Keeps playing through the result phase; stops on the next question
 - Optional `questionAudioStart` / `questionAudioEnd` / `questionAudioLoop`: trim the section that plays (same semantics as simple-quiz; pick the points on the waveform in admin)
 - Optional `answerImage`: shown after the reveal
@@ -276,7 +277,7 @@ Question fields match `simple-quiz` (image, audio, list, colors, timer, replaceI
 2. Both teams enter their numerical guess
 3. Host submits both guesses
 4. System reveals which team was closer
-5. Host awards points to the winning team
+5. Host confirms the verdict the show already worked out — or, with `scoringMode: "standard"`, picks the winning team by hand
 
 ---
 

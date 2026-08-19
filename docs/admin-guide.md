@@ -206,6 +206,10 @@ Teams guess a number. The closest team wins.
 - **Answer** — the correct number (e.g. `330`)
 - **Answer Image** *(optional)*
 
+**Punktevergabe** (game-wide dropdown next to "Fragen zufällig anordnen"):
+- **Automatisch** *(default)* — the show counts who was closer per question (equidistant guesses count for both teams; the **Beispiel** question never counts). The award screen then names the winner with both teams' counts, and one press awards the points. On the gamemaster you no longer count anything yourself: the score boxes and **Wertung pro Frage** fill in automatically as you reveal each question, and their `+`/`−` buttons are gone, so it is never unclear whether you or the show awarded a question. Starting the game again from its title screen resets that count (the teams' points stay — undo those under **Letzte Wertungen** if you replay a game you already scored). To fix a mistyped guess, submit that question again; after the points are booked, use the undo under **Letzte Wertungen**.
+- **Manuell** — you pick the winning team on the award screen yourself, as in every other game.
+
 ---
 
 ### Q1

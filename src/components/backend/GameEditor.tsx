@@ -827,6 +827,23 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
                   </select>
                 </label>
               )}
+              {data.type === 'guessing-game' && (
+                <label className="be-toggle be-scoring-mode">
+                  <span className="be-toggle-label">Punktevergabe</span>
+                  <select
+                    className="be-select"
+                    aria-label="Punktevergabe"
+                    value={data.scoringMode ?? 'auto'}
+                    onChange={e => {
+                      const value = e.target.value;
+                      setData({ ...data, scoringMode: value === 'auto' ? undefined : (value as 'standard') });
+                    }}
+                  >
+                    <option value="auto" title="Standard: Das nähere Team pro Frage wird automatisch gezählt; die Punkte gehen an das Team mit den meisten gewonnenen Fragen.">Automatisch</option>
+                    <option value="standard" title="Der Gamemaster wählt das Gewinnerteam am Ende selbst aus.">Manuell</option>
+                  </select>
+                </label>
+              )}
             </>
           ) : undefined}
           extra={data.type !== 'quizjagd' ? (

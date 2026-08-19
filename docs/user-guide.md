@@ -83,6 +83,8 @@ A numerical question is asked (e.g. *"How many kilometers is it from Berlin to T
 
 Both teams write down a number — the team whose guess is **closest** to the correct answer wins.
 
+The show keeps count of the won questions itself and names the winning team at the end of the game (an equidistant guess counts for both teams) — the host only confirms the points. Games set to **Manuell** in admin let the host pick the winner instead.
+
 ![Guessing Game](./screenshots/guessing-game.png)
 > *Add screenshot: `docs/screenshots/guessing-game.png` — the guessing game screen with both team inputs*
 

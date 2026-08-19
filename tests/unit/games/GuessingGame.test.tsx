@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { GameProvider } from '@/context/GameContext';
 import { MusicProvider } from '@/context/MusicContext';
 import GuessingGame from '@/components/games/GuessingGame';
+import { __emitChannelForTests } from '@/services/useBackendSocket';
 import type { GuessingGameConfig } from '@/types/config';
 
 vi.mock('@/services/api', () => ({
@@ -270,6 +271,213 @@ describe('GuessingGame', () => {
       expect(screen.getByText('1492')).toBeInTheDocument();
     });
     expect(screen.queryByText('1.492')).not.toBeInTheDocument();
+  });
+});
+
+describe('GuessingGame automatic scoring', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+  });
+
+  // Automatic scoring is the default — no `scoringMode` needed.
+  const autoConfig = (questions: GuessingGameConfig['questions']) =>
+    makeConfig({ questions });
+
+  /** The shared per-question tally as persisted by the reducer. */
+  const readTally = () => JSON.parse(localStorage.getItem('correctAnswersByQuestion') || '{}');
+
+  /** Enter both guesses, reveal, then advance (to the next question or the award screen). */
+  async function playQuestion(user: ReturnType<typeof userEvent.setup>, t1: string, t2: string) {
+    await waitFor(() => expect(screen.getByLabelText('Tipp Team 1:')).toBeInTheDocument());
+    await user.type(screen.getByLabelText('Tipp Team 1:'), t1);
+    await user.type(screen.getByLabelText('Tipp Team 2:'), t2);
+    await user.click(screen.getByText('Tipp Abgeben'));
+    await waitFor(() => expect(screen.getByText('Nächste Frage')).toBeInTheDocument());
+    await user.click(screen.getByText('Nächste Frage'));
+  }
+
+  it('states the verdict on the award screen and awards the positional points to the winner', async () => {
+    const user = userEvent.setup();
+    renderGame(autoConfig([
+      { question: 'Example', answer: 50 },
+      { question: 'Q1', answer: 100 },
+      { question: 'Q2', answer: 200 },
+    ]));
+    await waitFor(() => expect(screen.getByText('Test Guessing')).toBeInTheDocument());
+    await advanceToGame(user);
+
+    // Example question: never counted, whoever is closer.
+    await playQuestion(user, '10', '50');
+    // Team 1 closer on both real questions.
+    await playQuestion(user, '99', '150');
+    await playQuestion(user, '205', '300');
+
+    await waitFor(() => expect(screen.getByText('Punkte vergeben')).toBeInTheDocument());
+    expect(screen.getByText('Team 1 hat mehr Fragen gewonnen')).toBeInTheDocument();
+    // Points for BOTH teams plus a plain won-question count — never "x von y", which a
+    // drawn question (counting for both teams) would break.
+    expect(screen.getByText('+1 Punkt')).toBeInTheDocument();
+    expect(screen.getByText('0 Punkte')).toBeInTheDocument();
+    expect(screen.getByText('2 gewonnene Fragen')).toBeInTheDocument();
+    expect(screen.getByText('0 gewonnene Fragen')).toBeInTheDocument();
+    expect(screen.queryByText(/von 2 Fragen/)).not.toBeInTheDocument();
+
+    // The verdicts are filed in the shared per-question tally (game 0, questions 1 + 2),
+    // which is what the gamemaster's score boxes and "Wertung pro Frage" read.
+    expect(readTally()).toEqual({
+      '0': { '1': { team1: 1, team2: 0 }, '2': { team1: 1, team2: 0 } },
+    });
+
+    // No winner selection — a single confirm books the points and advances.
+    expect(screen.queryByText('Unentschieden')).not.toBeInTheDocument();
+    await user.click(screen.getByText('Punkte vergeben & weiter'));
+    expect(defaultProps.onAwardPoints).toHaveBeenCalledTimes(1);
+    expect(defaultProps.onAwardPoints).toHaveBeenCalledWith('team1', 1);
+    expect(defaultProps.onNextGame).toHaveBeenCalled();
+  });
+
+  it('counts an equidistant question for both teams', async () => {
+    const user = userEvent.setup();
+    renderGame(autoConfig([
+      { question: 'Example', answer: 50 },
+      { question: 'Q1', answer: 100 },
+      { question: 'Q2', answer: 200 },
+    ]));
+    await waitFor(() => expect(screen.getByText('Test Guessing')).toBeInTheDocument());
+    await advanceToGame(user);
+
+    await playQuestion(user, '50', '50');
+    // Q1: team 1 closer. Q2: both 10 away — counts for both.
+    await playQuestion(user, '99', '150');
+    await playQuestion(user, '190', '210');
+
+    await waitFor(() => expect(screen.getByText('Punkte vergeben')).toBeInTheDocument());
+    expect(screen.getByText('Team 1 hat mehr Fragen gewonnen')).toBeInTheDocument();
+    // The drawn question is recorded for both teams — 2 wins vs 1 out of 2 questions.
+    expect(readTally()['0']['2']).toEqual({ team1: 1, team2: 1 });
+    expect(screen.getByText('2 gewonnene Fragen')).toBeInTheDocument();
+    expect(screen.getByText('1 gewonnene Frage')).toBeInTheDocument();
+
+    await user.click(screen.getByText('Punkte vergeben & weiter'));
+    expect(defaultProps.onAwardPoints).toHaveBeenCalledTimes(1);
+    expect(defaultProps.onAwardPoints).toHaveBeenCalledWith('team1', 1);
+  });
+
+  it('awards both teams when they won the same number of questions', async () => {
+    const user = userEvent.setup();
+    renderGame(autoConfig([
+      { question: 'Example', answer: 50 },
+      { question: 'Q1', answer: 100 },
+      { question: 'Q2', answer: 200 },
+    ]));
+    await waitFor(() => expect(screen.getByText('Test Guessing')).toBeInTheDocument());
+    await advanceToGame(user);
+
+    await playQuestion(user, '50', '50');
+    await playQuestion(user, '99', '150');   // team 1
+    await playQuestion(user, '300', '205');  // team 2
+
+    await waitFor(() => expect(screen.getByText('Punkte vergeben')).toBeInTheDocument());
+    expect(screen.getByText('Unentschieden — beide Teams erhalten Punkte')).toBeInTheDocument();
+    expect(screen.getAllByText('+1 Punkt')).toHaveLength(2);
+    expect(screen.getAllByText('1 gewonnene Frage')).toHaveLength(2);
+
+    await user.click(screen.getByText('Punkte vergeben & weiter'));
+    expect(defaultProps.onAwardPoints).toHaveBeenCalledTimes(2);
+    expect(defaultProps.onAwardPoints).toHaveBeenCalledWith('team1', 1);
+    expect(defaultProps.onAwardPoints).toHaveBeenCalledWith('team2', 1);
+  });
+
+  it('overwrites a question\'s record when it is judged again', async () => {
+    const user = userEvent.setup();
+    renderGame(autoConfig([
+      { question: 'Example', answer: 50 },
+      { question: 'Q1', answer: 100 },
+    ]));
+    await waitFor(() => expect(screen.getByText('Test Guessing')).toBeInTheDocument());
+    await advanceToGame(user);
+
+    await playQuestion(user, '50', '50');
+    // Judge Q1 for team 1 (without advancing), then submit it again with team 2 closer.
+    await waitFor(() => expect(screen.getByLabelText('Tipp Team 1:')).toBeInTheDocument());
+    await user.type(screen.getByLabelText('Tipp Team 1:'), '99');
+    await user.type(screen.getByLabelText('Tipp Team 2:'), '150');
+    await user.click(screen.getByText('Tipp Abgeben'));
+    await waitFor(() => expect(screen.getByText('Nächste Frage')).toBeInTheDocument());
+    expect(readTally()['0']['1']).toEqual({ team1: 1, team2: 0 });
+  });
+
+  it('clears this game\'s tally when the host starts it from the title screen', async () => {
+    const user = userEvent.setup();
+    // A full standing from an earlier run of this game position.
+    localStorage.setItem('correctAnswersByQuestion', JSON.stringify({
+      '0': { '1': { team1: 1, team2: 0 }, '2': { team1: 0, team2: 1 } },
+      '4': { '1': { team1: 1, team2: 0 } },
+    }));
+    renderGame(autoConfig([
+      { question: 'Example', answer: 50 },
+      { question: 'Q1', answer: 100 },
+    ]));
+    await waitFor(() => expect(screen.getByText('Test Guessing')).toBeInTheDocument());
+    await advanceToGame(user);
+    await waitFor(() => expect(screen.getByLabelText('Tipp Team 1:')).toBeInTheDocument());
+
+    // Game 0 starts from a clean slate; another game's record is left alone.
+    expect(readTally()['0']).toBeUndefined();
+    expect(readTally()['4']).toEqual({ '1': { team1: 1, team2: 0 } });
+  });
+
+  it('ignores tally entries for questions this playthrough never reached', async () => {
+    const user = userEvent.setup();
+    renderGame(autoConfig([
+      { question: 'Example', answer: 50 },
+      { question: 'Q1', answer: 100 },
+    ]));
+    await waitFor(() => expect(screen.getByText('Test Guessing')).toBeInTheDocument());
+    await advanceToGame(user);
+    await playQuestion(user, '50', '50');
+    await playQuestion(user, '99', '150');   // team 1 closer on the only question played
+
+    // A record for question 2 arrives from another device AFTER the game started, so the
+    // start-of-game reset can't have removed it. Without the reached-question ceiling it
+    // would turn this into a 1:1 draw.
+    act(() => {
+      __emitChannelForTests('gamemaster-question-tally', {
+        '0': { '1': { team1: 1, team2: 0 }, '2': { team1: 0, team2: 1 } },
+      });
+    });
+
+    await waitFor(() => expect(screen.getByText('Punkte vergeben')).toBeInTheDocument());
+    expect(screen.getByText('Team 1 hat mehr Fragen gewonnen')).toBeInTheDocument();
+    await user.click(screen.getByText('Punkte vergeben & weiter'));
+    expect(defaultProps.onAwardPoints).toHaveBeenCalledTimes(1);
+    expect(defaultProps.onAwardPoints).toHaveBeenCalledWith('team1', 1);
+  });
+
+  it('counts a single judged question in the singular', async () => {
+    const user = userEvent.setup();
+    // Explicit `scoringMode: 'auto'` behaves exactly like the default.
+    renderGame(makeConfig({
+      scoringMode: 'auto',
+      questions: [
+        { question: 'Example', answer: 50 },
+        { question: 'Q1', answer: 100 },
+      ],
+    }));
+    await waitFor(() => expect(screen.getByText('Test Guessing')).toBeInTheDocument());
+    await advanceToGame(user);
+
+    await playQuestion(user, '50', '50');
+    await playQuestion(user, '150', '99');  // team 2 closer
+
+    await waitFor(() => expect(screen.getByText('Punkte vergeben')).toBeInTheDocument());
+    expect(screen.getByText('Team 2 hat mehr Fragen gewonnen')).toBeInTheDocument();
+    expect(screen.getByText('+1 Punkt')).toBeInTheDocument();
+
+    await user.click(screen.getByText('Punkte vergeben & weiter'));
+    expect(defaultProps.onAwardPoints).toHaveBeenCalledTimes(1);
+    expect(defaultProps.onAwardPoints).toHaveBeenCalledWith('team2', 1);
   });
 });
 

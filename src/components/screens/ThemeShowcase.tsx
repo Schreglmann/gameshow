@@ -701,6 +701,29 @@ function FrontendShowcase() {
         </GlassCard>
       </Section>
 
+      <Section title="Award Points (automatische Wertung)">
+        <GlassCard>
+          <h2 style={{ fontSize: '1.6em', marginBottom: 4 }}>Punkte vergeben</h2>
+          <p className="award-points-hint">Team 1 hat mehr Fragen gewonnen</p>
+          <div className="award-auto-teams">
+            <div className="award-auto-team is-winner" style={{ animation: 'none' }}>
+              <span className="award-auto-team-name">
+                Team 1
+                <span className="award-double-badge" title="Aufholjoker: Punkte zählen doppelt">×2 Aufholjoker</span>
+              </span>
+              <span className="award-auto-points">+6 Punkte</span>
+              <span className="award-auto-wins">3 gewonnene Fragen</span>
+            </div>
+            <div className="award-auto-team" style={{ animation: 'none' }}>
+              <span className="award-auto-team-name">Team 2</span>
+              <span className="award-auto-points">0 Punkte</span>
+              <span className="award-auto-wins">2 gewonnene Fragen</span>
+            </div>
+          </div>
+          <button className="quiz-button award-auto-confirm">Punkte vergeben &amp; weiter</button>
+        </GlassCard>
+      </Section>
+
       <Section title="Guessing Game Tipps">
         <GlassCard>
           <div className="guess-form">

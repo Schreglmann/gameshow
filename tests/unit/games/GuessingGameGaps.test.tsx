@@ -184,6 +184,46 @@ describe('GuessingGame - Gaps', () => {
     });
   });
 
+  it('keeps the manual winner selection under scoringMode "standard"', async () => {
+    const user = userEvent.setup();
+    renderGame(makeConfig({ scoringMode: 'standard' }));
+    await waitFor(() => expect(screen.getByText('Test Guessing')).toBeInTheDocument());
+    advanceToGame();
+
+    await user.type(screen.getByLabelText('Tipp Team 1:'), '80');
+    await user.type(screen.getByLabelText('Tipp Team 2:'), '120');
+    await user.click(screen.getByText('Tipp Abgeben'));
+    await clickForward(user);
+
+    await user.type(screen.getByLabelText('Tipp Team 1:'), '45');
+    await user.type(screen.getByLabelText('Tipp Team 2:'), '90');
+    await user.click(screen.getByText('Tipp Abgeben'));
+    await clickForward(user);
+
+    await waitFor(() => expect(screen.getByText('Welches Team hat gewonnen?')).toBeInTheDocument());
+    expect(screen.getByText('Unentschieden')).toBeInTheDocument();
+    expect(screen.queryByText('Punkte vergeben & weiter')).not.toBeInTheDocument();
+  });
+
+  it('falls back to the manual selection when automatic scoring judged no real question', async () => {
+    const user = userEvent.setup();
+    // Only the example question — nothing counts, so there is no verdict to state.
+    const config = makeConfig({
+      questions: [{ question: 'Example only', answer: 100 }],
+    });
+    renderGame(config);
+    await waitFor(() => expect(screen.getByText('Test Guessing')).toBeInTheDocument());
+    advanceToGame();
+
+    await user.type(screen.getByLabelText('Tipp Team 1:'), '80');
+    await user.type(screen.getByLabelText('Tipp Team 2:'), '120');
+    await user.click(screen.getByText('Tipp Abgeben'));
+    await clickForward(user);
+
+    await waitFor(() => expect(screen.getByText('Welches Team hat gewonnen?')).toBeInTheDocument());
+    expect(screen.getByText('Unentschieden')).toBeInTheDocument();
+  });
+
   it('handles zero guesses gracefully', async () => {
     const user = userEvent.setup();
     renderGame();

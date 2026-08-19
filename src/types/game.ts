@@ -275,6 +275,11 @@ export interface GamemasterControlsData {
   /** Game types that track progress via team points (bet-quiz, quizjagd, final-quiz)
    * don't need a separate correct-answers tally on the gamemaster screen. */
   hideCorrectTracker?: boolean;
+  /** True while the playing game keeps the per-question tally itself (guessing-game's
+   *  automatic scoring). The counters and the "Wertung pro Frage" rows still SHOW, but
+   *  their `+`/`−` are left out: with the show awarding the points, an edit control there
+   *  would leave the host unsure who scored what. See specs/games/guessing-game.md. */
+  tallyReadOnly?: boolean;
   /** True while a GM-triggered deadline timer has a value set (counting down
    * OR showing the "Zeit abgelaufen!" badge until auto-clear). */
   deadlineActive?: boolean;

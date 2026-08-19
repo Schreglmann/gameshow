@@ -553,6 +553,7 @@ type Action =
     }
   | { type: 'SET_CORRECT_ANSWERS'; payload: CorrectAnswersMap }
   | { type: 'REMAP_QUESTION_TALLY'; payload: { gameIndex: number; moved: readonly (number | null)[] } }
+  | { type: 'RESET_GAME_TALLY'; payload: { gameIndex: number } }
   | { type: 'CLEAR_ALL' };
 
 /**
@@ -806,6 +807,18 @@ function baseReducer(state: AppState, action: Action): AppState {
     case 'SET_CORRECT_ANSWERS': {
       writeCorrectAnswersMap(action.payload);
       return { ...state, correctAnswersByGame: action.payload };
+    }
+    case 'RESET_GAME_TALLY': {
+      // Starting a self-scoring game from its title screen wipes that game's slate, so a
+      // replay (or a second run of the same show) doesn't open with the previous round's
+      // standing. Only this game's bucket goes — team points and the score log are
+      // untouched; those are what admin's "Punkte zurücksetzen" is for.
+      const key = String(action.payload.gameIndex);
+      if (!state.correctAnswersByGame[key]) return state;
+      const nextMap: CorrectAnswersMap = { ...state.correctAnswersByGame };
+      delete nextMap[key];
+      writeCorrectAnswersMap(nextMap);
+      return { ...state, correctAnswersByGame: nextMap };
     }
     case 'REMAP_QUESTION_TALLY': {
       // A live question add/remove shifted the playing game's question indices.

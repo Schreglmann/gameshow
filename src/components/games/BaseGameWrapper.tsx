@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import DeadlineTimer from '@/components/common/DeadlineTimer';
 import { useKeyboardNavigation } from '@/hooks/useKeyboardNavigation';
 import { useGamemasterSync, useGamemasterControlsSync, useGamemasterCommandListener } from '@/hooks/useGamemasterSync';
-import AwardPoints, { type AwardPointsWinners } from '@/components/common/AwardPoints';
+import AwardPoints, { type AwardPointsWinners, type AutoAwardVerdict } from '@/components/common/AwardPoints';
 import { useGameContext } from '@/context/GameContext';
 import { teamName } from '@/utils/teamNames';
 import { teamDisplayOrder } from '@/utils/teamOrder';
@@ -33,6 +33,10 @@ interface BaseGameWrapperProps {
   /** Hide the gamemaster correct-answers tracker — for game types whose scoring
    * is already reflected in team points (bet-quiz, quizjagd, final-quiz). */
   hideCorrectTracker?: boolean;
+  /** The game keeps the per-question tally itself (guessing-game's automatic scoring), so
+   *  the gamemaster shows those counters without their edit buttons — with the show awarding
+   *  the points, an edit control there would make it unclear who scored what. */
+  autoScored?: boolean;
   /** Called when the rules screen is shown (landing → rules transition) */
   onRulesShow?: () => void;
   /** Called when the award-points phase is shown (or at game completion if points are skipped) */
@@ -82,6 +86,12 @@ interface BaseGameWrapperProps {
      * uses this to auto-hide the active countdown the moment the answer
      * appears — answer-reveal supersedes any countdown. */
     setAnswerRevealed: (revealed: boolean) => void;
+    /** Hand the wrapper a verdict the game worked out itself (guessing-game's
+     * `scoringMode: 'auto'`). The award screen then states who won and how many
+     * questions each team took, and the host only confirms — one press books the
+     * positional points for `winners` and advances. Pass `null` to fall back to the
+     * manual winner selection. See specs/base-game-wrapper.md. */
+    setAutoAward: (verdict: AutoAwardVerdict | null) => void;
     /** Declare the per-question `q.timer` countdown. Call with the duration in
      * seconds to (re)start it for the current question, or `null` to clear it.
      * The wrapper owns the absolute deadline, renders the ring on the show, and
@@ -102,6 +112,7 @@ export default function BaseGameWrapper({
   requiresPoints,
   skipPointsScreen,
   hideCorrectTracker,
+  autoScored,
   onRulesShow,
   onNextShow,
   onAwardPoints,
@@ -162,6 +173,9 @@ export default function BaseGameWrapper({
   // after the deadline expires (so a finished countdown doesn't linger on screen).
   const expiryClearTimerRef = useRef<number | null>(null);
   const [answerRevealed, setAnswerRevealedState] = useState(false);
+  // A verdict the game computed itself (guessing-game's auto scoring). When set, the
+  // award screen states who won instead of asking, and the host only confirms.
+  const [autoAward, setAutoAwardState] = useState<AutoAwardVerdict | null>(null);
   // GM Pause/Resume affects both the deadline timer (above) AND the
   // per-question q.timer in SimpleQuiz / BetQuiz. The flag is set by the
   // `timer-pause` / `timer-resume` commands.
@@ -344,6 +358,13 @@ export default function BaseGameWrapper({
     setFullscreenOpen(false);
     setFullscreenOverride(null);
     if (phase === 'landing') {
+      // Starting a self-scored game from its title screen clears its per-question tally:
+      // that tally IS the game's score, and it lives for the whole session, so a restart
+      // would otherwise open with the previous run's standing. Only on this transition —
+      // a back-navigated review enters the game phase directly and keeps its record.
+      if (autoScored && typeof currentIndex === 'number') {
+        gameDispatch({ type: 'RESET_GAME_TALLY', payload: { gameIndex: currentIndex } });
+      }
       if (rules.length > 0) {
         setPhase('rules');
         onRulesShow?.();
@@ -355,7 +376,7 @@ export default function BaseGameWrapper({
     } else if (phase === 'game') {
       navHandler?.();
     }
-  }, [phase, navHandler]);
+  }, [phase, navHandler, autoScored, currentIndex, gameDispatch]);
 
   const handleBackNav = useCallback(() => {
     setFullscreenOpen(false);
@@ -402,18 +423,36 @@ export default function BaseGameWrapper({
     }
   }, [shouldShowPoints, onNextShow, onNextGame, gameState.teams.doubleNextGame, gameDispatch]);
 
+  // Aufholjoker: the armed team's positional points double for this award, then the
+  // flag clears. Multiply the POSITIONAL value (never hardcode 2). Hoisted out of
+  // `handleComplete` so an auto verdict can STATE the same numbers it awards.
+  const ptsFor = useCallback(
+    (team: 'team1' | 'team2') => (gameState.teams.doubleNextGame === team ? pointValue * 2 : pointValue),
+    [gameState.teams.doubleNextGame, pointValue],
+  );
+
   const handleComplete = useCallback(
     (winners: AwardPointsWinners) => {
-      // Aufholjoker: the armed team's positional points double for this award,
-      // then the flag clears. Multiply the POSITIONAL value (never hardcode 2).
       const armed = gameState.teams.doubleNextGame;
-      const ptsFor = (team: 'team1' | 'team2') => (armed === team ? pointValue * 2 : pointValue);
       if (winners.team1) onAwardPoints('team1', ptsFor('team1'));
       if (winners.team2) onAwardPoints('team2', ptsFor('team2'));
       if (armed) gameDispatch({ type: 'CLEAR_DOUBLE_NEXT_GAME' });
       onNextGame();
     },
-    [onAwardPoints, pointValue, onNextGame, gameState.teams.doubleNextGame, gameDispatch]
+    [onAwardPoints, ptsFor, onNextGame, gameState.teams.doubleNextGame, gameDispatch]
+  );
+
+  // The verdict as the award screen shows it: wins from the game, points from the
+  // wrapper. Teams that get nothing still show a 0 so the reason stays legible.
+  const autoAwardView = useMemo(
+    () => autoAward && {
+      ...autoAward,
+      points: {
+        team1: autoAward.winners.team1 ? ptsFor('team1') : 0,
+        team2: autoAward.winners.team2 ? ptsFor('team2') : 0,
+      },
+    },
+    [autoAward, ptsFor],
   );
 
   // Build controls based on current phase
@@ -431,6 +470,24 @@ export default function BaseGameWrapper({
       ];
     }
     if (phase === 'points') {
+      // Auto-scored games decided the winner themselves — the GM gets the verdict as
+      // a read-only line plus a single confirm button, never a winner choice.
+      if (autoAwardView) {
+        const t1 = teamName(gameState.teams, 1);
+        const t2 = teamName(gameState.teams, 2);
+        const isDraw = autoAwardView.winners.team1 && autoAwardView.winners.team2;
+        const winnerLabel = isDraw
+          ? 'Unentschieden'
+          : `${autoAwardView.winners.team1 ? t1 : t2} gewinnt`;
+        return [
+          {
+            type: 'info',
+            id: 'award-auto-summary',
+            text: `${t1}: ${autoAwardView.team1Wins} · ${t2}: ${autoAwardView.team2Wins} → ${winnerLabel}`,
+          },
+          { type: 'button', id: 'award-auto', label: 'Punkte vergeben', variant: 'primary' },
+        ];
+      }
       // GM control panel → mirror the frontend order (GM faces the crowd). IDs stay
       // team-keyed, so only display order changes; "Unentschieden" stays last.
       return [{
@@ -448,9 +505,9 @@ export default function BaseGameWrapper({
       }];
     }
     return [];
-  }, [phase, gameControls, navState.hideForward, navState.hideBack, gameState.teams, gameState.settings.teamMirrorEnabled]);
+  }, [phase, gameControls, navState.hideForward, navState.hideBack, gameState.teams, gameState.settings.teamMirrorEnabled, autoAwardView]);
 
-  useGamemasterControlsSync(allControls, phase, currentIndex, hideCorrectTracker, gameState.currentGame?.totalGames, deadlineActive, timerActive, timerPaused, answerRevealed, scrollAnchors, fullscreenMedia !== null, fullscreenOpen, broadcastRemainingMs ?? undefined, activeTotalSeconds ?? undefined, activeKind ?? undefined, tickMuted);
+  useGamemasterControlsSync(allControls, phase, currentIndex, hideCorrectTracker, gameState.currentGame?.totalGames, deadlineActive, timerActive, timerPaused, answerRevealed, scrollAnchors, fullscreenMedia !== null, fullscreenOpen, broadcastRemainingMs ?? undefined, activeTotalSeconds ?? undefined, activeKind ?? undefined, tickMuted, autoScored);
 
   // Report which scroll jump-points the show currently exposes so the GM
   // toolbar can offer them — but only while the card overflows the viewport.
@@ -684,6 +741,9 @@ export default function BaseGameWrapper({
       handleComplete({ team1: false, team2: true });
     } else if (cmd.controlId === 'award-draw') {
       handleComplete({ team1: true, team2: true });
+    } else if (cmd.controlId === 'award-auto') {
+      // Confirm an auto verdict. Guarded: without one there is nothing to award.
+      if (autoAward) handleComplete(autoAward.winners);
     } else if (cmd.controlId === 'use-joker' && cmd.value && typeof cmd.value === 'object') {
       const { team, jokerId, used } = cmd.value as { team?: string; jokerId?: string; used?: string };
       if ((team === 'team1' || team === 'team2') && typeof jokerId === 'string') {
@@ -766,7 +826,7 @@ export default function BaseGameWrapper({
     } else {
       commandHandler?.(cmd);
     }
-  }, [handleNav, handleBackNav, handleComplete, commandHandler, gameDispatch, resumePausedAudio, freezeActiveTimer, resumeActiveTimer]));
+  }, [handleNav, handleBackNav, handleComplete, autoAward, commandHandler, gameDispatch, resumePausedAudio, freezeActiveTimer, resumeActiveTimer]));
 
   return (
     <FullscreenProvider value={fullscreenValue}>
@@ -805,13 +865,14 @@ export default function BaseGameWrapper({
             setNavState,
             setStopAudioHandler: fn => { stopAudioHandlerRef.current = fn; },
             setAnswerRevealed: setAnswerRevealedState,
+            setAutoAward: setAutoAwardState,
             setGameTimer,
           })}
         </div>
       )}
 
       {phase === 'points' && (
-        <AwardPoints onComplete={handleComplete} />
+        <AwardPoints onComplete={handleComplete} auto={autoAwardView} />
       )}
 
       {/* One countdown ring for BOTH timer kinds: the GM deadline takes

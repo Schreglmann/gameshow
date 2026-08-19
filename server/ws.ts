@@ -15,7 +15,8 @@
  *   cache-started               — a segment encode has started
  *   cache-ready                 — a segment encode has finished
  *   gamemaster-answer           — game → gamemaster (current answer data); cached last-value
- *   gamemaster-controls         — game → gamemaster (controls + phase + gameIndex); cached last-value
+ *   gamemaster-controls         — game → gamemaster (controls + phase + gameIndex + tallyReadOnly);
+ *                                 cached last-value
  *   gamemaster-command          — gamemaster → game (control commands); ephemeral, NOT cached
  *   gamemaster-team-state       — any client → any client (team/joker state); cached last-value.
  *                                 VERSION-GUARDED: relayed only when the payload's Lamport

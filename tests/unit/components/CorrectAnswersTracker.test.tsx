@@ -17,10 +17,10 @@ vi.mock('@/services/api', () => ({
 const STORAGE_KEY = 'correctAnswersByQuestion';
 
 /** The tally is stored per question, so a render needs the live question too. */
-function renderTracker(gameIndex: number, question = '1') {
+function renderTracker(gameIndex: number, question = '1', readOnly = false) {
   return render(
     <GameProvider>
-      <CorrectAnswersTracker gameIndex={gameIndex} question={question} />
+      <CorrectAnswersTracker gameIndex={gameIndex} question={question} readOnly={readOnly} />
     </GameProvider>,
   );
 }
@@ -246,5 +246,17 @@ describe('CorrectAnswersTracker', () => {
     });
 
     expect(screen.queryByText('9')).not.toBeInTheDocument();
+  });
+
+  it('leaves out both buttons when the playing game scores itself', () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ '2': { '1': { team1: 1, team2: 0 } } }));
+    renderTracker(2, '1', true);
+
+    // Not disabled — gone, so the host never wonders who awards a question.
+    expect(screen.queryByLabelText('Team 1 plus')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Team 1 minus')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Team 2 plus')).not.toBeInTheDocument();
+    // The counts stay: they are the running standing.
+    expect(document.querySelectorAll('.gm-correct-count')[0].textContent).toBe('1');
   });
 });

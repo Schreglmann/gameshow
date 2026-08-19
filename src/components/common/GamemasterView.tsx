@@ -203,7 +203,11 @@ export default function GamemasterView({ showAnswerImages = false, hideAnswers =
       {(controlsData?.phase === 'game' || controlsData?.phase === 'points')
         && typeof controlsData.gameIndex === 'number'
         && !controlsData.hideCorrectTracker && (
-        <CorrectAnswersTracker gameIndex={controlsData.gameIndex} question={tallyQuestionKey} />
+        <CorrectAnswersTracker
+          gameIndex={controlsData.gameIndex}
+          question={tallyQuestionKey}
+          readOnly={desynced || controlsData.tallyReadOnly === true}
+        />
       )}
 
       {showQuestionScores && typeof controlsData?.gameIndex === 'number' && (
@@ -211,7 +215,7 @@ export default function GamemasterView({ showAnswerImages = false, hideAnswers =
           gameIndex={controlsData.gameIndex}
           currentQuestion={scoringQuestion ?? null}
           inlineScored={pointsChangingGame}
-          readOnly={desynced}
+          readOnly={desynced || controlsData?.tallyReadOnly === true}
         />
       )}
 
