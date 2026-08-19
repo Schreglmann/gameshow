@@ -701,18 +701,44 @@ function FrontendShowcase() {
         </GlassCard>
       </Section>
 
+      <Section title="Guessing Game Tipps">
+        <GlassCard>
+          <div className="guess-form">
+            <div className="guess-fields">
+              <div className="guess-field">
+                <label htmlFor="showcaseGuess1">Tipp Team 1:</label>
+                <input type="number" id="showcaseGuess1" defaultValue={42} />
+              </div>
+              <div className="guess-field">
+                <label htmlFor="showcaseGuess2">Tipp Team 2:</label>
+                <input type="number" id="showcaseGuess2" defaultValue={50} />
+              </div>
+            </div>
+            <button type="button" className="quiz-button">Tipp Abgeben</button>
+          </div>
+        </GlassCard>
+      </Section>
+
       <Section title="Guessing Game Results">
-        <GlassCard style={{ textAlign: 'left' }}>
-          <div className="result-row" style={{ margin: '8px 0' }}>
-            <span>Team 1: <strong>42</strong></span>
-            <span className="difference">Differenz: 3</span>
-          </div>
-          <div className="result-row" style={{ margin: '8px 0' }}>
-            <span>Team 2: <strong>50</strong></span>
-            <span className="difference">Differenz: 11</span>
-          </div>
-          <div className="winner" style={{ animation: 'none', marginTop: 16, fontSize: '1.2em', padding: 16 }}>
-            Team 1 ist naeher dran!
+        <GlassCard>
+          <div className="guess-result">
+            <div className="guess-result-answer" style={{ animation: 'none' }}>
+              <span className="guess-result-label">Richtige Antwort</span>
+              <span className="guess-result-value">45</span>
+            </div>
+            <div className="guess-result-teams">
+              <div className="guess-result-team is-winner" style={{ animation: 'none' }}>
+                <span className="guess-result-team-name">Team 1</span>
+                <span className="guess-result-guess">42</span>
+                <span className="guess-result-diff">Differenz: 3</span>
+                <span className="guess-result-badge">Näher dran!</span>
+              </div>
+              <div className="guess-result-team" style={{ animation: 'none' }}>
+                <span className="guess-result-team-name">Team 2</span>
+                <span className="guess-result-guess">56</span>
+                <span className="guess-result-diff">Differenz: 11</span>
+              </div>
+            </div>
           </div>
         </GlassCard>
       </Section>

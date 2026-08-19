@@ -938,86 +938,193 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 20px;
+    gap: clamp(16px, 3vw, 32px);
+    width: 100%;
 }
 
-.guess-input {
-    margin-bottom: 40px;
-    text-align: center;
+/* Both teams guess the same number, so the two fields sit side by side — that
+   keeps the pair on screen next to the question audio player. */
+.guess-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: clamp(10px, 2.5vw, 28px);
+    width: 100%;
+    max-width: 720px;
 }
 
-.guess-input label {
-    display: block;
-    font-size: 1.2em;
-    color: var(--card-text, var(--text-primary));
-    margin-bottom: 20px;
+.guess-field {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: clamp(8px, 1.5vw, 14px);
+    padding: clamp(12px, 2vw, 20px);
+    background: rgba(var(--glass-rgb), 0.05);
+    border: 1px solid rgba(var(--glass-rgb), 0.12);
+    border-radius: var(--radius-md, 15px);
+}
+
+.guess-field label {
+    font-size: clamp(0.9em, 2vw, 1.15em);
     font-weight: 600;
+    line-height: 1.3;
+    text-align: center;
+    color: var(--card-text, var(--text-primary));
 }
 
-.guess-input input {
-    padding: 20px;
-    font-size: 1.2em;
-    border-radius: 15px;
+.guess-field input {
+    /* Bottom-aligned so both inputs line up even when one team's name wraps to
+       more lines than the other's (the grid stretches both cards). */
+    margin-top: auto;
+    width: 100%;
+    max-width: 220px;
+    padding: clamp(12px, 2vw, 18px);
+    font-size: clamp(1em, 2.5vw, 1.3em);
+    font-weight: 600;
+    text-align: center;
+    border-radius: 12px;
     border: 2px solid rgba(var(--glass-rgb), 0.3);
     background: rgba(var(--glass-rgb), 0.1);
+    -webkit-backdrop-filter: blur(10px);
     backdrop-filter: blur(10px);
     color: var(--card-text, var(--text-primary));
-    width: 150px;
-    text-align: center;
     transition: all 0.3s ease;
 }
 
-.guess-input input:focus {
+.guess-field input:focus {
     outline: none;
     border-color: rgba(var(--glass-rgb), 0.6);
     background: rgba(var(--glass-rgb), 0.15);
     box-shadow: 0 0 20px rgba(var(--glass-rgb), 0.2);
 }
 
-.result-row {
+/* Result: the answer on top, both teams side by side below it. The verdict is a
+   badge on the winning card instead of a separate banner — otherwise the
+   guesses end up sandwiched between two result blocks. */
+.guess-result {
     display: flex;
-    justify-content: space-between;
+    flex-direction: column;
     align-items: center;
+    gap: clamp(12px, 2vw, 20px);
     width: 100%;
-    max-width: 900px;
-    margin: 15px auto;
-    padding: 20px;
-    background: rgba(var(--glass-rgb), 0.05);
+}
+
+.guess-result-answer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: clamp(2px, 0.6vw, 6px);
+    width: 100%;
+    box-sizing: border-box;
+    padding: clamp(12px, 2vw, 22px) clamp(16px, 3vw, 40px);
+    background: rgba(var(--card-success-rgb, var(--success-rgb)), 0.1);
+    border: 2px solid rgba(var(--card-success-rgb, var(--success-rgb)), 0.3);
     border-radius: 15px;
-    border: 1px solid rgba(var(--glass-rgb), 0.1);
+    animation: fadeIn 0.5s ease-out;
+}
+
+.guess-result-label {
+    font-size: clamp(0.7em, 1.5vw, 0.9em);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.65, var(--text-fade-floor, 0)));
+}
+
+.guess-result-value {
+    font-family: var(--font-heading, var(--font-primary));
+    font-size: clamp(1.8em, 5vw, 3em);
+    font-weight: 700;
+    line-height: 1.1;
+    color: var(--card-success, var(--success));
+}
+
+.guess-result-teams {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: clamp(10px, 2.5vw, 24px);
+    width: 100%;
+}
+
+.guess-result-team {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: clamp(4px, 1vw, 8px);
+    padding: clamp(12px, 2vw, 20px);
+    background: rgba(var(--glass-rgb), 0.05);
+    border: 2px solid rgba(var(--glass-rgb), 0.12);
+    border-radius: 15px;
+    animation: fadeIn 0.5s ease-out;
     transition: all 0.3s ease;
 }
 
-.result-row:hover {
-    background: rgba(var(--glass-rgb), 0.1);
-    transform: translateX(5px);
+.guess-result-team.is-winner {
+    background: rgba(var(--card-gold-rgb, var(--gold-warm-rgb)), 0.18);
+    border-color: rgba(var(--card-gold-rgb, var(--gold-warm-rgb)), 0.75);
+    box-shadow: 0 8px 32px rgba(var(--card-gold-rgb, var(--gold-warm-rgb)), 0.25);
 }
 
-.difference {
-    font-size: 1em;
-    color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.6, var(--text-fade-floor, 0)));
-    margin-left: 20px;
-    font-weight: 500;
+.guess-result-team-name {
+    font-size: clamp(0.85em, 1.8vw, 1.05em);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    text-align: center;
+    color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.7, var(--text-fade-floor, 0)));
 }
 
-.winner {
-    font-size: 1.8em;
-    color: var(--card-gold, var(--gold-warm));
+.guess-result-guess {
+    font-family: var(--font-heading, var(--font-primary));
+    font-size: clamp(1.5em, 4vw, 2.2em);
     font-weight: 700;
-    margin-top: 40px;
-    text-align: center;
-    background: rgba(var(--card-gold-rgb, var(--gold-warm-rgb)), 0.1);
-    backdrop-filter: blur(10px);
-    border: 2px solid rgba(var(--card-gold-rgb, var(--gold-warm-rgb)), 0.3);
-    padding: 30px;
-    border-radius: 20px;
-    box-shadow: 0 8px 32px rgba(var(--card-gold-rgb, var(--gold-warm-rgb)), 0.2);
-    animation: pulse 2s ease-in-out infinite;
+    line-height: 1.1;
+    color: var(--card-text, var(--text-primary));
 }
 
-.winner.centered {
+.guess-result-team.is-winner .guess-result-guess {
+    color: var(--card-gold, var(--gold-warm));
+}
+
+.guess-result-diff {
+    font-size: clamp(0.8em, 1.6vw, 1em);
+    font-weight: 500;
+    color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.6, var(--text-fade-floor, 0)));
+}
+
+/* Filled accent pill (same fill/ink pair as the buttons) — on themes where
+   success and gold are the same hue, the solid badge is what separates the
+   winning card from the answer card above it. */
+.guess-result-badge {
+    margin-top: clamp(2px, 0.8vw, 6px);
+    padding: 0.35em 1.1em;
+    border: none;
+    border-radius: 999px;
+    font-size: clamp(0.7em, 1.5vw, 0.9em);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    background: linear-gradient(135deg, var(--accent-from) 0%, var(--accent-to) 100%);
+    color: var(--btn-color);
+}
+
+.guess-result-badge.is-tie {
+    background: rgba(var(--glass-rgb), 0.12);
+    color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.8, var(--text-fade-floor, 0)));
+    box-shadow: inset 0 0 0 1px rgba(var(--glass-rgb), 0.3);
+}
+
+.guess-result .quiz-image {
+    margin: 0;
+}
+
+/* ── Betting input ──
+   Applied to the <input> itself by bet-quiz, final-quiz and wer-kennt-mehr
+   (together with `.betting-input`); it must stay below that rule in the
+   cascade. */
+
+.guess-input {
+    margin-bottom: 40px;
     text-align: center;
-    width: 100%;
 }
 
 /* ── Four Statements ── */

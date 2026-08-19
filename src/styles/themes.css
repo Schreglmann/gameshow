@@ -3201,7 +3201,7 @@
 [data-theme="atlas"] .bandle-track-answer.hidden,
 [data-theme="atlas"] .bandle-track-answer.hidden:hover,
 [data-theme="atlas"] .bandle-track-answer.revealed,
-[data-theme="atlas"] .winner,
+[data-theme="atlas"] .guess-result-team.is-winner,
 [data-theme="atlas-light"] header div:hover,
 [data-theme="atlas-light"] header button,
 [data-theme="atlas-light"] header button:hover,
@@ -3217,7 +3217,7 @@
 [data-theme="atlas-light"] .bandle-track-answer.hidden,
 [data-theme="atlas-light"] .bandle-track-answer.hidden:hover,
 [data-theme="atlas-light"] .bandle-track-answer.revealed,
-[data-theme="atlas-light"] .winner {
+[data-theme="atlas-light"] .guess-result-team.is-winner {
   box-shadow: none;
 }
 /* bandlePulse / bandleAnswerPulse animate box-shadow glow — kill them (the
@@ -3232,8 +3232,8 @@
 }
 /* Hardcoded ivory focus halo — use the theme's own crisp focus ring instead
    (the var resolves per-theme: gold ring on Atlas, navy ring on Atlas Light). */
-[data-theme="atlas"] .guess-input input:focus,
-[data-theme="atlas-light"] .guess-input input:focus {
+[data-theme="atlas"] .guess-field input:focus,
+[data-theme="atlas-light"] .guess-field input:focus {
   box-shadow: var(--input-focus-shadow);
 }
 

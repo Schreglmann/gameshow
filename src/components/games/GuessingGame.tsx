@@ -453,69 +453,70 @@ function GuessingInner({ questions, order, gameTitle, questionAudioRef, skipAudi
 
       {phase === 'question' && (
         <form className="guess-form" onSubmit={handleSubmit}>
-          {teamDisplayOrder(state.teams.orderSwapped, false, state.settings.teamMirrorEnabled).map(teamKey => {
-            const label = teamKey === 'team1' ? t1 : t2;
-            const value = teamKey === 'team1' ? team1Guess : team2Guess;
-            const setValue = teamKey === 'team1' ? setTeam1Guess : setTeam2Guess;
-            return (
-              <div className="guess-input" key={teamKey}>
-                <label htmlFor={`${teamKey}Guess`}>Tipp {label}:</label>
-                <input
-                  type="number"
-                  id={`${teamKey}Guess`}
-                  value={value}
-                  onChange={e => setValue(e.target.value)}
-                  required
-                />
-              </div>
-            );
-          })}
-          <button type="submit" className="quiz-button button-centered">
+          <div className="guess-fields">
+            {teamDisplayOrder(state.teams.orderSwapped, false, state.settings.teamMirrorEnabled).map(teamKey => {
+              const label = teamKey === 'team1' ? t1 : t2;
+              const value = teamKey === 'team1' ? team1Guess : team2Guess;
+              const setValue = teamKey === 'team1' ? setTeam1Guess : setTeam2Guess;
+              return (
+                <div className="guess-field" key={teamKey}>
+                  <label htmlFor={`${teamKey}Guess`}>Tipp {label}:</label>
+                  <input
+                    type="number"
+                    id={`${teamKey}Guess`}
+                    value={value}
+                    onChange={e => setValue(e.target.value)}
+                    required
+                  />
+                </div>
+              );
+            })}
+          </div>
+          <button type="submit" className="quiz-button">
             Tipp Abgeben
           </button>
         </form>
       )}
 
       {phase === 'result' && resultInfo && (
-        <>
-          <div className="quiz-answer">
-            <p>{formatNumber(resultInfo.answer)}</p>
+        <div className="guess-result">
+          <div className="guess-result-answer">
+            <span className="guess-result-label">Richtige Antwort</span>
+            <span className="guess-result-value">{formatNumber(resultInfo.answer)}</span>
           </div>
-          {teamDisplayOrder(state.teams.orderSwapped, false, state.settings.teamMirrorEnabled).map(teamKey => {
-            const label = teamKey === 'team1' ? t1 : t2;
-            const guess = teamKey === 'team1' ? resultInfo.t1Guess : resultInfo.t2Guess;
-            const diff = teamKey === 'team1' ? resultInfo.t1Diff : resultInfo.t2Diff;
-            return (
-              <div className="result-row" key={teamKey}>
-                <span>{label}: {formatNumber(guess)}</span>
-                <span className="difference">Differenz: {formatNumber(diff)}</span>
-              </div>
-            );
-          })}
-          {resultInfo.t1Diff < resultInfo.t2Diff && (
-            <div className="winner centered">{t1} ist näher dran!</div>
+          <div className="guess-result-teams">
+            {teamDisplayOrder(state.teams.orderSwapped, false, state.settings.teamMirrorEnabled).map(teamKey => {
+              const label = teamKey === 'team1' ? t1 : t2;
+              const guess = teamKey === 'team1' ? resultInfo.t1Guess : resultInfo.t2Guess;
+              const diff = teamKey === 'team1' ? resultInfo.t1Diff : resultInfo.t2Diff;
+              const isTie = resultInfo.t1Diff === resultInfo.t2Diff;
+              const isWinner = !isTie && diff < Math.max(resultInfo.t1Diff, resultInfo.t2Diff);
+              return (
+                <div className={`guess-result-team${isWinner ? ' is-winner' : ''}`} key={teamKey}>
+                  <span className="guess-result-team-name">{label}</span>
+                  <span className="guess-result-guess">{formatNumber(guess)}</span>
+                  <span className="guess-result-diff">Differenz: {formatNumber(diff)}</span>
+                  {isWinner && <span className="guess-result-badge">Näher dran!</span>}
+                  {isTie && <span className="guess-result-badge is-tie">Gleichstand!</span>}
+                </div>
+              );
+            })}
+          </div>
+          {q.answerImage && (
+            <img
+              src={toMediaSrc(q.answerImage)}
+              alt=""
+              className="quiz-image"
+              style={{ cursor: 'pointer' }}
+              onClick={() => openFullscreen({ type: 'image', src: q.answerImage! })}
+            />
           )}
-          {resultInfo.t2Diff < resultInfo.t1Diff && (
-            <div className="winner centered">{t2} ist näher dran!</div>
-          )}
-          {resultInfo.t1Diff === resultInfo.t2Diff && (
-            <div className="winner centered">Gleichstand!</div>
-          )}
-          <button className="quiz-button button-centered" onClick={handleNext}>
+          <button className="quiz-button" onClick={handleNext}>
             Nächste Frage
           </button>
-        </>
+        </div>
       )}
 
-      {q.answerImage && phase === 'result' && (
-        <img
-          src={toMediaSrc(q.answerImage)}
-          alt=""
-          className="quiz-image"
-          style={{ cursor: 'pointer' }}
-          onClick={() => openFullscreen({ type: 'image', src: q.answerImage! })}
-        />
-      )}
     </>
   );
 }

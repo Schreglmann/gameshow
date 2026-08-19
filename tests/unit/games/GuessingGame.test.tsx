@@ -89,7 +89,7 @@ describe('GuessingGame', () => {
     expect(screen.getByLabelText('Tipp Team 2:')).toBeInTheDocument();
     expect(screen.getByText('Tipp Abgeben')).toBeInTheDocument();
     // Default (not swapped): team 1's input is first on the show.
-    const labels = Array.from(document.querySelectorAll('.guess-input label')).map(l => l.textContent);
+    const labels = Array.from(document.querySelectorAll('.guess-field label')).map(l => l.textContent);
     expect(labels).toEqual(['Tipp Team 1:', 'Tipp Team 2:']);
   });
 
@@ -101,7 +101,7 @@ describe('GuessingGame', () => {
     await advanceToGame(user);
 
     await waitFor(() => expect(screen.getByLabelText('Tipp Team 2:')).toBeInTheDocument());
-    const labels = Array.from(document.querySelectorAll('.guess-input label')).map(l => l.textContent);
+    const labels = Array.from(document.querySelectorAll('.guess-field label')).map(l => l.textContent);
     expect(labels).toEqual(['Tipp Team 2:', 'Tipp Team 1:']);
   });
 
@@ -136,8 +136,10 @@ describe('GuessingGame', () => {
     await user.type(screen.getByLabelText('Tipp Team 2:'), '60');
     await user.click(screen.getByText('Tipp Abgeben'));
 
+    // The verdict is a badge on the winning team's result card
     await waitFor(() => {
-      expect(screen.getByText('Team 1 ist näher dran!')).toBeInTheDocument();
+      expect(screen.getByText('Näher dran!').closest('.guess-result-team'))
+        .toHaveTextContent('Team 1');
     });
   });
 
@@ -155,7 +157,8 @@ describe('GuessingGame', () => {
     await user.click(screen.getByText('Tipp Abgeben'));
 
     await waitFor(() => {
-      expect(screen.getByText('Team 2 ist näher dran!')).toBeInTheDocument();
+      expect(screen.getByText('Näher dran!').closest('.guess-result-team'))
+        .toHaveTextContent('Team 2');
     });
   });
 
@@ -172,8 +175,9 @@ describe('GuessingGame', () => {
     await user.type(screen.getByLabelText('Tipp Team 2:'), '55');
     await user.click(screen.getByText('Tipp Abgeben'));
 
+    // A tie badges both team cards
     await waitFor(() => {
-      expect(screen.getByText('Gleichstand!')).toBeInTheDocument();
+      expect(screen.getAllByText('Gleichstand!')).toHaveLength(2);
     });
   });
 

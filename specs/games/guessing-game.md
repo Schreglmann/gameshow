@@ -27,9 +27,10 @@ Both teams submit a numeric guess; the team whose answer is closest to the corre
 
 ## UI behaviour
 - Component: `src/components/games/GuessingGame.tsx`
-- Two numeric inputs, one per team, labelled clearly
+- Two numeric inputs, one per team, labelled clearly, side by side in a two-column grid (`.guess-fields`) so the pair stays visible next to the question audio player
 - "Reveal" button shows correct answer and highlights the winning team
-- Visual indicator (colour/border) on the winning team's input
+- Result layout (`.guess-result`): the correct answer in a card on top, both teams side by side in a two-column grid below it, then the optional `answerImage`, then "Nächste Frage". The verdict is a gold "Näher dran!" badge on the winning team's card (a neutral "Gleichstand!" badge on both cards when the guesses are equidistant) — there is no separate winner banner, so the guesses are never sandwiched between two result blocks
+- Visual indicator (colour/border) on the winning team's result card
 - With `questionAudio`: the standard `.audio-controls` bar (timestamp / play-pause / restart) renders between question and inputs; playback uses `safePlay` + `watchMediaLoad` (asset resilience) and preloads the next question's audio via `usePreloadAsset`
 
 ## Out of scope

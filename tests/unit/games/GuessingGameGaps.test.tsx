@@ -195,8 +195,9 @@ describe('GuessingGame - Gaps', () => {
     await user.type(screen.getByLabelText('Tipp Team 2:'), '0');
     await user.click(screen.getByText('Tipp Abgeben'));
 
+    // A tie badges both team cards
     await waitFor(() => {
-      expect(screen.getByText('Gleichstand!')).toBeInTheDocument();
+      expect(screen.getAllByText('Gleichstand!')).toHaveLength(2);
     });
   });
 });
