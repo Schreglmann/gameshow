@@ -118,6 +118,21 @@ export interface BandleCatalogEntry {
   stream?: number;
   frontperson?: string;
   sources?: string[];
+  /**
+   * Bandle's own slot for the song, verbatim from the pack listing. Two forms:
+   * `"202607/Wanted"` — the year+month it ran as a daily puzzle, i.e. when bandle added
+   * it — and `"_kpop/Yeobo"` for songs that only belong to a themed pack and never had a
+   * dated slot. The month is the finest "added" resolution bandle exposes; there is no
+   * day and no running id (`path` is an opaque 20-char hex key).
+   */
+  folder?: string;
+  /**
+   * Exact date the song ran as bandle's daily puzzle (`"2026-07-15"`), from the
+   * `/v2/planning/<date>.txt` files the app itself uses to pick each day. Set by
+   * `scripts/bandle-sync.cjs`; absent for songs that only ever appeared in a themed pack,
+   * which never had a daily slot. When absent the `folder` month is the best available date.
+   */
+  dailyDate?: string;
 }
 
 export interface VideoGuessQuestion {

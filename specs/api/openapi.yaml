@@ -3748,6 +3748,23 @@ components:
         stream: { type: number }
         frontperson: { type: string }
         sources: { type: array, items: { type: string } }
+        folder:
+          type: string
+          description: >
+            Bandle's own slot for the song, verbatim from the pack listing, backing the
+            admin picker's "Hinzugefügt" sort. Either `YYYYMM/Slug` (e.g. `202607/Wanted`)
+            for the year+month it ran as a daily puzzle, or `_pack/Slug` (e.g. `_kpop/Yeobo`)
+            for songs that only belong to a themed pack and have no added date. Month is the
+            finest resolution bandle exposes.
+          examples: ["202607/Wanted", "_kpop/Yeobo"]
+        dailyDate:
+          type: string
+          format: date
+          description: >
+            Exact date the song ran as bandle's daily puzzle, from the
+            `/v2/planning/<date>.txt` files. Absent for songs that only ever appeared in a
+            themed pack; the `folder` month is then the best available date.
+          examples: ["2026-07-15"]
 
     VideoGuessQuestion:
       type: object
