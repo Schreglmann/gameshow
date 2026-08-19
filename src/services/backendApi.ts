@@ -125,6 +125,11 @@ export async function fetchBandleCatalog(): Promise<import('@/types/config').Ban
   return apiRequest<import('@/types/config').BandleCatalogEntry[]>(`${BASE}/bandle/catalog`);
 }
 
+export async function fetchBandleUsedSongs(): Promise<string[]> {
+  const data = await apiRequest<{ folders: string[] }>(`${BASE}/bandle/used-songs`);
+  return data.folders;
+}
+
 // ── Config ──
 
 export async function fetchConfig(): Promise<AppConfig> {

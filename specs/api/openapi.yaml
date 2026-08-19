@@ -600,6 +600,28 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/BandleCatalogEntry" }
 
+  /api/backend/bandle/used-songs:
+    get:
+      operationId: admin_bandleUsedSongs
+      tags: [admin]
+      summary: List bandle audio folder slugs referenced by any bandle game
+      description: >
+        Scans every bandle game file (base questions and all instances) and returns
+        the `/audio/bandle/<folder>/` slugs referenced by question tracks. Used by the
+        admin song picker's "Bereits verwendete Songs ausblenden" filter.
+      responses:
+        "200":
+          description: Used audio folder slugs (sorted)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [folders]
+                properties:
+                  folders:
+                    type: array
+                    items: { type: string }
+
   /api/backend/bandle/available-audio:
     get:
       operationId: admin_bandleAvailableAudio

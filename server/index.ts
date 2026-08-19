@@ -4414,6 +4414,46 @@ app.get('/api/backend/bandle/catalog', async (_req, res) => {
   res.json(catalog);
 });
 
+// GET /api/backend/bandle/used-songs — audio folder slugs referenced by any bandle game
+// Scans every games/*.json file of type "bandle" (base questions + all instances) and
+// collects the `/audio/bandle/<folder>/` slugs from question tracks. The admin song
+// picker uses this to optionally hide songs already used in some bandle game.
+app.get('/api/backend/bandle/used-songs', async (_req, res) => {
+  const folders = new Set<string>();
+  const collect = (questions: unknown) => {
+    if (!Array.isArray(questions)) return;
+    for (const q of questions) {
+      const tracks = (q as { tracks?: unknown })?.tracks;
+      if (!Array.isArray(tracks)) continue;
+      for (const t of tracks) {
+        const audio = (t as { audio?: unknown })?.audio;
+        const m = typeof audio === 'string' ? audio.match(/\/audio\/bandle\/([^/]+)\//) : null;
+        if (m) folders.add(m[1]!);
+      }
+    }
+  };
+  try {
+    const files = (await readdir(GAMES_DIR)).filter(f => f.endsWith('.json') && !f.startsWith('_') && !f.includes('.fingerprints.'));
+    for (const file of files) {
+      try {
+        const content = JSON.parse(await readFile(path.join(GAMES_DIR, file), 'utf8'));
+        if (content?.type !== 'bandle') continue;
+        collect(content.questions);
+        if (content.instances && typeof content.instances === 'object') {
+          for (const inst of Object.values(content.instances as Record<string, unknown>)) {
+            collect((inst as { questions?: unknown })?.questions);
+          }
+        }
+      } catch (err) {
+        console.warn(`Skipping invalid game file "${file}" during bandle usage scan: ${(err as Error).message}`);
+      }
+    }
+    res.json({ folders: [...folders].sort() });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to scan bandle usage: ${(err as Error).message}` });
+  }
+});
+
 // POST /api/backend/bandle/download-audio — download audio for a song from bandle CDN
 // Body: { path: string } — the bandle song path/ID
 // This is called when a song is added to a game instance and audio isn't yet local

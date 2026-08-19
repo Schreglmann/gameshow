@@ -73,6 +73,7 @@ Source files (line numbers link to the declaration):
 | Method | Path | Zone | Line | Purpose | Request shape | Response shape |
 |--------|------|------|------|---------|---------------|----------------|
 | `GET` | `/api/backend/bandle/catalog` | `admin` | [2502](../../server/index.ts#L2502) | List Bandle tracks with artist/title/preview URLs — used by `bandle` game editor. | — | `BandleCatalogEntry[]` |
+| `GET` | `/api/backend/bandle/used-songs` | `admin` | [4421](../../server/index.ts#L4421) | List bandle audio folder slugs referenced by any bandle game (base + all instances) — backs the song picker's "Bereits verwendete Songs ausblenden" filter. | — | `{ folders: string[] }` |
 | `POST` | `/api/backend/bandle/download-audio` | `admin` | [2521](../../server/index.ts#L2521) | Queue background download of Bandle preview audio into `local-assets/bandle-audio/`. | Body: `{ bandlePath: string; ... }` | `{ ok: true; jobId?: string }` |
 | `GET` | `/api/backend/bandle/available-audio` | `admin` | [2537](../../server/index.ts#L2537) | List already-downloaded Bandle audio files. | — | `string[]` |
 | `GET` | `/api/backend/bandle/audio-status/:bandlePath` | `admin` | [2548](../../server/index.ts#L2548) | Per-track download status. | Path: `bandlePath` | `{ status: 'missing' \| 'downloading' \| 'ready'; percent?: number }` |

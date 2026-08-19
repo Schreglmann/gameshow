@@ -3,7 +3,7 @@ import type { BandleQuestion, BandleCatalogEntry } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
 import { AssetField } from '../AssetPicker';
 import MoveQuestionButton from './MoveQuestionButton';
-import { fetchBandleCatalog } from '@/services/backendApi';
+import { fetchBandleCatalog, fetchBandleUsedSongs } from '@/services/backendApi';
 
 interface Props {
   questions: BandleQuestion[];
@@ -171,19 +171,23 @@ interface PickerFilters {
   setSelectedPacks: React.Dispatch<React.SetStateAction<Set<string>>>;
   selectedDecades: Set<string>;
   setSelectedDecades: React.Dispatch<React.SetStateAction<Set<string>>>;
+  hideUsed: boolean;
+  setHideUsed: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 interface PickerProps extends PickerFilters {
   catalog: BandleCatalogEntry[];
-  existingPaths: Set<string>;
+  existingSlugs: Set<string>;
+  usedSlugs: Set<string>;
   onAdd: (entries: BandleCatalogEntry[]) => void;
   onClose: () => void;
 }
 
 function BandleSongPicker({
-  catalog, existingPaths, onAdd, onClose,
+  catalog, existingSlugs, usedSlugs, onAdd, onClose,
   search, setSearch, selectedPars, setSelectedPars,
   selectedPacks, setSelectedPacks, selectedDecades, setSelectedDecades,
+  hideUsed, setHideUsed,
 }: PickerProps) {
   const [visibleCount, setVisibleCount] = useState(50);
   // Songs checked for adding — keyed by catalog path, insertion-ordered (Set).
@@ -207,7 +211,7 @@ function BandleSongPicker({
     return () => observer.disconnect();
   }, []);
 
-  useEffect(() => { setVisibleCount(50); }, [search, selectedPars, selectedPacks, selectedDecades]);
+  useEffect(() => { setVisibleCount(50); }, [search, selectedPars, selectedPacks, selectedDecades, hideUsed]);
 
   const toggleSet = (set: Set<string>, value: string): Set<string> => {
     const next = new Set(set);
@@ -229,7 +233,11 @@ function BandleSongPicker({
   const allPacks = [...new Set(catalog.flatMap(s => s.packs))].filter(p => p !== 'Gratis').sort();
 
   const filtered = catalog.filter(s => {
-    if (existingPaths.has(s.path)) return false;
+    // Questions carry no catalog path — the audio folder slug is the shared identity
+    // between a catalog entry and a question added from it.
+    const slug = songSlug(s.song);
+    if (existingSlugs.has(slug)) return false;
+    if (hideUsed && usedSlugs.has(slug)) return false;
     if (search) {
       const q = search.toLowerCase();
       const haystack = `${s.song} ${s.frontperson || ''} ${(s.sources || []).join(' ')}`.toLowerCase();
@@ -284,6 +292,17 @@ function BandleSongPicker({
             selected={selectedPacks}
             onToggle={v => setSelectedPacks(prev => toggleSet(prev, v))}
           />
+
+          <div className="bandle-chip-group">
+            <span className="bandle-chip-label">Verwendung</span>
+            <button
+              type="button"
+              className={`bandle-chip${hideUsed ? ' active' : ''}`}
+              onClick={() => setHideUsed(prev => !prev)}
+            >
+              Bereits verwendete Songs ausblenden
+            </button>
+          </div>
         </div>
 
         <div className="bandle-picker-list" ref={listRef}>
@@ -353,6 +372,11 @@ export default function BandleForm({ questions, onChange, otherInstances, onMove
   const [selectedPars, setSelectedPars] = useState<Set<string>>(new Set());
   const [selectedPacks, setSelectedPacks] = useState<Set<string>>(new Set());
   const [selectedDecades, setSelectedDecades] = useState<Set<string>>(new Set());
+  const [hideUsed, setHideUsed] = useState(true);
+
+  // Audio folder slugs referenced by any bandle game — re-fetched on every picker
+  // open so edits to other games in the meantime are reflected.
+  const [usedSlugs, setUsedSlugs] = useState<Set<string>>(new Set());
 
   // Click outside any question-block to close expanded
   useEffect(() => {
@@ -368,6 +392,9 @@ export default function BandleForm({ questions, onChange, otherInstances, onMove
   }, [expandedIdx]);
 
   const openPicker = useCallback(async () => {
+    fetchBandleUsedSongs()
+      .then(folders => setUsedSlugs(new Set(folders)))
+      .catch(e => console.error('Failed to load used bandle songs:', e));
     if (catalog.length === 0 && !catalogLoading) {
       setCatalogLoading(true);
       try { setCatalog(await fetchBandleCatalog()); }
@@ -377,7 +404,7 @@ export default function BandleForm({ questions, onChange, otherInstances, onMove
     setPickerOpen(true);
   }, [catalog.length, catalogLoading]);
 
-  const existingPaths = new Set(
+  const existingSlugs = new Set(
     questions.map(q => {
       const m = q.tracks[0]?.audio?.match(/\/audio\/bandle\/([^/]+)\//);
       return m ? m[1]! : '';
@@ -518,7 +545,8 @@ export default function BandleForm({ questions, onChange, otherInstances, onMove
       {pickerOpen && (
         <BandleSongPicker
           catalog={catalog}
-          existingPaths={existingPaths}
+          existingSlugs={existingSlugs}
+          usedSlugs={usedSlugs}
           onAdd={addManyFromCatalog}
           onClose={() => setPickerOpen(false)}
           search={search}
@@ -529,6 +557,8 @@ export default function BandleForm({ questions, onChange, otherInstances, onMove
           setSelectedPacks={setSelectedPacks}
           selectedDecades={selectedDecades}
           setSelectedDecades={setSelectedDecades}
+          hideUsed={hideUsed}
+          setHideUsed={setHideUsed}
         />
       )}
     </div>
