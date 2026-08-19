@@ -145,9 +145,15 @@ describe('GameScreen — live content reload', () => {
     });
     renderGameScreen();
     await waitFor(() => expect(screen.getByText('Game A')).toBeInTheDocument());
-    act(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))); // landing → rules
+    // The keydown listener is attached in a passive effect that may still be
+    // pending when the title commits (the game data resolves outside act) —
+    // retry the first press until it takes effect (rules show no title, so
+    // "title gone" pins down landing → rules).
+    await waitFor(() => {
+      act(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))); // landing → rules
+      expect(screen.queryByText('Game A')).not.toBeInTheDocument();
+    });
     act(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))); // rules → game
-    await waitFor(() => expect(screen.queryByText('Game A')).not.toBeInTheDocument());
 
     // Admin deletes the current game: the next game (gameB) shifts into index 0.
     mockFetchGameData.mockResolvedValue({
@@ -229,7 +235,12 @@ describe('GameScreen — live content reload', () => {
       mockFetchGameData.mockResolvedValue(data);
       renderGameScreen();
       await waitFor(() => expect(screen.getByText('Quiz')).toBeInTheDocument());
-      next(); // landing → rules
+      // Same passive-effect race as in the deleted-game test above — retry the
+      // first press until the keydown listener is attached and landing is left.
+      await waitFor(() => {
+        next(); // landing → rules
+        expect(document.querySelector('#landingScreen')).toBeNull();
+      });
       next(); // rules → game
       await waitFor(() => expect(label()).toBe('Beispiel Frage'));
       for (let i = 0; i < playIdx; i++) nextQuestion();
