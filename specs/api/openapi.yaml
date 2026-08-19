@@ -3682,6 +3682,10 @@ components:
         question: { type: string }
         answer: { type: number }
         answerImage: { type: string }
+        questionAudio: { type: string }
+        questionAudioStart: { type: number }
+        questionAudioEnd: { type: number }
+        questionAudioLoop: { type: boolean }
         disabled: { type: boolean }
 
     FinalQuizQuestion:

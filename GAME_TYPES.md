@@ -251,6 +251,13 @@ Question fields match `simple-quiz` (image, audio, list, colors, timer, replaceI
     {
       "question": "Population of Tokyo (in millions)?",
       "answer": 37400000
+    },
+    {
+      "question": "„Dancing Queen“ — ABBA",
+      "answer": 1976,
+      "questionAudio": "/audio/ABBA/01 Dancing Queen.m4a",
+      "questionAudioStart": 42,
+      "answerImage": "/images/Audio-Covers/ABBA Gold.jpg"
     }
   ]
 }
@@ -260,6 +267,9 @@ Question fields match `simple-quiz` (image, audio, list, colors, timer, replaceI
 - Automatic number formatting (e.g., 1.000.000)
 - Calculates which team is closer
 - Displays both guesses and the correct answer
+- Optional `questionAudio`: auto-plays while the question is shown (with play/pause + restart controls, mirrored to the gamemaster) — e.g. "guess the release year of this song". Keeps playing through the result phase; stops on the next question
+- Optional `questionAudioStart` / `questionAudioEnd` / `questionAudioLoop`: trim the section that plays (same semantics as simple-quiz; pick the points on the waveform in admin)
+- Optional `answerImage`: shown after the reveal
 
 **How to Play**:
 1. Question is displayed

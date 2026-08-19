@@ -268,3 +268,121 @@ describe('GuessingGame', () => {
     expect(screen.queryByText('1.492')).not.toBeInTheDocument();
   });
 });
+
+describe('GuessingGame question audio', () => {
+  // Track all created Audio instances
+  const audioInstances: Array<{
+    src: string;
+    paused: boolean;
+    currentTime: number;
+    play: ReturnType<typeof vi.fn>;
+    pause: ReturnType<typeof vi.fn>;
+  }> = [];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    audioInstances.length = 0;
+    (globalThis as any).Audio = class MockAudioInstance {
+      src = '';
+      volume = 1;
+      paused = true;
+      currentTime = 0;
+      duration = 0;
+      play = vi.fn().mockImplementation(() => {
+        this.paused = false;
+        return Promise.resolve();
+      });
+      pause = vi.fn().mockImplementation(() => {
+        this.paused = true;
+      });
+      load = vi.fn();
+      addEventListener = vi.fn();
+      removeEventListener = vi.fn();
+      constructor(src?: string) {
+        if (src) this.src = src;
+        audioInstances.push(this as any);
+      }
+    };
+  });
+
+  it('auto-plays question audio when the question has questionAudio', async () => {
+    const user = userEvent.setup();
+    const config = makeConfig({
+      questions: [
+        { question: 'Which year?', answer: 1976, questionAudio: '/audio/song.mp3' },
+        { question: 'Q2', answer: 100 },
+      ],
+    });
+    renderGame(config);
+    await waitFor(() => expect(screen.getByText('Test Guessing')).toBeInTheDocument());
+    await advanceToGame(user);
+
+    await waitFor(() => {
+      const playedAudio = audioInstances.find(a => a.src.includes('/audio/song.mp3'));
+      expect(playedAudio).toBeTruthy();
+      expect(playedAudio!.play).toHaveBeenCalled();
+    });
+  });
+
+  it('keeps the question audio playing through the result phase and stops it on the next question', async () => {
+    const user = userEvent.setup();
+    const config = makeConfig({
+      questions: [
+        { question: 'Which year?', answer: 1976, questionAudio: '/audio/song.mp3' },
+        { question: 'Q2', answer: 100 },
+      ],
+    });
+    renderGame(config);
+    await waitFor(() => expect(screen.getByText('Test Guessing')).toBeInTheDocument());
+    await advanceToGame(user);
+
+    await waitFor(() => expect(screen.getByLabelText('Tipp Team 1:')).toBeInTheDocument());
+    const playedAudio = audioInstances.find(a => a.src.includes('/audio/song.mp3'))!;
+
+    await user.type(screen.getByLabelText('Tipp Team 1:'), '1970');
+    await user.type(screen.getByLabelText('Tipp Team 2:'), '1980');
+    await user.click(screen.getByText('Tipp Abgeben'));
+
+    // Result phase: audio not paused by the reveal
+    await waitFor(() => expect(screen.getByText('Nächste Frage')).toBeInTheDocument());
+    expect(playedAudio.pause).not.toHaveBeenCalled();
+
+    // Advancing to the next question stops the song
+    await user.click(screen.getByText('Nächste Frage'));
+    await waitFor(() => {
+      expect(playedAudio.pause).toHaveBeenCalled();
+    });
+  });
+
+  it('starts trimmed question audio at questionAudioStart', async () => {
+    const user = userEvent.setup();
+    const config = makeConfig({
+      questions: [
+        { question: 'Which year?', answer: 1976, questionAudio: '/audio/song.mp3', questionAudioStart: 42 },
+        { question: 'Q2', answer: 100 },
+      ],
+    });
+    renderGame(config);
+    await waitFor(() => expect(screen.getByText('Test Guessing')).toBeInTheDocument());
+    await advanceToGame(user);
+
+    await waitFor(() => {
+      const playedAudio = audioInstances.find(a => a.src.includes('/audio/song.mp3'));
+      expect(playedAudio).toBeTruthy();
+      expect(playedAudio!.currentTime).toBe(42);
+    });
+  });
+
+  it('creates no audio element for questions without questionAudio', async () => {
+    const user = userEvent.setup();
+    renderGame();
+    await waitFor(() => expect(screen.getByText('Test Guessing')).toBeInTheDocument());
+    await advanceToGame(user);
+
+    await waitFor(() => expect(screen.getByLabelText('Tipp Team 1:')).toBeInTheDocument());
+    // The background-music player creates two src-less A/B elements; the game
+    // itself must not have created any sourced audio element.
+    expect(audioInstances.filter(a => a.src !== '').length).toBe(0);
+  });
+});

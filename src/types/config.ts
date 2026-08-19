@@ -64,6 +64,14 @@ export interface GuessingGameQuestion {
   question: string;
   answer: number;
   answerImage?: string;
+  /** Auto-played while the question is shown. */
+  questionAudio?: string;
+  /** Trim: playback starts here instead of 0 (seconds). */
+  questionAudioStart?: number;
+  /** Trim: playback stops here (seconds). */
+  questionAudioEnd?: number;
+  /** Restart at `questionAudioStart` when the trimmed section ends. */
+  questionAudioLoop?: boolean;
   disabled?: boolean;
 }
 
