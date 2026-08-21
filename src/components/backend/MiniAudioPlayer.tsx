@@ -3,6 +3,8 @@ import { useSharedAudio } from './useSharedAudio';
 import { useAudioSpaceToggle } from './useAudioSpaceToggle';
 
 interface Props {
+  /** DOM-ready URL — already run through `toMediaSrc()` / `assetUrl()`. Sharing state
+   * with a sibling AudioTrimTimeline requires both to pass the identical string. */
   src: string;
   className?: string;
   style?: React.CSSProperties;

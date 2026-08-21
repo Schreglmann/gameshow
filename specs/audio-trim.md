@@ -23,6 +23,7 @@ Allow a start time and end time to be set on any `questionAudio` or `answerAudio
 - [x] The timeline renders a waveform (amplitude bars) for the full file duration using the Web Audio API
 - [x] The region of the waveform outside the start/end markers is visually dimmed; the selected region is highlighted
 - [x] A playback cursor moves across the waveform during preview playback
+- [x] The timeline and the audio field's `MiniAudioPlayer` drive **one** audio element: playing or seeking in either is reflected in the other, whatever characters the filename contains
 - [x] While zoomed, the view auto-pans to keep the playback cursor visible. Once the user manually pans (trackpad scroll, wheel zoom, or minimap drag/click), auto-pan is suspended so the cursor can drift off-screen without the view jumping back. Auto-pan re-engages automatically as soon as the cursor is back inside the visible area — whether the user panned back to it or playback caught up — and also on explicit re-center actions (play button, canvas-click seek, jump button, zoom button)
 - [x] A draggable **start marker** (left handle, optional) lets the user set `questionAudioStart` / `answerAudioStart`
 - [x] A draggable **end marker** (right handle, optional) lets the user set `questionAudioEnd` / `answerAudioEnd`
@@ -50,6 +51,7 @@ Allow a start time and end time to be set on any `questionAudio` or `answerAudio
 - If `start` or `end` is already set on a question, the timeline is **expanded automatically** so the values are visible
 - Self-contained component: `AudioTrimTimeline` (in `src/components/backend/`)
 - Props: `src: string`, `start?: number`, `end?: number`, `onChange: (start: number | undefined, end: number | undefined) => void`
+- `src` is a **DOM-ready URL** — the caller runs the stored path through `toMediaSrc()` (or `assetUrl()`) first. `useSharedAudio` keys its element pool on the `src` string, so a raw path here and an encoded one in the sibling `MiniAudioPlayer` name two elements for one file and the two players drift apart
 - The widget decodes the audio file with the Web Audio API (`AudioContext.decodeAudioData`) and renders a **waveform** onto a `<canvas>` element (downsampled amplitude bars)
 - The waveform fills the full file duration; the region outside the start/end markers is dimmed
 - Dragging the start handle sets the start marker; dragging the end handle sets the end marker

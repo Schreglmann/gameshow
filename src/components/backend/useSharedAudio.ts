@@ -39,6 +39,10 @@ function pauseOthers(audio: HTMLAudioElement) {
  * SimpleQuizForm) get independent playback state by passing distinct scopes,
  * while a MiniAudioPlayer and its trim timeline in the same field share state by
  * passing the same scope.
+ *
+ * `src` is compared as a plain string, so subscribers must pass the identical
+ * DOM-ready URL: `/audio/A B.mp3` and `/audio/A%20B.mp3` name the same file but key
+ * two separate elements, which is exactly the drift this pool exists to prevent.
  */
 export function useSharedAudio(src: string | undefined, scope?: string) {
   const [isPlaying, setIsPlaying] = useState(false);

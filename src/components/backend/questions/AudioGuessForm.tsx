@@ -5,6 +5,7 @@ import SpellField from '../SpellField';
 import { AssetField } from '../AssetPicker';
 import { useCoverUrl } from '@/context/AudioCoverMetaContext';
 import AudioTrimTimeline from '../AudioTrimTimeline';
+import { toMediaSrc } from '@/utils/assetUrl';
 import MoveQuestionButton from './MoveQuestionButton';
 import { stripTrailingEmpty } from './ghostRow';
 import { useConfirm } from '../ConfirmContext';
@@ -198,7 +199,7 @@ export default function AudioGuessForm({ questions, onChange, otherInstances, on
                 {q.audio && trimExpanded.has(`${i}-short`) && (
                   canLoad(i) ? (
                     <AudioTrimTimeline
-                      src={q.audio}
+                      src={toMediaSrc(q.audio) ?? q.audio}
                       start={q.audioStart}
                       end={q.audioEnd}
                       onChange={(s, e) => update(i, { audioStart: s, audioEnd: e })}

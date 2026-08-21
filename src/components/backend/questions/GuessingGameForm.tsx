@@ -4,6 +4,7 @@ import { useDragReorder } from '../useDragReorder';
 import SpellField from '../SpellField';
 import { AssetField } from '../AssetPicker';
 import AudioTrimTimeline from '../AudioTrimTimeline';
+import { toMediaSrc } from '@/utils/assetUrl';
 import MoveQuestionButton from './MoveQuestionButton';
 import { stripTrailingEmpty } from './ghostRow';
 import { useConfirm } from '../ConfirmContext';
@@ -116,7 +117,7 @@ export default function GuessingGameForm({ questions, onChange, otherInstances, 
                   </button>
                   {q.questionAudio && trimExpanded.has(i) && (
                     <AudioTrimTimeline
-                      src={q.questionAudio}
+                      src={toMediaSrc(q.questionAudio) ?? q.questionAudio}
                       scope={`q-${i}-question`}
                       start={q.questionAudioStart}
                       end={q.questionAudioEnd}

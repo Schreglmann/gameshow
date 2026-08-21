@@ -3,6 +3,7 @@ import type { SimpleQuizQuestion } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
 import { AssetField } from '../AssetPicker';
 import { useCoverUrl } from '@/context/AudioCoverMetaContext';
+import { toMediaSrc } from '@/utils/assetUrl';
 import StatusMessage from '../StatusMessage';
 import AudioTrimTimeline from '../AudioTrimTimeline';
 import MoveQuestionButton from './MoveQuestionButton';
@@ -364,7 +365,7 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
                   </button>
                   {q.questionAudio && trimExpanded.has(`${i}-question`) && (
                     <AudioTrimTimeline
-                      src={q.questionAudio}
+                      src={toMediaSrc(q.questionAudio) ?? q.questionAudio}
                       scope={`q-${i}-question`}
                       start={q.questionAudioStart}
                       end={q.questionAudioEnd}
@@ -425,7 +426,7 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
                   </button>
                   {q.answerAudio && trimExpanded.has(`${i}-answer`) && (
                     <AudioTrimTimeline
-                      src={q.answerAudio}
+                      src={toMediaSrc(q.answerAudio) ?? q.answerAudio}
                       scope={`q-${i}-answer`}
                       start={q.answerAudioStart}
                       end={q.answerAudioEnd}
