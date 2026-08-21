@@ -51,6 +51,7 @@ const VALID_GAME_TYPES: GameType[] = [
   'ranking',
   'wer-kennt-mehr',
   'random-frame',
+  'city-compass',
 ];
 
 function parseGameRef(ref: string): { gameName: string; instanceName: string | null } {
@@ -337,6 +338,22 @@ function validateGame(gameRef: string, game: GameConfig, validPresetIds: Set<str
     }
   }
 
+  if ('reveal' in gameRaw) {
+    if (game.type !== 'city-compass') {
+      errors.push(`Game "${gameRef}": "reveal" is only supported on city-compass games`);
+    } else if (!['all', 'progressive'].includes(gameRaw.reveal)) {
+      errors.push(`Game "${gameRef}": "reveal" must be "all" or "progressive"`);
+    }
+  }
+
+  if ('showDistances' in gameRaw) {
+    if (game.type !== 'city-compass') {
+      errors.push(`Game "${gameRef}": "showDistances" is only supported on city-compass games`);
+    } else if (typeof gameRaw.showDistances !== 'boolean') {
+      errors.push(`Game "${gameRef}": "showDistances" must be a boolean`);
+    }
+  }
+
   const typesNeedingQuestions: GameType[] = [
     'simple-quiz',
     'bet-quiz',
@@ -352,6 +369,7 @@ function validateGame(gameRef: string, game: GameConfig, validPresetIds: Set<str
     'ranking',
     'wer-kennt-mehr',
     'random-frame',
+    'city-compass',
     // video-guess was missing: its questions array was never validated at all,
     // so a game with no `video` or no `answer` passed `npm run validate` and
     // only failed in front of the audience.
@@ -586,6 +604,34 @@ function validateQuestion(
       }
       if (question.items !== undefined && (!Array.isArray(question.items) || (question.items as unknown[]).some(a => typeof a !== 'string'))) {
         errors.push(`Game "${gameRef}", question ${index}: "items" must be an array of strings`);
+      }
+      break;
+    }
+
+    case 'city-compass': {
+      const checkCity = (city: unknown, label: string): void => {
+        if (!city || typeof city !== 'object' || Array.isArray(city)) {
+          errors.push(`Game "${gameRef}", question ${index}: ${label} must be an object with "name", "lat" and "lon"`);
+          return;
+        }
+        const c = city as Record<string, unknown>;
+        if (typeof c.name !== 'string' || !(c.name as string).trim())
+          errors.push(`Game "${gameRef}", question ${index}: ${label} needs a non-empty "name"`);
+        if (typeof c.lat !== 'number' || (c.lat as number) < -90 || (c.lat as number) > 90)
+          errors.push(`Game "${gameRef}", question ${index}: ${label} needs a "lat" between -90 and 90`);
+        if (typeof c.lon !== 'number' || (c.lon as number) < -180 || (c.lon as number) > 180)
+          errors.push(`Game "${gameRef}", question ${index}: ${label} needs a "lon" between -180 and 180`);
+      };
+
+      checkCity(question.center, '"center"');
+      if (!Array.isArray(question.neighbors)) {
+        errors.push(`Game "${gameRef}", question ${index}: "neighbors" must be an array`);
+      } else {
+        // Two cities already pin a point down; three is the floor at which the
+        // constellation reads as a shape rather than as a pair of directions.
+        if ((question.neighbors as unknown[]).length < 3)
+          errors.push(`Game "${gameRef}", question ${index}: needs at least 3 "neighbors"`);
+        (question.neighbors as unknown[]).forEach((neighbor, i) => checkCity(neighbor, `neighbor ${i}`));
       }
       break;
     }

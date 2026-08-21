@@ -1583,6 +1583,203 @@ textarea {
     font-size: 10px;
 }
 
+/* ── City Compass ── */
+
+.city-compass-stage {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    /* Explicit width, not the shrink-to-fit an `align-items: center` column would
+     * give: the rose's own `width: 100%` needs a definite parent width, or the
+     * browser falls back to the 300px default width of a replaced element. */
+    width: 100%;
+    gap: clamp(8px, 1.6vw, 16px);
+    margin: clamp(12px, 2.4vw, 24px) 0;
+}
+
+/* The rose has no background of its own — it sits directly on the card the theme
+ * draws. It inherits the card text color and every part paints with `currentColor`
+ * at its own opacity, so one token carries the whole drawing through every theme.
+ *
+ * The ratio of the crop `layoutCompass` measured arrives inline as `--compass-aspect`,
+ * and the rose is sized by width alone: the height it may take, times that ratio, is
+ * as wide as it may get. Both dimensions therefore always fit the drawing. The height
+ * needs a cap of its own because a question of short names crops to a nearly square
+ * box, which at full width would be so tall that the answer below it leaves the
+ * screen. `overflow: visible` is a guard — the crop estimates the text width, and a
+ * name a few units wider than estimated should spill rather than lose a letter.
+ *
+ * Type sizes are SVG user-space units set as attributes in CompassRose, not here: the
+ * crop is computed from them, so they have to be one number both sides agree on. That
+ * also means they need no breakpoints — the label keeps its share of the rose at every
+ * width, and cropping the box already makes the names on a phone about twice the size
+ * they were in the fixed one. */
+.compass-rose {
+    --compass-max-height: min(62vh, 780px);
+
+    width: 100%;
+    max-width: min(100%, calc(var(--compass-max-height) * var(--compass-aspect, 1.6)));
+    aspect-ratio: var(--compass-aspect, 1.6);
+    height: auto;
+    display: block;
+    overflow: visible;
+    color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.92, var(--text-fade-floor, 0)));
+}
+
+.compass-rose__grid line {
+    stroke: currentColor;
+    stroke-opacity: 0.16;
+    stroke-width: 2;
+}
+
+.compass-rose__ring {
+    fill: none;
+    stroke: currentColor;
+    stroke-opacity: 0.3;
+    stroke-width: 3;
+}
+
+.compass-rose__spoke {
+    stroke: currentColor;
+    stroke-opacity: 0.42;
+    stroke-width: 2.5;
+    /* One dash covering the whole spoke, so the draw-in can offset it out of view. */
+    stroke-dasharray: var(--compass-spoke-len, 300);
+}
+
+.compass-rose__dot {
+    fill: currentColor;
+    fill-opacity: 0.88;
+}
+
+.compass-rose__label {
+    fill: currentColor;
+    font-weight: 700;
+}
+
+.compass-rose__distance {
+    fill: currentColor;
+    fill-opacity: 0.62;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+}
+
+.compass-rose__center {
+    fill: currentColor;
+    fill-opacity: 0.14;
+    stroke: currentColor;
+    stroke-opacity: 0.5;
+    stroke-width: 3;
+}
+
+.compass-rose__unknown {
+    fill: currentColor;
+    font-weight: 800;
+}
+
+/* The solved center reuses the answer colour of `.quiz-answer`, so the reveal reads as
+ * the same event in both places. The fill is nearly opaque and the ring of spokes stops
+ * at its edge (see `centerInset` in cityCompass.ts): a translucent pill let all six
+ * spokes converge visibly through the name. */
+.compass-rose__pill {
+    fill: rgba(var(--card-success-rgb, var(--success-rgb)), 0.14);
+    stroke: rgba(var(--card-success-rgb, var(--success-rgb)), 0.85);
+    stroke-width: 4;
+}
+
+.compass-rose__solution {
+    fill: var(--card-success, var(--success));
+    font-weight: 800;
+    letter-spacing: 0.5px;
+}
+
+/* Same soft halo `.gm-answer-value` puts behind the gamemaster's answer — it lifts the
+ * name off the card without needing a second colour token. */
+.compass-rose__solved {
+    filter: drop-shadow(0 0 12px rgba(var(--card-success-rgb, var(--success-rgb)), 0.35));
+}
+
+.city-compass-progress {
+    font-size: clamp(0.9em, 1.5vw, 1.1em);
+    color: rgba(var(--card-text-rgb, var(--text-rgb)), 0.75);
+    letter-spacing: 0.5px;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Scoped override for the admin preview, which sits in a form column: the crop can be
+ * nearly square, and a preview as tall as the column is wide would push the fields it
+ * belongs to off the screen. */
+.compass-rose.compass-rose--fit {
+    --compass-max-height: 420px;
+}
+
+/* ── City Compass: drawing the constellation ──
+ * Each city arrives in turn — its spoke draws outward from the centre, the dot lands,
+ * the name fades in. The delays are per element, set in CompassRose. Every keyframe
+ * animates *from* a hidden state to the element's normal styling above, so when these
+ * animations do not run the rose is simply there, fully drawn. */
+
+@keyframes compass-spoke-in {
+    from { stroke-dashoffset: var(--compass-spoke-len, 300); }
+    to { stroke-dashoffset: 0; }
+}
+
+@keyframes compass-dot-in {
+    0% { transform: scale(0); }
+    65% { transform: scale(1.4); }
+    100% { transform: scale(1); }
+}
+
+@keyframes compass-label-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes compass-ring-in {
+    from { opacity: 0; transform: scale(0.86); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+.compass-rose__spoke {
+    animation: compass-spoke-in 380ms ease-out backwards;
+}
+
+.compass-rose__dot {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: compass-dot-in 260ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+}
+
+.compass-rose__label {
+    animation: compass-label-in 260ms ease-out backwards;
+}
+
+.compass-rose__ring,
+.compass-rose__grid {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: compass-ring-in 420ms ease-out backwards;
+}
+
+.compass-rose__hidden-center,
+.compass-rose__solved {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: compass-dot-in 320ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .compass-rose__spoke,
+    .compass-rose__dot,
+    .compass-rose__label,
+    .compass-rose__ring,
+    .compass-rose__grid,
+    .compass-rose__hidden-center,
+    .compass-rose__solved {
+        animation: none;
+    }
+}
+
 /* ── Video loading spinner ── */
 .video-loading-spinner {
     width: 48px;

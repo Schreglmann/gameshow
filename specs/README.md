@@ -123,6 +123,7 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | Wer kennt mehr? (name-more duel) | [games/wer-kennt-mehr.md](games/wer-kennt-mehr.md) | ✅ Implemented |
 | Cover oder Original (uses simple-quiz) | [games/cover-oder-original.md](games/cover-oder-original.md) | ✅ Implemented |
 | Random frame (guess the movie from a random video still) | [games/random-frame.md](games/random-frame.md) | ✅ Implemented |
+| City compass (guess the center city from its neighbors' bearings) | [games/city-compass.md](games/city-compass.md) | ✅ Implemented |
 | Ein Stern. Würde nicht wiederkommen. (uses simple-quiz) | [games/ein-stern.md](games/ein-stern.md) | ✅ Implemented |
 | Sprachsalat (uses simple-quiz) | [games/sprachsalat.md](games/sprachsalat.md) | ✅ Implemented — clips placed, need listen-check |
 

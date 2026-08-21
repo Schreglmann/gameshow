@@ -6,6 +6,7 @@ import { JOKER_CATALOG, getJoker, GENERIC_JOKER_RULES } from '@/data/jokers';
 import JokerIcon from '@/components/common/JokerIcon';
 import DeadlineTimer from '@/components/common/DeadlineTimer';
 import { ColorPie } from '@/components/games/ColorGuess';
+import CompassRose from '@/components/common/CompassRose';
 import { QRCodeSVG } from 'qrcode.react';
 import RulesEditor from '@/components/backend/RulesEditor';
 import SpellCheckPanel, { type SpellGroup } from '@/components/backend/SpellCheckPanel';
@@ -887,6 +888,41 @@ function FrontendShowcase() {
             />
           </div>
           <div className="color-guess-tooltip">Hover über ein Segment für den Farbcode</div>
+        </GlassCard>
+      </Section>
+
+      <Section title="City Compass (Kompass-Rose)">
+        <GlassCard>
+          <div className="city-compass-stage">
+            <CompassRose
+              center={{ name: 'Wien', lat: 48.2085, lon: 16.3721, country: 'AT' }}
+              neighbors={[
+                { name: 'Prag', lat: 50.088, lon: 14.4208, country: 'CZ' },
+                { name: 'Budapest', lat: 47.4984, lon: 19.0404, country: 'HU' },
+                { name: 'Berlin', lat: 52.5244, lon: 13.4105, country: 'DE' },
+                { name: 'Rom', lat: 41.8919, lon: 12.5113, country: 'IT' },
+                { name: 'Krems an der Donau', lat: 48.4092, lon: 15.6142, country: 'AT' },
+              ]}
+              showDistances
+            />
+            <div className="city-compass-progress">5 von 5 Städten</div>
+          </div>
+        </GlassCard>
+        <GlassCard>
+          {/* The solved centre, because that is where the rose has to hold a second
+              colour: the answer pill carries the success token on top of the drawing. */}
+          <div className="city-compass-stage">
+            <CompassRose
+              center={{ name: 'Wien', lat: 48.2085, lon: 16.3721, country: 'AT' }}
+              neighbors={[
+                { name: 'Prag', lat: 50.088, lon: 14.4208, country: 'CZ' },
+                { name: 'Budapest', lat: 47.4984, lon: 19.0404, country: 'HU' },
+                { name: 'München', lat: 48.1374, lon: 11.5755, country: 'DE' },
+                { name: 'Zagreb', lat: 45.8144, lon: 15.978, country: 'HR' },
+              ]}
+              solved
+            />
+          </div>
         </GlassCard>
       </Section>
 

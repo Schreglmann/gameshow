@@ -16,7 +16,8 @@ export type GameType =
   | 'colorguess'
   | 'ranking'
   | 'wer-kennt-mehr'
-  | 'random-frame';
+  | 'random-frame'
+  | 'city-compass';
 
 // ── Question types per game ──
 
@@ -195,6 +196,29 @@ export interface ColorGuessQuestion {
   /** Populated by the server from the sidecar color-profile cache.
    *  Never present in authored JSON. */
   colors?: ColorSlice[];
+}
+
+/** A city on the compass rose. Coordinates are stored, not looked up, so the show
+ *  renders offline and the city dataset stays out of the show bundle. */
+export interface CompassCity {
+  name: string;
+  lat: number;
+  lon: number;
+  /** ISO 3166-1 alpha-2, shown next to the name once the answer is revealed. */
+  country?: string;
+}
+
+export interface CityCompassQuestion {
+  /** The city teams have to name. Never rendered before the reveal. */
+  center: CompassCity;
+  /** 3-8 cities around it, in reveal order. */
+  neighbors: CompassCity[];
+  /** Overrides the default prompt "Welche Stadt liegt im Zentrum?". */
+  question?: string;
+  /** Optional small-font subtitle rendered above the question text. */
+  info?: string;
+  answerImage?: string;
+  disabled?: boolean;
 }
 
 export interface Q1Question {
@@ -393,6 +417,19 @@ export interface RandomFrameConfig extends BaseGameConfig {
   questions: RandomFrameQuestion[];
 }
 
+export interface CityCompassConfig extends BaseGameConfig {
+  type: 'city-compass';
+  questions: CityCompassQuestion[];
+  /** Append the distance to each neighbor's label. Off by default (and when the
+   *  field is absent): the bearing alone is the intended puzzle, and the distance is
+   *  an opt-in that makes it easier. */
+  showDistances?: boolean;
+  /** 'all' (the DEFAULT, also when the field is absent): the whole constellation is
+   *  visible at once. 'progressive': two neighbors to start with, one more per host
+   *  advance, then the answer. */
+  reveal?: 'all' | 'progressive';
+}
+
 export type GameConfig =
   | SimpleQuizConfig
   | BetQuizConfig
@@ -409,7 +446,8 @@ export type GameConfig =
   | ColorGuessConfig
   | RankingConfig
   | WerKenntMehrConfig
-  | RandomFrameConfig;
+  | RandomFrameConfig
+  | CityCompassConfig;
 
 // ── Game file types (files in games/ directory) ──
 

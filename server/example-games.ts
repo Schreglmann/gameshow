@@ -340,6 +340,52 @@ export const EXAMPLE_GAMES: ExampleGame[] = [
       ],
     },
   },
+  {
+    fileName: 'beispiel-city-compass',
+    gameFile: {
+      type: 'city-compass',
+      title: 'Beispiel: Städte-Kompass',
+      rules: ['Errate die Stadt, die im Zentrum des Kompass liegt.', ...A],
+      // Constellations generated with the admin "Auto" button, so the coordinates are
+      // the same ones the editor writes. Every question has one regional town among
+      // the capitals — the hint that pins the region down.
+      questions: [
+        {
+          center: { name: 'Wien', lat: 48.2085, lon: 16.3721, country: 'AT' },
+          neighbors: [
+            { name: 'Moskau', lat: 55.7522, lon: 37.6156, country: 'RU' },
+            { name: 'Stockholm', lat: 59.3294, lon: 18.0687, country: 'SE' },
+            { name: 'Berlin', lat: 52.5244, lon: 13.4105, country: 'DE' },
+            { name: 'Belgrad', lat: 44.804, lon: 20.4651, country: 'RS' },
+            { name: 'Budapest', lat: 47.4984, lon: 19.0404, country: 'HU' },
+            { name: 'Krems an der Donau', lat: 48.4092, lon: 15.6142, country: 'AT' },
+          ],
+        },
+        {
+          center: { name: 'Hamburg', lat: 53.5507, lon: 9.993, country: 'DE' },
+          neighbors: [
+            { name: 'Rom', lat: 41.8919, lon: 12.5113, country: 'IT' },
+            { name: 'Stockholm', lat: 59.3294, lon: 18.0687, country: 'SE' },
+            { name: 'Wien', lat: 48.2085, lon: 16.3721, country: 'AT' },
+            { name: 'London', lat: 51.5085, lon: -0.1257, country: 'GB' },
+            { name: 'Berlin', lat: 52.5244, lon: 13.4105, country: 'DE' },
+            { name: 'Schwerin', lat: 53.6294, lon: 11.4132, country: 'DE' },
+          ],
+        },
+        {
+          center: { name: 'Prag', lat: 50.088, lon: 14.4208, country: 'CZ' },
+          neighbors: [
+            { name: 'Madrid', lat: 40.4165, lon: -3.7026, country: 'ES' },
+            { name: 'Paris', lat: 48.8534, lon: 2.3488, country: 'FR' },
+            { name: 'Warschau', lat: 52.2298, lon: 21.0118, country: 'PL' },
+            { name: 'Berlin', lat: 52.5244, lon: 13.4105, country: 'DE' },
+            { name: 'Wien', lat: 48.2085, lon: 16.3721, country: 'AT' },
+            { name: 'Zwickau', lat: 50.7272, lon: 12.4884, country: 'DE' },
+          ],
+        },
+      ],
+    },
+  },
 ];
 
 /**

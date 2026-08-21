@@ -93,6 +93,7 @@ The admin's "Neues Spiel" dialog lists all 16 types:
 | `ranking` | Guess the answers to a question in the correct order — host reveals one rank at a time |
 | `wer-kennt-mehr` | Final game — both teams name as many of a thing as possible; the team that named more scores that count |
 | `random-frame` | Guess the movie/show from a single random still frame pulled from a video (GM can re-roll) |
+| `city-compass` | Name the hidden city at the center of a compass rose, from the cities around it at their true bearing |
 
 See [GAME_TYPES.md](GAME_TYPES.md) for the per-type field reference.
 

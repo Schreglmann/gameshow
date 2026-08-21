@@ -18,6 +18,7 @@ const ColorGuess = lazyWithRetry(() => import('./ColorGuess'));
 const Ranking = lazyWithRetry(() => import('./Ranking'));
 const WerKenntMehr = lazyWithRetry(() => import('./WerKenntMehr'));
 const RandomFrame = lazyWithRetry(() => import('./RandomFrame'));
+const CityCompass = lazyWithRetry(() => import('./CityCompass'));
 
 function renderGame(props: GameComponentProps) {
   switch (props.config.type) {
@@ -53,6 +54,8 @@ function renderGame(props: GameComponentProps) {
       return <WerKenntMehr {...props} />;
     case 'random-frame':
       return <RandomFrame {...props} />;
+    case 'city-compass':
+      return <CityCompass {...props} />;
     default:
       return (
         <div className="quiz-container">

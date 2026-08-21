@@ -28,6 +28,7 @@ This guide explains how to **set up the app** and **create your own gameshow** u
    - [Ranking](#ranking)
    - [Wer kennt mehr?](#wer-kennt-mehr)
    - [Random Frame (Zufallsbild)](#random-frame-zufallsbild)
+   - [City Compass (Städte-Kompass)](#city-compass-städte-kompass)
 5. [Uploading Media (Images & Audio)](#5-uploading-media-images--audio)
 6. [Global Settings](#6-global-settings)
 7. [Jokers](#7-jokers)
@@ -394,6 +395,30 @@ Players see a **single random still frame** pulled from a video and guess which 
 When playing: if the shown frame is bad (e.g. all black), press **Neues Bild** on the gamemaster screen to re-roll a fresh one. While the answer is revealed you can also pre-roll the **next** question's frame with **Neues nächstes Bild**. The first question is a non-scoring **Beispiel** round.
 
 See [GAME_TYPES.md](../GAME_TYPES.md) for the full field reference and [specs/games/random-frame.md](../specs/games/random-frame.md) for behaviour details.
+
+---
+
+### City Compass (Städte-Kompass)
+
+A compass rose with a `?` in the middle and named cities around it, each at the true bearing it has from the hidden city. Teams name the city in the middle.
+
+**Each question has:**
+- **Gesuchte Stadt (Zentrum)** — search for the city teams have to name. Picking it fills in its coordinates
+- **Nachbarstädte** — the cities drawn around it, 3 to 8 of them. Use ↑/↓ to reorder; the order is the reveal order. Each row shows how far away and in which direction the city lies. A city further than 2000 km is marked in red
+- In every city field you can type a few letters and then use ↑/↓ and Enter — with only one match, Enter takes it straight away. Escape closes the list
+- **Fragetext** *(optional)* — a custom prompt (defaults to *"Welche Stadt liegt im Zentrum?"*)
+- **Zusatzinfo** *(optional)* — a subtitle above the question. Do not put anything in it that gives the answer away
+- **Bild zur Auflösung** *(optional)* — shown with the answer on reveal
+
+**The Auto button.** Pick the center city, then press **Auto** and the neighbor list fills itself: mostly capitals and large cities, plus one regional town, spread around the compass and across near and far distances. **Neu würfeln** gives a genuinely different set — city size counts only weakly, so the same handful of big capitals does not come back every time. The dropdowns next to it set how many cities to use (3–8) and how hard the question should be — *Leicht* leans on nearer, better-known cities, *Schwer* on distant ones and drops the regional town. You can always add or remove cities by hand afterwards, and the preview below shows exactly what the audience will see.
+
+**Two settings apply to the whole instance:**
+- **Entfernungen anzeigen** — off by default, which leaves the angles as the only clue. Switch it on to print the km next to every city, which makes the question noticeably easier
+- **Aufdecken** — *Alle auf einmal* (the default) shows the full constellation; *Schrittweise* starts with two cities and adds one on each host advance
+
+Editing a question while the show is running is safe: swap a city and the rose redraws on the stage screen within a second, without jumping to a different question.
+
+See [GAME_TYPES.md](../GAME_TYPES.md) for the full field reference and [specs/games/city-compass.md](../specs/games/city-compass.md) for behaviour details.
 
 ---
 

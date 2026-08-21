@@ -842,6 +842,74 @@ Videos often live only on the NAS, which may not be mounted at the live event. I
 
 ---
 
+## 14. City Compass (`city-compass`)
+
+A hidden city sits at the center of a compass rose, and the named cities around it are placed at their **true geographic bearing** from it. Teams identify the center city from that constellation. Every neighbor sits on the same ring — distance is never encoded in the radius, and where it is shown at all it is written into the label, so the angles carry the puzzle.
+
+The rose is inline SVG drawn from coordinates in the game JSON, so it needs no map tiles and no network access at show time. When a question appears, the constellation draws itself: each spoke runs outward from the center, its dot lands, and the name fades in, one city after another and done inside a second.
+
+### Configuration Example
+
+```json
+{
+  "type": "city-compass",
+  "title": "Städte-Kompass",
+  "questions": [
+    {
+      "center": { "name": "Wien", "lat": 48.2085, "lon": 16.3721, "country": "AT" },
+      "neighbors": [
+        { "name": "Moskau", "lat": 55.7522, "lon": 37.6156, "country": "RU" },
+        { "name": "Berlin", "lat": 52.5244, "lon": 13.4105, "country": "DE" },
+        { "name": "Belgrad", "lat": 44.804, "lon": 20.4651, "country": "RS" },
+        { "name": "Budapest", "lat": 47.4984, "lon": 19.0404, "country": "HU" },
+        { "name": "Krems an der Donau", "lat": 48.4092, "lon": 15.6142, "country": "AT" }
+      ]
+    }
+  ]
+}
+```
+
+### Question Fields
+
+- **`center`** (required): The city teams have to name. Never rendered before the reveal
+- **`neighbors`** (required): 3–8 cities drawn around it. **The order is the reveal order**
+- **`question`** (optional): Prompt shown above the rose. Defaults to *"Welche Stadt liegt im Zentrum?"*
+- **`info`** (optional): Small-font subtitle above the question. Must not name the answer
+- **`answerImage`** (optional): Image shown alongside the answer on reveal
+- **`disabled`** (optional): Hide the question from playback
+
+A city is `{ name, lat, lon, country? }`. Coordinates are **stored**, not looked up at runtime — that keeps the city dataset out of the show bundle and makes the rose a pure function of the question, so an admin edit reaches a running show as soon as the new config arrives.
+
+### Instance Options
+
+- **`showDistances`** (optional, default `false`): Append the distance to each neighbor's name (`Linz · 180 km`). Left off, the bearing is the only clue — that is the intended puzzle, and switching distances on makes it easier
+- **`reveal`** (optional, default `"all"`): `"all"` shows the whole constellation at once; `"progressive"` starts with two neighbors and adds one per host advance. It starts at two because one city alone gives only a direction
+
+### Automatic Neighbor Selection
+
+The admin editor has an **Auto** button that fills the neighbor list from a curated dataset of about 2800 cities (`src/data/cities.generated.ts`). It runs in the browser, so it also works at an offline event.
+
+- Candidates lie **60–2000 km** from the center. Nearer than that is a suburb of the answer; further is outside the game's range
+- Prominence gates distance: capitals and cities above 300,000 inhabitants are eligible at any distance, cities above 150,000 up to 1200 km, and small towns only up to 350 km
+- One slot is reserved for a **regional town** rather than a capital — the hint that pins the region down, and the reason small Austrian and German towns are in the dataset at all. `Schwer` drops it
+- Picks are at least 25° apart in bearing, and the set spans a near and a far band
+- Population counts only weakly, so the largest cities do not take every slot: about 37 different cities show up across 20 re-rolls for one center
+- **Neu würfeln** re-rolls with a new seed; the same seed always gives the same selection
+
+Cities can also be searched and added by hand, and a city the dataset does not have can be entered with its own coordinates.
+
+### How to Play
+
+1. Question 0 is the **Beispiel** (practice) round; real rounds are labelled `Stadt N von M`
+2. Teams look at the constellation and write down which city they think sits in the middle
+3. With `reveal: "progressive"` the host advances to add one more neighbor at a time
+4. The host advances to reveal the answer: the `?` in the middle becomes the city name
+5. The host awards the round's points to the winning team via the standard point screen
+
+The gamemaster card shows the center city as the answer plus the full neighbor list, marking which cities the audience can already see.
+
+---
+
 ## Common Configuration Options
 
 ### Available for All Game Types:

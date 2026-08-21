@@ -3232,7 +3232,8 @@ components:
       type: string
       enum: [simple-quiz, bet-quiz, guessing-game, final-quiz, audio-guess,
              video-guess, q1, four-statements, fact-or-fake, quizjagd, bandle,
-             image-guess, colorguess, ranking, wer-kennt-mehr, random-frame]
+             image-guess, colorguess, ranking, wer-kennt-mehr, random-frame,
+             city-compass]
 
     SettingsResponse:
       type: object
@@ -3436,6 +3437,7 @@ components:
         - $ref: "#/components/schemas/RankingConfig"
         - $ref: "#/components/schemas/WerKenntMehrConfig"
         - $ref: "#/components/schemas/RandomFrameConfig"
+        - $ref: "#/components/schemas/CityCompassConfig"
       discriminator:
         propertyName: type
 
@@ -3644,6 +3646,63 @@ components:
             questions:
               type: array
               items: { $ref: "#/components/schemas/RandomFrameQuestion" }
+
+    CityCompassConfig:
+      allOf:
+        - $ref: "#/components/schemas/BaseGameConfig"
+        - type: object
+          required: [type, questions]
+          properties:
+            type: { const: city-compass }
+            questions:
+              type: array
+              items: { $ref: "#/components/schemas/CityCompassQuestion" }
+            showDistances:
+              type: boolean
+              description: |
+                Append each neighbor's distance to its label. Defaults to false when
+                omitted, leaving the bearing as the only clue.
+            reveal:
+              type: string
+              enum: [all, progressive]
+              description: |
+                `all` (the default when omitted) shows the whole constellation at
+                once. `progressive` starts with two neighbors and adds one per host
+                advance. See [specs/games/city-compass.md](../games/city-compass.md).
+
+    CompassCity:
+      description: |
+        A city on the compass rose. Coordinates are stored in the game JSON rather
+        than resolved at runtime, so the show renders without network access.
+      type: object
+      required: [name, lat, lon]
+      properties:
+        name: { type: string }
+        lat: { type: number, minimum: -90, maximum: 90 }
+        lon: { type: number, minimum: -180, maximum: 180 }
+        country:
+          type: string
+          description: ISO 3166-1 alpha-2, shown next to the name on the reveal.
+
+    CityCompassQuestion:
+      description: |
+        The hidden `center` city and the `neighbors` drawn around it at their true
+        bearing from it. Neighbor order is the reveal order.
+      type: object
+      required: [center, neighbors]
+      properties:
+        center: { $ref: "#/components/schemas/CompassCity" }
+        neighbors:
+          type: array
+          minItems: 3
+          maxItems: 8
+          items: { $ref: "#/components/schemas/CompassCity" }
+        question:
+          type: string
+          description: Overrides the default prompt "Welche Stadt liegt im Zentrum?".
+        info: { type: string }
+        answerImage: { type: string }
+        disabled: { type: boolean }
 
     MultiInstanceGameFile:
       type: object

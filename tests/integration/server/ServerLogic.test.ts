@@ -50,6 +50,7 @@ describe('Server Config Loading', () => {
       'ranking',
       'wer-kennt-mehr',
       'random-frame',
+      'city-compass',
     ];
 
     for (const file of files) {

@@ -39,7 +39,7 @@ Jede Frage wird beiden Teams gleichzeitig gestellt.
 Die Teams schreiben ihre Antwort auf.
 ```
 
-**Applies to:** most `simple-quiz` games, `fact-or-fake`, `q1`, `das-zweitmeiste`, `x-dinge-nennen`, `woher-kommt-es`, `promi-vornamen`, `trump-oder-hitler`, `feuerwehr-quiz`, `allgemeinwissen`, `abkuerzungen`, `automarken`, `was-war-vorher`, `harry-potter-trivia`.
+**Applies to:** most `simple-quiz` games, `fact-or-fake`, `q1`, `city-compass` (with `reveal: "all"`), `das-zweitmeiste`, `x-dinge-nennen`, `woher-kommt-es`, `promi-vornamen`, `trump-oder-hitler`, `feuerwehr-quiz`, `allgemeinwissen`, `abkuerzungen`, `automarken`, `was-war-vorher`, `harry-potter-trivia`.
 
 **Example** (`woher-kommt-es.json`):
 ```json
@@ -159,6 +159,15 @@ Games where the core mechanic is unique. The rules stay mechanic-specific but fo
   "<TASK LINE>.",
   "Die Lösung wird anhand von bis zu 4 Hinweisen erraten.",
   "Nach jedem Hinweis darf geraten werden."
+]
+```
+
+**City-compass — schrittweises Aufdecken** (`city-compass` with `reveal: "progressive"`; the `reveal: "all"` variant uses Archetype A):
+```json
+"rules": [
+  "<TASK LINE>.",
+  "Die Nachbarstädte werden eine nach der anderen aufgedeckt.",
+  "Nach jeder Stadt darf geraten werden."
 ]
 ```
 

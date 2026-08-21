@@ -70,6 +70,10 @@ export const GAME_TYPE_INFO: Record<GameType, GameTypeInfo> = {
     label: 'Zufallsbild',
     description: 'Ein zufälliges Standbild aus einem Video – aus welchem Film stammt es?',
   },
+  'city-compass': {
+    label: 'Städte-Kompass',
+    description: 'Nachbarstädte stehen im richtigen Winkel – welche Stadt liegt im Zentrum?',
+  },
 };
 
 /**
@@ -95,6 +99,7 @@ export const GAME_TYPE_TEMPLATES: Record<GameType, object> = {
   'ranking': { type: 'ranking', rules: [], instances: { v1: { questions: [] } } },
   'wer-kennt-mehr': { type: 'wer-kennt-mehr', rules: [], instances: { v1: { questions: [] } } },
   'random-frame': { type: 'random-frame', rules: [], instances: { v1: { questions: [] } } },
+  'city-compass': { type: 'city-compass', rules: [], instances: { v1: { questions: [] } } },
 };
 
 /**
