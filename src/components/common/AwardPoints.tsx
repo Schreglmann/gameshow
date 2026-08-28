@@ -1,10 +1,42 @@
 import { useGameContext } from '@/context/GameContext';
-import { teamName } from '@/utils/teamNames';
+import { teamName, joinTeamNames, hasNamedTeams, type TeamNames } from '@/utils/teamNames';
 import { teamDisplayOrder } from '@/utils/teamOrder';
+import { type TeamKey } from '@/utils/teams';
 
-export interface AwardPointsWinners {
-  team1: boolean;
-  team2: boolean;
+/**
+ * Which teams are marked as winners. A partial record over the ACTIVE teams:
+ * a missing/false key is "not selected", every selected team receives points,
+ * and two or more selected is the draw. See specs/team-count.md.
+ */
+export type AwardPointsWinners = Partial<Record<TeamKey, boolean>>;
+
+/** The teams currently selected, in the given display order. */
+export function selectedTeams(
+  selected: AwardPointsWinners,
+  teams: readonly TeamKey[],
+): TeamKey[] {
+  return teams.filter(t => selected[t] === true);
+}
+
+/**
+ * The German sentence describing a multi-team award.
+ *
+ * At two teams — where a draw can only mean "both" — this is the wording the
+ * award screen has always used, so nothing about a two-team show changes. With
+ * more teams a draw can be partial, so the winners are named unless every active
+ * team is in it. See specs/team-count.md.
+ */
+export function drawHint(
+  names: TeamNames,
+  picked: readonly TeamKey[],
+  active: readonly TeamKey[],
+): string {
+  if (picked.length === active.length) {
+    return active.length === 2
+      ? 'Unentschieden — beide Teams erhalten Punkte'
+      : 'Unentschieden — alle Teams erhalten Punkte';
+  }
+  return `Unentschieden — ${joinTeamNames(names, picked)} erhalten Punkte`;
 }
 
 /**
@@ -14,28 +46,27 @@ export interface AwardPointsWinners {
  * point value.
  */
 export interface AutoAwardVerdict {
-  /** Questions won per team. A tied question counts for BOTH teams, so these need not
+  /** Questions won per team. A tied question counts for EVERY tied team, so these need not
    *  add up to `scoredQuestions` — which is why the award screen states a plain count,
    *  not an "x of y" fraction. Surfaced as the gamemaster's standing. */
-  team1Wins: number;
-  team2Wins: number;
+  wins: Partial<Record<TeamKey, number>>;
   /** Questions that counted (the example question never does). Zero means "no verdict" —
    *  the wrapper then preselects nothing. */
   scoredQuestions: number;
-  /** Who receives points — both true on an overall tie. */
+  /** Who receives points — more than one on an overall tie. */
   winners: AwardPointsWinners;
 }
 
 interface AwardPointsProps {
-  /** The teams currently marked as winners. Both = draw, neither = nothing picked yet. */
+  /** The teams currently marked as winners. Two or more = draw, none = nothing picked yet. */
   selected: AwardPointsWinners;
   /** What each team would receive — positional value, Aufholjoker already applied. */
-  points: { team1: number; team2: number };
-  onToggle: (team: 'team1' | 'team2') => void;
+  points: Partial<Record<TeamKey, number>>;
+  onToggle: (team: TeamKey) => void;
   onConfirm: () => void;
   /** Third card line per team, already formatted ("2 gewonnene Fragen" /
-   *  "3 richtige Antworten"). `null` hides the line on both cards. */
-  counts?: { team1: string; team2: string } | null;
+   *  "3 richtige Antworten"). `null` hides the line on every card. */
+  counts?: Partial<Record<TeamKey, string>> | null;
   /** Replaces the generic hint (an untouched auto verdict, WerKenntMehr's prompt). */
   hint?: string;
   /** Extra line under the hint (WerKenntMehr's round tally). */
@@ -47,37 +78,52 @@ interface AwardPointsProps {
 }
 
 /**
- * The shared point-award screen: one card per team, each toggled on or off by the
- * host (on the show or from the gamemaster), then a single confirm press books the
- * points and advances. Nothing is selected until the host picks — or until a
- * preselection (an auto verdict, the gamemaster's tally) fills it in.
- * See specs/point-system.md.
+ * The shared point-award screen: one card per ACTIVE team, each toggled on or off
+ * by the host (on the show or from the gamemaster), then a single confirm press
+ * books the points and advances. Nothing is selected until the host picks — or
+ * until a preselection (an auto verdict, the gamemaster's tally) fills it in.
+ * See specs/point-system.md and specs/team-count.md.
  */
 export default function AwardPoints({ selected, points, onToggle, onConfirm, counts, hint, note, inline }: AwardPointsProps) {
   const { state } = useGameContext();
   const armed = state.teams.doubleNextGame;
   // The armed team's positional points double for this award (Aufholjoker).
-  const badge = (team: 'team1' | 'team2') =>
+  const badge = (team: TeamKey) =>
     armed === team ? <span className="award-double-badge" title="Aufholjoker: Punkte zählen doppelt">×2 Aufholjoker</span> : null;
   // Crowd-facing surface → follow the frontend team order (see specs/team-order-mirror.md).
-  const order = teamDisplayOrder(state.teams.orderSwapped, false, state.settings.teamMirrorEnabled);
-  const anySelected = selected.team1 || selected.team2;
+  const order = teamDisplayOrder(
+    state.teams.orderSwapped,
+    false,
+    state.settings.teamMirrorEnabled,
+    state.settings.teamCount,
+  );
+  const picked = selectedTeams(selected, order);
 
-  const defaultHint = !anySelected
-    ? 'Welches Team hat gewonnen?'
-    : selected.team1 && selected.team2
-      ? 'Unentschieden — beide Teams erhalten Punkte'
-      : `${teamName(state.teams, selected.team1 ? 1 : 2)} hat gewonnen`;
+  // Below two teams there is no team to name — the audience plays the show
+  // itself. The show never reaches this screen at 1 team (BaseGameWrapper skips
+  // it: there is no winner to choose), but the admin/theme showcase can still
+  // render it, and a nameless card must read sensibly there too.
+  // See specs/team-count.md.
+  const named = hasNamedTeams(state.settings.teamCount);
+  const defaultHint = picked.length === 0
+    // With a single team there is nothing to choose BETWEEN — the question is
+    // whether the round was won at all.
+    ? (order.length === 1
+      ? (named ? `Hat ${teamName(state.teams, order[0]!)} die Runde gewonnen?` : 'Wurde die Runde gewonnen?')
+      : 'Welches Team hat gewonnen?')
+    : picked.length === 1
+      ? (named ? `${teamName(state.teams, picked[0]!)} hat gewonnen` : 'Runde gewonnen')
+      : drawHint(state.teams, picked, order);
 
   const body = (
     <>
       <h2>Punkte vergeben</h2>
       <p className="award-points-hint">{hint ?? defaultHint}</p>
       {note && <p className="award-points-note">{note}</p>}
-      <div className="award-teams">
+      <div className="award-teams" data-team-count={order.length}>
         {order.map(team => {
-          const isSelected = selected[team];
-          const pts = points[team];
+          const isSelected = selected[team] === true;
+          const pts = points[team] ?? 0;
           return (
             <button
               type="button"
@@ -86,24 +132,30 @@ export default function AwardPoints({ selected, points, onToggle, onConfirm, cou
               aria-pressed={isSelected}
               onClick={() => onToggle(team)}
             >
-              <span className="award-team-card-name">
-                {teamName(state.teams, team === 'team1' ? 1 : 2)}
-                {badge(team)}
-              </span>
+              {/* Below two teams there is no name to put here — the card IS the
+                  round's points. Its value carries the whole meaning, so it is
+                  shown from the start rather than only once something is picked
+                  (the solo card arrives preselected anyway). */}
+              {(named || badge(team)) && (
+                <span className="award-team-card-name">
+                  {named ? teamName(state.teams, team) : null}
+                  {badge(team)}
+                </span>
+              )}
               {/* No points before anything is picked — until then nobody knows who gets what. */}
-              {anySelected && (
+              {(picked.length > 0 || !named) && (
                 <span className="award-team-card-points">
                   {isSelected && pts > 0 ? `+${pts} ${pts === 1 ? 'Punkt' : 'Punkte'}` : '0 Punkte'}
                 </span>
               )}
-              {counts && <span className="award-team-card-count">{counts[team]}</span>}
+              {counts && <span className="award-team-card-count">{counts[team] ?? ''}</span>}
             </button>
           );
         })}
       </div>
       <button
         className="quiz-button award-confirm"
-        disabled={!anySelected}
+        disabled={picked.length === 0}
         onClick={onConfirm}
       >
         Punkte vergeben &amp; weiter

@@ -11,8 +11,9 @@ import CorrectAnswersTracker from '@/components/common/CorrectAnswersTracker';
 import QuestionScorePanel from '@/components/common/QuestionScorePanel';
 import ScoreHistoryPanel from '@/components/common/ScoreHistoryPanel';
 import { NO_QUESTION_KEY } from '@/types/game';
-import { teamName } from '@/utils/teamNames';
+import { teamName, hasNamedTeams } from '@/utils/teamNames';
 import { teamDisplayOrder } from '@/utils/teamOrder';
+import { teamJokersUsed, teamKeys, trailingTeams } from '@/utils/teams';
 import '@/styles/gamemaster.css';
 
 /** Neutral stand-in for a masked answer text — never derived from the answer, so its
@@ -62,8 +63,15 @@ export default function GamemasterView({ showAnswerImages = false, hideAnswers =
   // on a landing screen `gameIndex` is already the NEXT game, so the panel would
   // show empty rows for a game nobody has played yet. Between-games review is what
   // "Letzte Wertungen" is for. See specs/gamemaster-question-scores.md.
+  // ...and only when the show is actually keeping score. With no scoring — 0
+  // teams, or a game whose type the team count cannot score — every row could
+  // only ever read "keine Wertung", so the panel promises a breakdown that will
+  // never arrive. The flag comes from the show because `pointSystemEnabled` is
+  // resolved PER GAME by `GET /api/game/:index`; the GM never fetches that.
+  // See specs/team-count.md and specs/gamemaster-question-scores.md.
   const showQuestionScores =
-    (phase === 'game' || phase === 'points') && typeof controlsData?.gameIndex === 'number';
+    controlsData?.pointsDisabled !== true
+    && (phase === 'game' || phase === 'points') && typeof controlsData?.gameIndex === 'number';
   // The question the show says is live. Undefined on the example question and on
   // every non-game screen — deliberately NOT `questionNumber`, whose 0 is
   // ambiguous between "Beispiel" and "nothing known".
@@ -309,11 +317,14 @@ function JokerControls() {
   // in the last game unless the gameshow allows jokers there.
   if (isLastGame && state.settings.jokersInLastGame !== true) return null;
 
-  // Comeback joker (Aufholjoker) gating: only the strictly-trailing team may
-  // arm it; on a tie neither may. Computed at read time — never stored.
-  const { team1Points, team2Points } = state.teams;
-  const trailingTeam: JokerTeam | null =
-    team1Points < team2Points ? 'team1' : team2Points < team1Points ? 'team2' : null;
+  // Comeback joker (Aufholjoker) gating: only a team strictly behind the leader
+  // may arm it; on an all-way tie nobody may. Same helper the show's TeamJokers
+  // uses, so the two surfaces can't drift. Read time — never stored.
+  const activeTeams = teamKeys(state.settings.teamCount);
+  // At 0-1 teams there is no team to name — the audience simply holds the
+  // jokers. See specs/team-count.md.
+  const named = hasNamedTeams(state.settings.teamCount);
+  const canComeback = trailingTeams(state.teams, activeTeams);
 
   const toggle = (team: JokerTeam, jokerId: string, used: boolean) => {
     dispatch({ type: 'SET_JOKER_USED', payload: { team, jokerId, used } });
@@ -361,23 +372,28 @@ function JokerControls() {
       </button>
       {lastUsedDef && lastUsed && (
         <div className="gm-joker-confirm" role="status" aria-live="polite">
-          <span className="gm-joker-confirm-team">{teamName(state.teams, lastUsed.team === 'team1' ? 1 : 2)}</span>
+          {named && <span className="gm-joker-confirm-team">{teamName(state.teams, lastUsed.team)}</span>}
           <span className="gm-joker-confirm-name">{lastUsedDef.name}</span>
           <span className="gm-joker-confirm-desc">{lastUsedDef.description}</span>
         </div>
       )}
       {!collapsed && (
         <div id="gm-jokers-body" className="gm-jokers-body">
-          <div className="gm-jokers-teams">
+          <div className="gm-jokers-teams" data-team-count={activeTeams.length}>
             {/* GM faces the crowd → mirror the frontend team order. */}
-            {teamDisplayOrder(state.teams.orderSwapped, true, state.settings.teamMirrorEnabled).map(teamKey => (
+            {teamDisplayOrder(
+              state.teams.orderSwapped,
+              true,
+              state.settings.teamMirrorEnabled,
+              state.settings.teamCount,
+            ).map(teamKey => (
               <JokerTeamCard
                 key={teamKey}
                 team={teamKey}
-                label={teamName(state.teams, teamKey === 'team1' ? 1 : 2)}
+                label={named ? teamName(state.teams, teamKey) : 'Joker'}
                 enabled={enabled}
-                used={teamKey === 'team1' ? state.teams.team1JokersUsed : state.teams.team2JokersUsed}
-                trailingTeam={trailingTeam}
+                used={teamJokersUsed(state.teams, teamKey)}
+                canUseComeback={canComeback.includes(teamKey)}
                 onToggle={toggle}
               />
             ))}
@@ -393,11 +409,12 @@ interface JokerTeamCardProps {
   label: string;
   enabled: string[];
   used: string[];
-  trailingTeam: JokerTeam | null;
+  /** May this team spend the Aufholjoker? (It is behind the leader.) */
+  canUseComeback: boolean;
   onToggle: (team: JokerTeam, jokerId: string, used: boolean) => void;
 }
 
-function JokerTeamCard({ team, label, enabled, used, trailingTeam, onToggle }: JokerTeamCardProps) {
+function JokerTeamCard({ team, label, enabled, used, canUseComeback, onToggle }: JokerTeamCardProps) {
   const usedCount = enabled.filter(id => used.includes(id)).length;
   return (
     <div className="gm-joker-team">
@@ -413,7 +430,7 @@ function JokerTeamCard({ team, label, enabled, used, trailingTeam, onToggle }: J
           if (!def) return null;
           const isUsed = used.includes(id);
           // Comeback joker locked for the leading team / on a tie unless already used.
-          const locked = id === 'comeback' && !isUsed && team !== trailingTeam;
+          const locked = id === 'comeback' && !isUsed && !canUseComeback;
           return (
             <button
               key={id}

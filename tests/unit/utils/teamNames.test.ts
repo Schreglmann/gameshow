@@ -16,19 +16,19 @@ function teams(partial: Partial<TeamState>): TeamState {
 
 describe('teamName', () => {
   it('falls back to positional labels when no name is set', () => {
-    expect(teamName(teams({}), 1)).toBe('Team 1');
-    expect(teamName(teams({}), 2)).toBe('Team 2');
+    expect(teamName(teams({}), 'team1')).toBe('Team 1');
+    expect(teamName(teams({}), 'team2')).toBe('Team 2');
   });
 
   it('returns the custom name when set', () => {
     const t = teams({ team1Name: 'Die Adler', team2Name: 'Quizfüchse' });
-    expect(teamName(t, 1)).toBe('Die Adler');
-    expect(teamName(t, 2)).toBe('Quizfüchse');
+    expect(teamName(t, 'team1')).toBe('Die Adler');
+    expect(teamName(t, 'team2')).toBe('Quizfüchse');
   });
 
   it('falls back when the name is blank or whitespace only', () => {
-    expect(teamName(teams({ team1Name: '' }), 1)).toBe('Team 1');
-    expect(teamName(teams({ team2Name: '   ' }), 2)).toBe('Team 2');
+    expect(teamName(teams({ team1Name: '' }), 'team1')).toBe('Team 1');
+    expect(teamName(teams({ team2Name: '   ' }), 'team2')).toBe('Team 2');
   });
 });
 

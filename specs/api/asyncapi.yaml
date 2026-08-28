@@ -15,7 +15,7 @@ info:
     **Zone tags** mirror the OpenAPI tags: `frontend`, `admin`, `gamemaster`, `shared`.
 
     **Cached channels.** The server holds the last value of select channels
-    (`gamemaster-answer`, `gamemaster-controls`, `gamemaster-team-state`,
+    (`gamemaster-answer`, `gamemaster-controls`, `gamemaster-team-state-v2`,
     `gamemaster-question-tally`, `music-state`) and sends the cached value to
     every newly connected client in the initial-state burst.
 
@@ -24,7 +24,7 @@ info:
       - `gamemaster-answer`
       - `gamemaster-controls`
       - `gamemaster-command`
-      - `gamemaster-team-state`
+      - `gamemaster-team-state-v2`
       - `gamemaster-question-tally`
       - `music-state`
       - `music-command`
@@ -246,8 +246,8 @@ channels:
       re-broadcasts to every other client. Not cached — commands are ephemeral.
       Show PWA acts on received commands. Zone: shared.
 
-  gamemaster-team-state:
-    address: gamemaster-team-state
+  gamemaster-team-state-v2:
+    address: gamemaster-team-state-v2
     messages:
       gamemasterTeamState:
         $ref: "#/components/messages/GamemasterTeamStateMessage"
@@ -265,7 +265,7 @@ channels:
       gamemasterQuestionTally:
         $ref: "#/components/messages/GamemasterQuestionTallyMessage"
     description: |
-      Manual correct-answer tally, nested `{ [gameIndex]: { [questionKey]: { team1, team2 } } }`
+      Manual correct-answer tally, nested `{ [gameIndex]: { [questionKey]: { teamN: count } } }`
       so the gamemaster can see which team scored on which question. Question keys
       are the question number as a string (`"0"` = the example question) plus the
       reserved `"none"` bucket for taps made with no attributable question. The
@@ -415,10 +415,10 @@ operations:
 
   receiveGamemasterTeamState:
     action: receive
-    channel: { $ref: "#/channels/gamemaster-team-state" }
+    channel: { $ref: "#/channels/gamemaster-team-state-v2" }
     summary: Every PWA receives team/joker state changes.
     messages:
-      - $ref: "#/channels/gamemaster-team-state/messages/gamemasterTeamState"
+      - $ref: "#/channels/gamemaster-team-state-v2/messages/gamemasterTeamState"
 
   receiveGamemasterQuestionTally:
     action: receive
@@ -466,10 +466,10 @@ operations:
 
   sendGamemasterTeamState:
     action: send
-    channel: { $ref: "#/channels/gamemaster-team-state" }
+    channel: { $ref: "#/channels/gamemaster-team-state-v2" }
     summary: Any PWA publishes team/joker state mutations.
     messages:
-      - $ref: "#/channels/gamemaster-team-state/messages/gamemasterTeamState"
+      - $ref: "#/channels/gamemaster-team-state-v2/messages/gamemasterTeamState"
 
   sendGamemasterQuestionTally:
     action: send
@@ -716,10 +716,15 @@ components:
           type: object
           additionalProperties:
             type: object
-            required: [team1, team2]
+            description: >-
+              Counts for the teams that scored on this question. SPARSE — a team with
+              no count simply has no key, and only the teams the gameshow plays with
+              (teams 1-4) ever appear. Read a missing key as 0. See specs/team-count.md.
             properties:
               team1: { type: integer, minimum: 0 }
               team2: { type: integer, minimum: 0 }
+              team3: { type: integer, minimum: 0 }
+              team4: { type: integer, minimum: 0 }
 
     MusicStateMessage:
       name: musicState
@@ -867,6 +872,9 @@ components:
         tallyReadOnly:
           type: boolean
           description: "True while the playing game fills the per-question tally itself (guessing-game's automatic scoring). Show the counters and the per-question breakdown, but leave out their +/- controls - the show awards the points."
+        pointsDisabled:
+          type: boolean
+          description: "True while the playing game awards no points at all - the show-wide point system is off (0 teams), or the game's type cannot be scored at the configured team count. Hide the 'Wertung pro Frage' breakdown: every row could only read 'keine Wertung'. The gamemaster has no other way to know, since pointSystemEnabled is resolved PER GAME by GET /api/game/:index. See specs/team-count.md."
         deadlineActive:
           type: boolean
           description: "True while a GM-triggered deadline timer has a value set (counting down or showing the 'Zeit abgelaufen!' badge until auto-clear)."
@@ -945,6 +953,12 @@ components:
 
     TeamState:
       type: object
+      description: >-
+        Live state of every team. Fields are flat per team (`teamN`, `teamNName`,
+        `teamNPoints`, `teamNJokersUsed`) for teams 1-4. `team1`/`team2` are always
+        present; `team3`/`team4` only while the gameshow is configured for 3-4 teams
+        (`GameshowConfig.teamCount`) — read a missing team as `[]` / `0`.
+        See specs/team-count.md.
       required: [team1, team2, team1Points, team2Points, team1JokersUsed, team2JokersUsed]
       properties:
         team1: { type: array, items: { type: string } }
@@ -955,6 +969,14 @@ components:
         team2Points: { type: number }
         team1JokersUsed: { type: array, items: { type: string } }
         team2JokersUsed: { type: array, items: { type: string } }
+        team3: { type: array, items: { type: string } }
+        team4: { type: array, items: { type: string } }
+        team3Name: { type: string }
+        team4Name: { type: string }
+        team3Points: { type: number }
+        team4Points: { type: number }
+        team3JokersUsed: { type: array, items: { type: string } }
+        team4JokersUsed: { type: array, items: { type: string } }
         scoreHistory:
           type: array
           description: >-
@@ -964,7 +986,7 @@ components:
           items: { $ref: "#/components/schemas/ScoreLogEntry" }
         doubleNextGame:
           type: string
-          enum: [team1, team2]
+          enum: [team1, team2, team3, team4]
           nullable: true
           description: >-
             Armed Aufholjoker (comeback-joker) multiplier target: the next
@@ -973,10 +995,10 @@ components:
         orderSwapped:
           type: boolean
           description: >-
-            Presentation flag: when true the crowd-facing frontend shows team2 on
-            the left and team1 on the right; the gamemaster always shows the mirror
-            of the frontend order. Team identities/points are unaffected. Optional;
-            defaults to false. See specs/team-order-mirror.md.
+            Presentation flag: when true the crowd-facing frontend REVERSES the team
+            display order (with two teams: team2 left, team1 right); the gamemaster
+            always shows the mirror of the frontend order. Team identities/points are
+            unaffected. Optional; defaults to false. See specs/team-order-mirror.md.
         rev:
           type: number
           description: >-
@@ -994,7 +1016,7 @@ components:
       required: [id, team, delta, pointsAfter, ts]
       properties:
         id: { type: string, description: "Unique id (`<ts>-<counter>`); the undo target." }
-        team: { type: string, enum: [team1, team2] }
+        team: { type: string, enum: [team1, team2, team3, team4] }
         delta: { type: number, description: "Signed, clamp-adjusted points delta actually applied." }
         pointsAfter: { type: number, description: "The team's total immediately after this delta." }
         ts: { type: number, description: "Epoch ms when the delta was applied." }

@@ -29,6 +29,7 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 |------|------|--------|
 | App navigation flow | [app-navigation-flow.md](app-navigation-flow.md) | ✅ Implemented |
 | Team management | [team-management.md](team-management.md) | ✅ Implemented |
+| Dynamic team count (0–4 teams) | [team-count.md](team-count.md) | ✅ Implemented |
 | Team order & gamemaster mirror | [team-order-mirror.md](team-order-mirror.md) | ✅ Implemented |
 | Point system | [point-system.md](point-system.md) | ✅ Implemented |
 | Config system | [config-system.md](config-system.md) | ✅ Implemented |

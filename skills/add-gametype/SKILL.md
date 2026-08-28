@@ -128,7 +128,7 @@ Add `'<type>'` to the `GameType[]` array in the type `<select>` dropdown (search
 
 ### Step 5c — Admin: New Game modal + type metadata (`src/components/backend/GamesTab.tsx`, `src/data/gameTypeInfo.ts`)
 
-1. `src/data/gameTypeInfo.ts` — add a `GAME_TYPE_INFO['<type>']` entry (label shown in the modal/dropdown + short German description) **and** a `GAME_TYPE_TEMPLATES['<type>']` entry (a clean empty template). Both are `Record<GameType, …>`, so a missing entry is a compile error.
+1. `src/data/gameTypeInfo.ts` — add a `GAME_TYPE_INFO['<type>']` entry (label shown in the modal/dropdown, short German description, **and `supportedTeamCounts`** — the team counts the type can be SCORED at, see [specs/team-count.md](../../specs/team-count.md)) **and** a `GAME_TYPE_TEMPLATES['<type>']` entry (a clean empty template). Both are `Record<GameType, …>`, so a missing entry is a compile error. Use `ANY_TEAM_COUNT` unless the mechanic genuinely needs a fixed number of opponents; if a *scoring mode* narrows it further, add a `SCORING_MODE_TEAM_COUNTS` entry too.
 2. `src/components/backend/GamesTab.tsx` — add `'<type>'` to the `GAME_TYPES` array used by `NewGameModal`.
 
 ### Step 5d — Admin: Instance Editor (`src/components/backend/InstanceEditor.tsx`)

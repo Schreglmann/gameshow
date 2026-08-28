@@ -46,7 +46,7 @@ describe('GameContext — team-state echo guard', () => {
   // the reducer produced; if those ever drift apart, every client re-broadcasts
   // every update it receives — the echo storm that caused 30s lag and awards
   // clobbered back to 0.
-  it('does NOT re-broadcast gamemaster-team-state after applying a remote update', async () => {
+  it('does NOT re-broadcast gamemaster-team-state-v2 after applying a remote update', async () => {
     render(<GameProvider>{null}</GameProvider>);
     // Let mount effects (the initial broadcast) settle, then ignore them.
     await act(async () => { await Promise.resolve(); });
@@ -58,10 +58,10 @@ describe('GameContext — team-state echo guard', () => {
       team1JokersUsed: [], team2JokersUsed: [],
       scoreHistory: [], doubleNextGame: null,
     };
-    act(() => { __emitChannelForTests('gamemaster-team-state', remote); });
+    act(() => { __emitChannelForTests('gamemaster-team-state-v2', remote); });
     await act(async () => { await Promise.resolve(); });
 
-    const teamStateEmits = sendWsMock.mock.calls.filter(c => c[0] === 'gamemaster-team-state');
+    const teamStateEmits = sendWsMock.mock.calls.filter(c => c[0] === 'gamemaster-team-state-v2');
     expect(teamStateEmits).toHaveLength(0);
   });
 
@@ -75,7 +75,7 @@ describe('GameContext — team-state echo guard', () => {
       team1JokersUsed: [], team2JokersUsed: [],
       scoreHistory: [], doubleNextGame: null,
     };
-    act(() => { __emitChannelForTests('gamemaster-team-state', remote); });
+    act(() => { __emitChannelForTests('gamemaster-team-state-v2', remote); });
     await act(async () => { await Promise.resolve(); });
 
     // The reducer persists points to localStorage — assert they took effect.
@@ -102,10 +102,10 @@ describe('GameContext — team-state echo guard', () => {
       orderSwapped: true,
       rev: 12,
     };
-    act(() => { __emitChannelForTests('gamemaster-team-state', remote); });
+    act(() => { __emitChannelForTests('gamemaster-team-state-v2', remote); });
     await act(async () => { await Promise.resolve(); });
 
-    expect(sendWsMock.mock.calls.filter(c => c[0] === 'gamemaster-team-state')).toHaveLength(0);
+    expect(sendWsMock.mock.calls.filter(c => c[0] === 'gamemaster-team-state-v2')).toHaveLength(0);
     // ...and it was actually applied, not silently dropped.
     expect(localStorage.getItem('team1Points')).toBe('8');
     expect(localStorage.getItem('teamOrderSwapped')).toBe('true');
@@ -121,12 +121,12 @@ describe('GameContext — team-state echo guard', () => {
     sendWsMock.mockClear();
 
     act(() => {
-      __emitChannelForTests('gamemaster-team-state', { ...baseTeams, team1Points: 4, rev: 3 });
+      __emitChannelForTests('gamemaster-team-state-v2', { ...baseTeams, team1Points: 4, rev: 3 });
     });
     await act(async () => { await Promise.resolve(); });
 
     expect(localStorage.getItem('team1Points')).toBe('20');
-    const reasserts = sendWsMock.mock.calls.filter(c => c[0] === 'gamemaster-team-state');
+    const reasserts = sendWsMock.mock.calls.filter(c => c[0] === 'gamemaster-team-state-v2');
     expect(reasserts).toHaveLength(1);
     expect((reasserts[0][1] as TeamState).team1Points).toBe(20);
   });
@@ -138,7 +138,7 @@ describe('GameContext — team-state echo guard', () => {
     await act(async () => { await Promise.resolve(); });
 
     act(() => {
-      __emitChannelForTests('gamemaster-team-state', { ...baseTeams, team1Points: 4, rev: 10 });
+      __emitChannelForTests('gamemaster-team-state-v2', { ...baseTeams, team1Points: 4, rev: 10 });
     });
     await act(async () => { await Promise.resolve(); });
 

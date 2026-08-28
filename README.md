@@ -1,6 +1,6 @@
 # Gameshow
 
-A browser-based team quiz gameshow for live events. Two teams compete across multiple game rounds. The host controls the app from any device on the same network.
+A browser-based team quiz gameshow for live events. Up to four teams compete across multiple game rounds (or none at all, for a pure play-through). The host controls the app from any device on the same network.
 
 ---
 
@@ -21,7 +21,7 @@ A browser-based team quiz gameshow for live events. Two teams compete across mul
 
 ## How to Play
 
-Two teams compete across multiple rounds. The host drives the app — players just watch and answer.
+0–4 teams compete across multiple rounds — set per gameshow in the admin. The host drives the app — players just watch and answer.
 
 ### 1. Starting the Game
 

@@ -33,3 +33,10 @@ Move gameshow management out of the admin **Config** tab into its own **Gameshow
 - Persisting expand state across reloads or per-user.
 - Adding a deep-link hash sub-route for an individual gameshow.
 - Any change to gameshow data shape or the activation API.
+
+## Team count + incompatible-game warnings
+Each gameshow card carries a **Teams** `<select>` (0–4, default 2) next to the Spieler roster,
+writing `GameshowConfig.teamCount` (stored as absent at the default 2). When at least one game in the
+`gameOrder` cannot be scored at that count, the card shows a `ConflictBanner`-styled summary and each
+affected row gets an **"Ohne Wertung"** badge whose tooltip names the counts the type supports. The
+games still play — the server serves them `pointSystemEnabled: false`. See [team-count.md](team-count.md).

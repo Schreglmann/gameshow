@@ -36,7 +36,7 @@ killing late-show tension without any house-ruling.
       flag is set, and — once that team is selected — the doubled value in its points line, which is
       the same number the award books. Standard-mode `wer-kennt-mehr`'s summary renders the same
       screen (`inline`), so it carries the badge too.
-- [x] `doubleNextGame` rides the cached `gamemaster-team-state` channel (cross-device + reconnect),
+- [x] `doubleNextGame` rides the cached `gamemaster-team-state-v2` channel (cross-device + reconnect),
       is persisted to localStorage, and is cleared by `RESET_POINTS`, `RESET_JOKERS`, and `CLEAR_ALL`.
 
 ## State / data changes
@@ -70,3 +70,10 @@ killing late-show tension without any house-ruling.
   screen, or standard-mode wer-kennt-mehr's equivalent summary. Arm it at a game boundary.)
 - Stacking multiple multipliers.
 - Tracking exactly which game index is "next" — the flag applies to the next AwardPoints resolution.
+
+## Team count
+With more than two teams "trailing" means **strictly below the highest score** — every team that is
+not tied for the lead may spend the Aufholjoker; on an all-way tie nobody may. At two teams that is
+exactly the original rule. Computed once by `trailingTeams()` in
+[src/utils/teams.ts](../src/utils/teams.ts), which both `TeamJokers` (show) and `GamemasterView` (GM)
+read, so the two surfaces cannot drift. See [team-count.md](team-count.md).

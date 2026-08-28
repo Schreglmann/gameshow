@@ -172,7 +172,7 @@ describe('SessionTab', () => {
     expect(screen.getAllByRole('spinbutton')[0]).toHaveValue(3);
 
     await act(async () => {
-      emitWsMessage('gamemaster-team-state', { ...remoteTeams, team1Points: 11, rev: 5 });
+      emitWsMessage('gamemaster-team-state-v2', { ...remoteTeams, team1Points: 11, rev: 5 });
     });
 
     await waitFor(() => {
@@ -188,7 +188,7 @@ describe('SessionTab', () => {
     await user.type(team1Input, 'Alice');
 
     await act(async () => {
-      emitWsMessage('gamemaster-team-state', { ...remoteTeams, team1: ['Remote'], rev: 5 });
+      emitWsMessage('gamemaster-team-state-v2', { ...remoteTeams, team1: ['Remote'], rev: 5 });
     });
 
     expect(team1Input).toHaveValue('Alice');
@@ -200,7 +200,7 @@ describe('SessionTab', () => {
 
     // Operator opens the tab at 0, a game awards 7 while it sits open.
     await act(async () => {
-      emitWsMessage('gamemaster-team-state', { ...remoteTeams, team1Points: 7, rev: 5 });
+      emitWsMessage('gamemaster-team-state-v2', { ...remoteTeams, team1Points: 7, rev: 5 });
     });
 
     // Focus and leave the name field without changing anything — this is the
@@ -218,7 +218,7 @@ describe('SessionTab', () => {
 
     // Team 2 scores 9 while the tab is open...
     await act(async () => {
-      emitWsMessage('gamemaster-team-state', { ...remoteTeams, team2Points: 9, rev: 5 });
+      emitWsMessage('gamemaster-team-state-v2', { ...remoteTeams, team2Points: 9, rev: 5 });
     });
 
     // ...then the operator corrects team 1 only.

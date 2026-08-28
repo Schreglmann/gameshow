@@ -19,10 +19,14 @@
 - [x] Warns (non-fatal) about game files in `games/` that are not referenced in any `gameOrder`
 - [x] Generated example games (`games/beispiel-*.json`) are gitignored; when referenced by the active `beispiele` gameshow they validate like any other game
 - [x] Validates that each gameshow's `enabledJokers` (if present) is an array of strings referencing IDs in the hardcoded joker catalog at `src/data/jokers.ts`; unknown IDs emit `unknown joker id "<id>"` errors
+- [x] Validates that each gameshow's `teamCount` (if present) is an integer 0–4; anything else is an error
+- [x] Warns when a gameshow sets `teamCount > 0` while the global `pointSystemEnabled` is `false` (the global switch wins — the show runs with no teams)
+- [x] Warns, per `gameOrder` entry, when the game's type + `scoringMode` cannot be scored at that gameshow's team count — the game still plays, just without scoring. See [team-count.md](team-count.md)
+- [x] The quizjagd supply check needs `questionsPerTeam × teamCount` playable questions and is a **warning**, not an error: one game file may be referenced by gameshows with different team counts, so a shortfall is a property of the pairing, not of the file
 
 ## State / data changes
 - No runtime state; this is a build/dev-time script only
-- File: `validate-config.ts`
+- File: `validate-config.ts` (imports `gameSupportsTeamCount` from `src/data/gameTypeInfo.ts`)
 - Run via: `npm run validate`
 
 ## UI behaviour

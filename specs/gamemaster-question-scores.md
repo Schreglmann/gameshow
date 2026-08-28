@@ -48,6 +48,14 @@ its "Out of scope: Per-game grouping / full session ledger UI" bullet.
       Deliberately **not** on `landing`: `gameIndex` there is already the *next* game, so the panel would
       show empty rows for a game that has not been played. Between-games review stays with
       "Letzte Wertungen".
+- [x] ...and **not while the game awards no points at all** — the show-wide point system is off
+      (0 teams), or the game's type cannot be scored at the configured team count. Every row could
+      then only read "keine Wertung", so the panel promises a breakdown that never arrives. The show
+      publishes `pointsDisabled` on the `gamemaster-controls` channel for this: `pointSystemEnabled`
+      is resolved **per game** by `GET /api/game/:index`, which the gamemaster never fetches.
+      See [team-count.md](team-count.md).
+- [x] Below two teams the panel's column header drops the team name (there is no team — see
+      [team-count.md](team-count.md)) and reads "Punkte".
 - [x] Collapsible, collapsed by default, header "Wertung pro Frage" with a count pill — the same
       pattern as `.gm-score-history` / `.gm-jokers`.
 - [x] One row model, two feeds, selected off the existing `hideCorrectTracker` signal:
@@ -112,7 +120,7 @@ terminated only by the server's echo-dedup rather than by anything noticing. Und
 peer merely fails to sync the tally, which is visible. There is deliberately **no legacy migration**.
 
 ### Known limitations
-- `gamemaster-question-tally` has **no** Lamport `rev` guard (only `gamemaster-team-state` does), so it
+- `gamemaster-question-tally` has **no** Lamport `rev` guard (only `gamemaster-team-state-v2` does), so it
   stays last-write-wins. Two gamemaster devices editing different rows at the same time can lose one
   edit. Pre-existing for this channel; out of scope here.
 - Admin Session-tab point edits go through `SET_TEAM_STATE` and are **not** logged, so panel rows will
@@ -142,3 +150,9 @@ peer merely fails to sync the tally, which is visible. There is deliberately **n
 - Player-facing display of the breakdown.
 - Fixing the pre-existing BetQuiz re-judge double-award and the FinalQuiz reversal-under-clamp
   arithmetic. The `2×` marker makes both visible instead of netting them away.
+
+## Team count
+The tally and the breakdown carry one column per active team (0–4). `QuestionTally` is **sparse** —
+a team that never scored has no key, so read it through the helpers in
+[src/utils/correctAnswers.ts](../src/utils/correctAnswers.ts). `BreakdownRow.cells` is a full
+`Record<TeamKey, ScoreCell>`. See [team-count.md](team-count.md).

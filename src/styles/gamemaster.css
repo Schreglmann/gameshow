@@ -827,6 +827,13 @@ html.gamemaster-embedded::after {
   gap: clamp(10px, 1.5vw, 16px);
 }
 
+/* Three or four teams spread across the row instead of leaving the last one
+   alone under a fixed two-column grid. The narrow-screen override below still
+   collapses everything to one column. See specs/team-count.md. */
+.gm-correct-panel[data-team-count="1"] { grid-template-columns: 1fr; }
+.gm-correct-panel[data-team-count="3"] { grid-template-columns: repeat(3, 1fr); }
+.gm-correct-panel[data-team-count="4"] { grid-template-columns: repeat(2, 1fr); }
+
 .gm-correct-team {
   background: var(--card-bg, rgba(var(--glass-rgb), 0.10));
   border: 1px solid rgba(var(--glass-rgb), 0.15);
@@ -971,7 +978,9 @@ html.gamemaster-embedded::after {
   }
 
   /* Correct-answers tracker: stack team panels vertically on phones */
-  .gm-correct-panel {
+  .gm-correct-panel,
+  .gm-correct-panel[data-team-count="3"],
+  .gm-correct-panel[data-team-count="4"] {
     grid-template-columns: 1fr;
     gap: 10px;
   }
@@ -1120,6 +1129,9 @@ html.gamemaster-embedded::after {
   grid-template-columns: 1fr 1fr;
   gap: clamp(8px, 1.2vw, 12px);
 }
+
+.gm-jokers-teams[data-team-count="1"] { grid-template-columns: 1fr; }
+.gm-jokers-teams[data-team-count="3"] { grid-template-columns: repeat(3, 1fr); }
 
 /* ── Score-history (scoring-undo) panel ── */
 /* Mirrors the joker panel's collapsible header pattern. */
@@ -1439,10 +1451,20 @@ html.gamemaster-embedded::after {
   flex-shrink: 0;
 }
 
-/* Phones: the label gets its own row so the two team columns keep full width and
+/* One value column per team. The column count comes from the panel's
+   data-team-count, so a 3-4 team breakdown lines its cells up under the right
+   headings instead of overflowing the fixed two-column grid.
+   See specs/team-count.md. */
+.gm-qscore[data-team-count="1"] .gm-qscore-row { grid-template-columns: minmax(5.5em, auto) 1fr; }
+.gm-qscore[data-team-count="3"] .gm-qscore-row { grid-template-columns: minmax(5.5em, auto) repeat(3, 1fr); }
+.gm-qscore[data-team-count="4"] .gm-qscore-row { grid-template-columns: minmax(5.5em, auto) repeat(4, 1fr); }
+
+/* Phones: the label gets its own row so the team columns keep full width and
    the ≥44px tap-target rule still holds for the correction buttons. */
 @media (max-width: 480px) {
-  .gm-qscore-row {
+  .gm-qscore-row,
+  .gm-qscore[data-team-count="3"] .gm-qscore-row,
+  .gm-qscore[data-team-count="4"] .gm-qscore-row {
     grid-template-columns: 1fr 1fr;
   }
 
@@ -1613,7 +1635,8 @@ html.gamemaster-embedded::after {
 }
 
 @media (max-width: 640px) {
-  .gm-jokers-teams { grid-template-columns: 1fr; }
+  .gm-jokers-teams,
+  .gm-jokers-teams[data-team-count="3"] { grid-template-columns: 1fr; }
 }
 
 /* The toolbar always flows inline at the top of the gamemaster-screen, above

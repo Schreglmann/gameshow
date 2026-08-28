@@ -3,13 +3,17 @@
 ## Goal
 Each game awards a fixed point value to the winning team(s); points accumulate across all games and determine the winner shown on the summary screen.
 
+The show runs with 0–4 teams (`GameshowConfig.teamCount`, default 2) — see
+[team-count.md](team-count.md). `pointSystemEnabled` is exactly `teamCount > 0`, so everything below
+that describes "the point system off" is the 0-teams case.
+
 ## Acceptance criteria
 - [x] Each game is worth `currentIndex + 1` points (game 0 = 1pt, game 1 = 2pt, …)
-- [x] After a game completes, the host sees the `AwardPoints` screen: one card per team, each a
+- [x] After a game completes, the host sees the `AwardPoints` screen: one card per ACTIVE team, each a
       toggle, and a single "Punkte vergeben & weiter" button below them. Selecting a team and
       confirming are two separate presses — nothing is booked by a mis-tap on a card
-- [x] The host can award points to team 1, team 2, or both — **both selected is the draw**; there is
-      no separate "Unentschieden" button
+- [x] The host can award points to any subset of the active teams — **two or more selected is the
+      draw**; there is no separate "Unentschieden" button
 - [x] The confirm button is disabled while no team is selected
 - [x] Each card states the points that team would receive (`+3 Punkte` / `0 Punkte`), computed from the
       same value the award books, Aufholjoker ×2 included. The points appear only **once something is
@@ -23,14 +27,14 @@ Each game awards a fixed point value to the winning team(s); points accumulate a
       otherwise `3 richtige Antworten` from the tally. With nothing tallied the line is dropped from both
       cards rather than reading "0 richtige Antworten" twice
 - [x] The gamemaster mirrors the same screen: an `award-selection` button-group of team toggles
-      (`award-toggle-team1` / `award-toggle-team2`, `active` mirroring the show) plus an
+      (`award-toggle-<teamKey>`, one per active team, `active` mirroring the show) plus an
       `award-confirm` button, disabled while nothing is selected. Either surface can select and either
       can confirm
 - [x] Points are added to the team's running total via `AWARD_POINTS` action
 - [x] Points can never go below 0 (enforced in reducer)
-- [x] Points are persisted to `localStorage` under keys `team1Points` and `team2Points`
+- [x] Points are persisted to `localStorage` under the team's key (`team1Points` … `team4Points`)
 - [x] On reload, points are restored from `localStorage`
-- [x] Points propagate to every connected device on the cached `gamemaster-team-state`
+- [x] Points propagate to every connected device on the cached `gamemaster-team-state-v2`
       channel, version-guarded so no client can publish a total older than one already
       in circulation. Points are **never stored server-side** — the server only relays
       and caches the last snapshot. See [cross-device-gamemaster.md](cross-device-gamemaster.md).
@@ -43,18 +47,19 @@ Each game awards a fixed point value to the winning team(s); points accumulate a
   - **FinalQuiz**: no bet inputs — nav-forward reveals the answer; no per-team Richtig/Falsch, a plain "Weiter"/"Nächste Frage" advances.
   - **WerKenntMehr**: the count/team scoring panel is hidden (all modes); the standard-mode final winner-selection reward screen is skipped and the game completes directly.
   In all four, the gamemaster forward control stays visible so the GM can advance.
-- [x] Host can reset both teams to 0 from `AdminScreen` (single confirmation)
+- [x] Host can reset every team to 0 from `AdminScreen` (single confirmation)
 - [x] `SummaryScreen` declares the winner based on final point totals; shows confetti if and only if point system is enabled AND there is a clear winner (no draw)
 
 ## State / data changes
 - `AppState.teams.team1Points: number` (initial: `localStorage.team1Points ?? 0`)
 - `AppState.teams.team2Points: number` (initial: `localStorage.team2Points ?? 0`)
-- `AWARD_POINTS` action: `{ team: 'team1' | 'team2'; points: number }` — a draw dispatches once per team.
+- `AWARD_POINTS` action: `{ team: TeamKey; points: number }` — a draw dispatches once per winning team.
   The reducer stamps the log entry's `gameIndex` / `questionNumber` from `AppState.currentGame` /
   `AppState.currentQuestion`, so the action payload stays this small
 - `RESET_POINTS` action: sets both to 0, clears localStorage entries
-- Config flag: `pointSystemEnabled: boolean` in `config.json`
-- localStorage keys: `team1Points`, `team2Points`
+- Config: `pointSystemEnabled: boolean` in `config.json` (global master switch, forces 0 teams) and
+  `GameshowConfig.teamCount?: 0|1|2|3|4` per gameshow — see [team-count.md](team-count.md)
+- localStorage keys: `team1Points` … `team4Points`
 
 ## UI behaviour
 - `AwardPoints` component: shown inside `BaseGameWrapper` after game phase completes (if point system enabled)

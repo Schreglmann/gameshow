@@ -482,6 +482,17 @@ export interface GameshowConfig {
   gameOrder: string[];
   players?: string[];
   enabledJokers?: string[];
+  /**
+   * How many teams this gameshow is played with (0-4). Omitted means 2 — the
+   * historic behaviour, so every pre-existing gameshow is unchanged. `0` means
+   * no teams at all (a pure play-through), the same thing the global
+   * `pointSystemEnabled: false` does for every gameshow at once.
+   *
+   * A game type whose mechanic cannot be scored at this count still PLAYS, just
+   * without scoring: `GET /api/game/:index` serves it `pointSystemEnabled:
+   * false`. See specs/team-count.md.
+   */
+  teamCount?: 0 | 1 | 2 | 3 | 4;
 }
 
 export interface RulesPreset {
@@ -548,6 +559,15 @@ export interface GameFileSummary {
   questionCounts?: Record<string, number>; // questions per instance key; set for multi-instance games
   disabled?: boolean; // file-level disable: whole game hidden from add-to-gameshow pickers
   disabledInstances?: string[]; // instance keys (non-template) marked disabled; multi-instance only
+  /**
+   * Effective `scoringMode` per instance key (single-instance files use the key
+   * `''`), for the types that have one (`bet-quiz`, `guessing-game`,
+   * `wer-kennt-mehr`). Present only where the resolved config sets it. The admin
+   * needs it to tell a 2-only `transfer` / `count-penalty` row from a fully
+   * team-count-agnostic one without fetching every game file.
+   * See specs/team-count.md.
+   */
+  scoringModes?: Record<string, string>;
   parseError?: string; // set when the JSON file could not be parsed
 }
 
@@ -594,8 +614,31 @@ export interface AssetListResponse {
 
 // ── API response types ──
 
+/**
+ * A game in the active gameshow that cannot be scored at the configured team
+ * count. It still plays — just without scoring. See specs/team-count.md.
+ */
+export interface IncompatibleGameInfo {
+  /** Position in the active gameshow's `gameOrder` (0-based). */
+  index: number;
+  title: string;
+  type: GameType;
+}
+
 export interface SettingsResponse {
   pointSystemEnabled: boolean;
+  /**
+   * Teams the active gameshow runs with (0-4). `pointSystemEnabled` is exactly
+   * `teamCount > 0`; the global `pointSystemEnabled: false` forces 0. Optional
+   * so existing test fixtures don't need it — a client that gets no value falls
+   * back to 2 when scoring is on. See specs/team-count.md.
+   */
+  teamCount?: number;
+  /**
+   * Games in the active gameshow that cannot be scored at `teamCount`. Empty or
+   * omitted when everything fits (and always empty at `teamCount: 0`).
+   */
+  incompatibleGames?: IncompatibleGameInfo[];
   teamRandomizationEnabled: boolean;
   /**
    * Master switch for the team-order/gamemaster-mirror feature — opt-in, false

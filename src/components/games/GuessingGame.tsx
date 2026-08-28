@@ -19,6 +19,7 @@ import { usePreloadAsset } from '@/hooks/usePreloadAsset';
 import { useGmConnected } from '@/hooks/useGmConnected';
 import AssetReloadButton from '@/components/common/AssetReloadButton';
 import { teamName } from '@/utils/teamNames';
+import { ALL_TEAM_KEYS, teamKeys, type TeamKey } from '@/utils/teams';
 import { teamDisplayOrder } from '@/utils/teamOrder';
 import BaseGameWrapper from './BaseGameWrapper';
 import { useFullscreen, useRegisterFullscreenMedia } from '@/context/FullscreenContext';
@@ -135,18 +136,22 @@ interface GuessingInnerProps {
 
 function GuessingInner({ questions, order, gameTitle, autoScoring, gameIndex, gameId, questionAudioRef, skipAudioCleanupRef, onGameComplete, setAutoAward, setNavHandler, setGamemasterData, setGamemasterControls, setCommandHandler, setStopAudioHandler, setNavState, setAnswerRevealed }: GuessingInnerProps) {
   const { state, dispatch } = useGameContext();
-  const t1 = teamName(state.teams, 1);
-  const t2 = teamName(state.teams, 2);
+  // One guess per active team; the winner is the smallest absolute difference and
+  // every team tied at that minimum wins the question. See specs/team-count.md.
+  const activeTeams = useMemo(() => teamKeys(state.settings.teamCount), [state.settings.teamCount]);
+  const labelOf = useCallback((team: TeamKey) => teamName(state.teams, team), [state.teams]);
   const [qIdx, setQIdx, qKey] = useLiveQuestionIndex(order);
   const [phase, setPhase] = useState<'question' | 'result'>('question');
-  const [team1Guess, setTeam1Guess] = useState('');
-  const [team2Guess, setTeam2Guess] = useState('');
+  const [guesses, setGuesses] = useState<Partial<Record<TeamKey, string>>>({});
+  const guessesKey = ALL_TEAM_KEYS.map(k => guesses[k] ?? '').join('|');
   const [resultInfo, setResultInfo] = useState<{
     answer: number;
-    t1Guess: number;
-    t2Guess: number;
-    t1Diff: number;
-    t2Diff: number;
+    /** Each team's parsed guess and its distance from the answer. */
+    byTeam: Partial<Record<TeamKey, { guess: number; diff: number }>>;
+    /** Smallest distance any team achieved — the winning diff. */
+    bestDiff: number;
+    /** Every team on `bestDiff`. More than one is a tie; all of them win. */
+    winners: TeamKey[];
   } | null>(null);
   const [audioCurrentTime, setAudioCurrentTime] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
@@ -216,19 +221,18 @@ function GuessingInner({ questions, order, gameTitle, autoScoring, gameIndex, ga
     setAnswerRevealed(phase === 'result');
   }, [phase, setAnswerRevealed]);
 
-  const doSubmit = useCallback((t1: string, t2: string) => {
-    const t1Val = parseFloat(t1) || 0;
-    const t2Val = parseFloat(t2) || 0;
+  const doSubmit = useCallback((submitted: Partial<Record<TeamKey, string>>) => {
     const answer = q!.answer;
-    const t1Diff = Math.abs(t1Val - answer);
-    const t2Diff = Math.abs(t2Val - answer);
-    setResultInfo({
-      answer,
-      t1Guess: t1Val,
-      t2Guess: t2Val,
-      t1Diff,
-      t2Diff,
-    });
+    const byTeam: Partial<Record<TeamKey, { guess: number; diff: number }>> = {};
+    for (const team of activeTeams) {
+      const guess = parseFloat(submitted[team] ?? '') || 0;
+      byTeam[team] = { guess, diff: Math.abs(guess - answer) };
+    }
+    const bestDiff = activeTeams.length > 0
+      ? Math.min(...activeTeams.map(t => byTeam[t]!.diff))
+      : 0;
+    const winners = activeTeams.filter(t => byTeam[t]!.diff === bestDiff);
+    setResultInfo({ answer, byTeam, bestDiff, winners });
     if (autoScoring && !isExample) {
       // Record the verdict in the SAME per-question tally the host used to fill by hand:
       // it persists, syncs to every gamemaster device, and feeds both the score boxes and
@@ -236,19 +240,19 @@ function GuessingInner({ questions, order, gameTitle, autoScoring, gameIndex, ga
       // delta, so we diff against what the question already holds — re-judging a question
       // (or a host correction) is overwritten, never counted twice.
       const key = String(qIdx);
-      const held = tallyRef.current[key] ?? { team1: 0, team2: 0 };
-      const target = { team1: t1Diff <= t2Diff ? 1 : 0, team2: t2Diff <= t1Diff ? 1 : 0 };
-      for (const team of ['team1', 'team2'] as const) {
-        const delta = target[team] - held[team];
+      const held = tallyRef.current[key] ?? {};
+      for (const team of activeTeams) {
+        const target = winners.includes(team) ? 1 : 0;
+        const delta = target - (held[team] ?? 0);
         if (delta !== 0) dispatch({ type: 'UPDATE_CORRECT_ANSWER', payload: { gameIndex, question: key, team, delta } });
       }
     }
     setPhase('result');
-  }, [q, autoScoring, isExample, qIdx, gameIndex, dispatch]);
+  }, [q, autoScoring, isExample, qIdx, gameIndex, dispatch, activeTeams]);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    doSubmit(team1Guess, team2Guess);
+    doSubmit(guesses);
   };
 
   // Running standing, read back off the tally. A question counts as won by a team when its
@@ -262,19 +266,20 @@ function GuessingInner({ questions, order, gameTitle, autoScoring, gameIndex, ga
     // award. `getHighWater` is session-scoped per gameId, so the ceiling survives leaving
     // and re-entering the game.
     const reached = Math.max(qIdx, gameId ? getHighWater(gameId) : 0);
-    let t1Wins = 0;
-    let t2Wins = 0;
+    const wins: Partial<Record<TeamKey, number>> = {};
+    for (const team of activeTeams) wins[team] = 0;
     let scoredQuestions = 0;
     for (const [key, cell] of Object.entries(byQuestion ?? {})) {
       const n = Number(key);
       if (!Number.isInteger(n) || n <= EXAMPLE_SLOT_ID || n > reached) continue;
-      if (cell.team1 <= 0 && cell.team2 <= 0) continue;
+      if (activeTeams.every(t => (cell[t] ?? 0) <= 0)) continue;
       scoredQuestions += 1;
-      if (cell.team1 > 0) t1Wins += 1;
-      if (cell.team2 > 0) t2Wins += 1;
+      for (const team of activeTeams) {
+        if ((cell[team] ?? 0) > 0) wins[team] = (wins[team] ?? 0) + 1;
+      }
     }
-    return { t1Wins, t2Wins, scoredQuestions };
-  }, [byQuestion, qIdx, gameId]);
+    return { wins, scoredQuestions };
+  }, [byQuestion, qIdx, gameId, activeTeams]);
 
   // Hand the wrapper the finished verdict, so the award screen states it instead of
   // asking. Until a real question has been judged there is nothing to state — the
@@ -284,25 +289,26 @@ function GuessingInner({ questions, order, gameTitle, autoScoring, gameIndex, ga
       setAutoAward(null);
       return;
     }
+    // Every team on the top win count is awarded — one team is a clear winner,
+    // several is a draw, exactly like picking "Unentschieden" by hand.
+    const best = Math.max(...activeTeams.map(t => roundTally.wins[t] ?? 0));
+    const winners: AutoAwardVerdict['winners'] = {};
+    for (const team of activeTeams) {
+      if ((roundTally.wins[team] ?? 0) === best) winners[team] = true;
+    }
     setAutoAward({
-      team1Wins: roundTally.t1Wins,
-      team2Wins: roundTally.t2Wins,
+      wins: roundTally.wins,
       scoredQuestions: roundTally.scoredQuestions,
-      // Equal wins → both teams are awarded, like picking "Unentschieden" by hand.
-      winners: {
-        team1: roundTally.t1Wins >= roundTally.t2Wins,
-        team2: roundTally.t2Wins >= roundTally.t1Wins,
-      },
+      winners,
     });
-  }, [autoScoring, roundTally, setAutoAward]);
+  }, [autoScoring, roundTally, setAutoAward, activeTeams]);
 
   const handleNext = useCallback(() => {
     if (phase === 'result') {
       if (qIdx < questions.length - 1) {
         setQIdx(prev => prev + 1);
         setPhase('question');
-        setTeam1Guess('');
-        setTeam2Guess('');
+        setGuesses({});
         setResultInfo(null);
       } else {
         // Last question: let audio keep playing until "next game" is pressed
@@ -355,12 +361,17 @@ function GuessingInner({ questions, order, gameTitle, autoScoring, gameIndex, ga
       controls.push({
         type: 'input-group',
         id: 'guess-submit',
-        inputs: teamDisplayOrder(state.teams.orderSwapped, true, state.settings.teamMirrorEnabled).map(teamKey => ({
+        inputs: teamDisplayOrder(
+          state.teams.orderSwapped,
+          true,
+          state.settings.teamMirrorEnabled,
+          state.settings.teamCount,
+        ).map(teamKey => ({
           id: `${teamKey}Guess`,
-          label: `Tipp ${teamKey === 'team1' ? t1 : t2}`,
+          label: `Tipp ${labelOf(teamKey)}`,
           inputType: 'number' as const,
-          placeholder: `Tipp ${teamKey === 'team1' ? t1 : t2}`,
-          value: teamKey === 'team1' ? team1Guess : team2Guess,
+          placeholder: `Tipp ${labelOf(teamKey)}`,
+          value: guesses[teamKey] ?? '',
           emitOnChange: true,
         })),
         submitLabel: 'Tipp Abgeben',
@@ -378,23 +389,31 @@ function GuessingInner({ questions, order, gameTitle, autoScoring, gameIndex, ga
       controls.push({ type: 'button', id: 'asset-reload', label: 'Asset neu laden' });
     }
     setGamemasterControls(controls);
-  }, [phase, team1Guess, team2Guess, q?.questionAudio, audioDuration, audioPlaying, assetFailed, setGamemasterControls, setNavState, t1, t2, state.teams.orderSwapped, state.settings.teamMirrorEnabled]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, guessesKey, q?.questionAudio, audioDuration, audioPlaying, assetFailed, setGamemasterControls, setNavState, labelOf, state.teams.orderSwapped, state.settings.teamMirrorEnabled, state.settings.teamCount]);
 
   // Handle gamemaster commands
   const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
+    /** Fold the GM's `<teamKey>Guess` fields into the local guess record. */
+    const mergeGuesses = (
+      prev: Partial<Record<TeamKey, string>>,
+      vals: Record<string, string>,
+    ): Partial<Record<TeamKey, string>> => {
+      const next = { ...prev };
+      for (const team of ALL_TEAM_KEYS) {
+        const value = vals[`${team}Guess`];
+        if (value !== undefined) next[team] = value;
+      }
+      return next;
+    };
     if (cmd.controlId === 'guess-submit:change' && cmd.value && typeof cmd.value === 'object') {
       // Live mirror: every keystroke in the GM input is reflected in the
       // frontend's input fields so spectators can see the guesses being typed.
-      const vals = cmd.value as Record<string, string>;
-      setTeam1Guess(vals.team1Guess ?? '');
-      setTeam2Guess(vals.team2Guess ?? '');
+      setGuesses(prev => mergeGuesses(prev, cmd.value as Record<string, string>));
     } else if (cmd.controlId === 'guess-submit' && cmd.value && typeof cmd.value === 'object') {
-      const vals = cmd.value as Record<string, string>;
-      const t1 = vals.team1Guess ?? '';
-      const t2 = vals.team2Guess ?? '';
-      setTeam1Guess(t1);
-      setTeam2Guess(t2);
-      doSubmit(t1, t2);
+      const merged = mergeGuesses(guesses, cmd.value as Record<string, string>);
+      setGuesses(merged);
+      doSubmit(merged);
     } else if (cmd.controlId === 'next-question') {
       handleNext();
     } else if (cmd.controlId === 'audio-playpause') {
@@ -404,7 +423,7 @@ function GuessingInner({ questions, order, gameTitle, autoScoring, gameIndex, ga
     } else if (cmd.controlId === 'asset-reload') {
       handleAssetReload();
     }
-  }, [doSubmit, handleNext, handleAudioPlayPause, handleAudioRestart, handleAssetReload]);
+  }, [guesses, doSubmit, handleNext, handleAudioPlayPause, handleAudioRestart, handleAssetReload]);
 
   useEffect(() => {
     setCommandHandler(commandHandlerFn);
@@ -493,6 +512,14 @@ function GuessingInner({ questions, order, gameTitle, autoScoring, gameIndex, ga
 
   if (!q) return null;
 
+  // Crowd-facing surface → the frontend team order.
+  const showOrder = teamDisplayOrder(
+    state.teams.orderSwapped,
+    false,
+    state.settings.teamMirrorEnabled,
+    state.settings.teamCount,
+  );
+
   return (
     <>
       <h2 className="quiz-question-number">{questionLabel}</h2>
@@ -543,24 +570,19 @@ function GuessingInner({ questions, order, gameTitle, autoScoring, gameIndex, ga
 
       {phase === 'question' && (
         <form className="guess-form" onSubmit={handleSubmit}>
-          <div className="guess-fields">
-            {teamDisplayOrder(state.teams.orderSwapped, false, state.settings.teamMirrorEnabled).map(teamKey => {
-              const label = teamKey === 'team1' ? t1 : t2;
-              const value = teamKey === 'team1' ? team1Guess : team2Guess;
-              const setValue = teamKey === 'team1' ? setTeam1Guess : setTeam2Guess;
-              return (
-                <div className="guess-field" key={teamKey}>
-                  <label htmlFor={`${teamKey}Guess`}>Tipp {label}:</label>
-                  <input
-                    type="number"
-                    id={`${teamKey}Guess`}
-                    value={value}
-                    onChange={e => setValue(e.target.value)}
-                    required
-                  />
-                </div>
-              );
-            })}
+          <div className="guess-fields" data-team-count={showOrder.length}>
+            {showOrder.map(teamKey => (
+              <div className="guess-field" key={teamKey}>
+                <label htmlFor={`${teamKey}Guess`}>Tipp {labelOf(teamKey)}:</label>
+                <input
+                  type="number"
+                  id={`${teamKey}Guess`}
+                  value={guesses[teamKey] ?? ''}
+                  onChange={e => setGuesses(prev => ({ ...prev, [teamKey]: e.target.value }))}
+                  required
+                />
+              </div>
+            ))}
           </div>
           <button type="submit" className="quiz-button">
             Tipp Abgeben
@@ -574,20 +596,21 @@ function GuessingInner({ questions, order, gameTitle, autoScoring, gameIndex, ga
             <span className="guess-result-label">Richtige Antwort</span>
             <span className="guess-result-value">{formatNumber(resultInfo.answer)}</span>
           </div>
-          <div className="guess-result-teams">
-            {teamDisplayOrder(state.teams.orderSwapped, false, state.settings.teamMirrorEnabled).map(teamKey => {
-              const label = teamKey === 'team1' ? t1 : t2;
-              const guess = teamKey === 'team1' ? resultInfo.t1Guess : resultInfo.t2Guess;
-              const diff = teamKey === 'team1' ? resultInfo.t1Diff : resultInfo.t2Diff;
-              const isTie = resultInfo.t1Diff === resultInfo.t2Diff;
-              const isWinner = !isTie && diff < Math.max(resultInfo.t1Diff, resultInfo.t2Diff);
+          <div className="guess-result-teams" data-team-count={showOrder.length}>
+            {showOrder.map(teamKey => {
+              const entry = resultInfo.byTeam[teamKey];
+              if (!entry) return null;
+              // Several teams can share the best distance — then nobody is "näher
+              // dran", they are level, and all of them score.
+              const isTie = resultInfo.winners.length > 1;
+              const won = resultInfo.winners.includes(teamKey);
               return (
-                <div className={`guess-result-team${isWinner ? ' is-winner' : ''}`} key={teamKey}>
-                  <span className="guess-result-team-name">{label}</span>
-                  <span className="guess-result-guess">{formatNumber(guess)}</span>
-                  <span className="guess-result-diff">Differenz: {formatNumber(diff)}</span>
-                  {isWinner && <span className="guess-result-badge">Näher dran!</span>}
-                  {isTie && <span className="guess-result-badge is-tie">Gleichstand!</span>}
+                <div className={`guess-result-team${won && !isTie ? ' is-winner' : ''}`} key={teamKey}>
+                  <span className="guess-result-team-name">{labelOf(teamKey)}</span>
+                  <span className="guess-result-guess">{formatNumber(entry.guess)}</span>
+                  <span className="guess-result-diff">Differenz: {formatNumber(entry.diff)}</span>
+                  {won && !isTie && <span className="guess-result-badge">Näher dran!</span>}
+                  {won && isTie && <span className="guess-result-badge is-tie">Gleichstand!</span>}
                 </div>
               );
             })}

@@ -3,7 +3,7 @@ import { clearWsState, publishTeamState, readCachedTeamState } from '../_helpers
 
 // Cross-zone: team points must stay consistent between whoever awards them and
 // the admin Session tab. Deliberately NOT using isolateShowWsState — the point
-// of these tests is the real `gamemaster-team-state` traffic.
+// of these tests is the real `gamemaster-team-state-v2` traffic.
 //
 // Regression from a live show: the Session tab seeded its inputs once at mount
 // and re-published that snapshot on every blur, so it displayed the score from

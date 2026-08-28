@@ -24,7 +24,7 @@ type WsChannel =
   | 'gamemaster-answer'
   | 'gamemaster-controls'
   | 'gamemaster-command'
-  | 'gamemaster-team-state'
+  | 'gamemaster-team-state-v2'
   | 'gamemaster-question-tally'
   | 'music-state'
   | 'music-command'

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { decideTeamStateWrite, teamStateRev } from '../../../server/ws.js';
 
-// Stale-write guard for the `gamemaster-team-state` channel. Every PWA
+// Stale-write guard for the `gamemaster-team-state-v2` channel. Every PWA
 // publishes the WHOLE TeamState on any local mutation, so without a version a
 // client that fell behind could roll the live score back for everyone
 // (last-writer-wins). See specs/cross-device-gamemaster.md.

@@ -3239,8 +3239,35 @@ components:
       type: object
       required: [pointSystemEnabled, teamRandomizationEnabled, globalRules]
       properties:
-        pointSystemEnabled: { type: boolean }
-        teamRandomizationEnabled: { type: boolean }
+        pointSystemEnabled:
+          type: boolean
+          description: >-
+            Whether the show has teams at all. Exactly `teamCount > 0` — kept on the
+            wire so a client that predates `teamCount` still behaves correctly.
+        teamCount:
+          type: integer
+          minimum: 0
+          maximum: 4
+          description: >-
+            How many teams the active gameshow runs with. Derived: the global
+            `pointSystemEnabled: false` forces 0, otherwise the active gameshow's
+            `teamCount` (default 2). A client that receives no value falls back to 2
+            while scoring is on. See specs/team-count.md.
+        incompatibleGames:
+          type: array
+          items: { $ref: '#/components/schemas/IncompatibleGame' }
+          description: >-
+            Entries of the active gameshow's gameOrder whose game type (and scoring
+            mode) cannot be scored at `teamCount`. They still play — `GET /api/game/:index`
+            serves them `pointSystemEnabled: false` — this list only drives the
+            HomeScreen warning. Empty at `teamCount: 0`. See specs/team-count.md.
+        teamRandomizationEnabled:
+          type: boolean
+          description: >-
+            Whether the HomeScreen splits a typed roster randomly across the teams.
+            Always false below two teams regardless of the configured value —
+            randomization needs a second team to split players between, and both
+            0 and 1 team run without any assignment flow. See specs/team-count.md.
         teamMirrorEnabled:
           type: boolean
           description: >-
@@ -3274,6 +3301,16 @@ components:
           items: { type: string }
           description: Roster of the active gameshow, prefills the HomeScreen randomization textarea.
 
+    IncompatibleGame:
+      type: object
+      required: [index, title, type]
+      properties:
+        index:
+          type: integer
+          description: Position in the active gameshow's gameOrder (0-based).
+        title: { type: string }
+        type: { $ref: '#/components/schemas/GameType' }
+
     ThemeSettings:
       type: object
       required: [frontend, admin]
@@ -3295,7 +3332,12 @@ components:
         config: { $ref: "#/components/schemas/GameConfig" }
         currentIndex: { type: integer }
         totalGames: { type: integer }
-        pointSystemEnabled: { type: boolean }
+        pointSystemEnabled:
+          type: boolean
+          description: >-
+            Whether THIS game can be scored: the show has teams AND this game's type
+            (and scoring mode) supports that team count. An incompatible game still
+            plays in full — it just never reaches an award. See specs/team-count.md.
 
     AppConfig:
       type: object
@@ -3351,6 +3393,14 @@ components:
         gameOrder: { type: array, items: { type: string } }
         players: { type: array, items: { type: string } }
         enabledJokers: { type: array, items: { type: string } }
+        teamCount:
+          type: integer
+          minimum: 0
+          maximum: 4
+          description: >-
+            How many teams this gameshow is played with. Omitted means 2 (the historic
+            default), so pre-existing gameshows are unchanged. 0 means no teams at all.
+            See specs/team-count.md.
 
     GameFileSummary:
       type: object
@@ -3377,6 +3427,14 @@ components:
           additionalProperties: { type: integer }
           description: |
             Number of questions per instance key. Set for multi-instance games.
+        scoringModes:
+          type: object
+          additionalProperties: { type: string }
+          description: |
+            Effective `scoringMode` per instance key (`''` for a single-instance
+            file); only present where the resolved config sets one. Lets the admin
+            tell a team-count-restricted mode (`transfer`, `count-penalty`) from an
+            unrestricted one without loading every game file. See specs/team-count.md.
         disabled:
           type: boolean
           description: |

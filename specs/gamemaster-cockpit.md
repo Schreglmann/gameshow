@@ -38,7 +38,7 @@ of mentally recomputing totals and re-awarding.
       like `AWARD_POINTS`). Removing a middle entry reverses only that delta.
 - [x] `UNDO_LAST_SCORE` undoes the most recent entry.
 - [x] The undo itself is NOT logged (no infinite stack).
-- [x] The log rides the cached `gamemaster-team-state` channel as part of `TeamState`, so a GM on a
+- [x] The log rides the cached `gamemaster-team-state-v2` channel as part of `TeamState`, so a GM on a
       different device sees it and can undo; the GM's undo mutates local team state, which
       re-broadcasts so the show converges.
 - [x] `ScoreHistoryPanel` renders on the gamemaster view (collapsible, newest-first, last 5 shown),
@@ -61,7 +61,7 @@ of mentally recomputing totals and re-awarding.
   `UNDO_LAST_SCORE` / `UNDO_SCORE_ENTRY`; localStorage key `scoreHistory` (read in `getInitialState`,
   persisted inside the reducer only).
 - Persisted to localStorage: yes (`scoreHistory`, capped).
-- WS contract: `gamemaster-team-state` payload (the `TeamState` schema) gains `scoreHistory`.
+- WS contract: `gamemaster-team-state-v2` payload (the `TeamState` schema) gains `scoreHistory`.
 
 ### UI behaviour
 - Component: `src/components/common/ScoreHistoryPanel.tsx`, rendered by `GamemasterView` only when

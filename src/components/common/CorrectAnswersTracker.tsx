@@ -1,5 +1,6 @@
 import { useGameContext } from '@/context/GameContext';
-import { teamName } from '@/utils/teamNames';
+import { teamName, hasNamedTeams } from '@/utils/teamNames';
+import { teamRoster, type TeamKey } from '@/utils/teams';
 import { teamDisplayOrder } from '@/utils/teamOrder';
 import { tallyTotals, questionTally } from '@/utils/correctAnswers';
 import { NO_QUESTION_KEY } from '@/types/game';
@@ -34,7 +35,7 @@ export default function CorrectAnswersTracker({
   const total = tallyTotals(byQuestion);
   const current = questionTally(byQuestion, question);
 
-  const update = (team: 'team1' | 'team2', delta: number) => {
+  const update = (team: TeamKey, delta: number) => {
     dispatch({ type: 'UPDATE_CORRECT_ANSWER', payload: { gameIndex, question, team, delta } });
   };
 
@@ -45,7 +46,7 @@ export default function CorrectAnswersTracker({
         ? 'Beispiel'
         : `Frage ${question}`;
 
-  const renderTeam = (team: 'team1' | 'team2', label: string, members: string[]) => (
+  const renderTeam = (team: TeamKey, label: string, members: string[]) => (
     <div className="gm-correct-team" key={team}>
       <div className="gm-correct-label">{label}</div>
       {members.length > 0 && (
@@ -86,10 +87,21 @@ export default function CorrectAnswersTracker({
   );
 
   return (
-    <div className="gm-correct-panel">
+    <div className="gm-correct-panel" data-team-count={state.settings.teamCount}>
       {/* GM faces the crowd → mirror the frontend team order. */}
-      {teamDisplayOrder(state.teams.orderSwapped, true, state.settings.teamMirrorEnabled).map(team =>
-        renderTeam(team, teamName(state.teams, team === 'team1' ? 1 : 2), state.teams[team]),
+      {teamDisplayOrder(
+        state.teams.orderSwapped,
+        true,
+        state.settings.teamMirrorEnabled,
+        state.settings.teamCount,
+      ).map(team =>
+        // At 0-1 teams there is no team to name — the audience is the only
+        // counter on screen. See specs/team-count.md.
+        renderTeam(
+          team,
+          hasNamedTeams(state.settings.teamCount) ? teamName(state.teams, team) : 'Richtig',
+          teamRoster(state.teams, team),
+        ),
       )}
     </div>
   );

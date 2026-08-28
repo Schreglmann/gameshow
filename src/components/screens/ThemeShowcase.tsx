@@ -27,6 +27,10 @@ import '@/styles/header-jokers.css';
 import '@/styles/install-button.css';
 import '@/styles/inactive-show-overlay.css';
 
+/** Four jokers — the count a real show usually runs, and the one that makes the
+ *  header joker grid two rows deep. Used by the multi-team header preview. */
+const SHOWCASE_JOKERS = ['solo-answer', 'comeback', 'double-answer', 'call-friend'];
+
 const SPELL_DEMO_GROUPS: SpellGroup[] = [
   {
     key: 'allgemeinwissen::v1',
@@ -182,6 +186,62 @@ function FrontendShowcase() {
             </span>
           </div>
         </header>
+      </Section>
+
+      <Section title="Header mit 4 Teams">
+        {/* Same shape as the two-team header — a side, the counter, a side —
+            except each side is a COLUMN of two team pills, the joker grid drops
+            to a single row and everything steps down a size. That keeps one team
+            per row, so a joker grid is never adjacent to another team's name.
+            See specs/team-count.md and specs/header.md. */}
+        <header data-team-count={4} style={{ position: 'relative', animation: 'none' }}>
+          <div className="team-header-stack team-header-stack-left">
+            {(['Team 1', 'Team 2'] as const).map((name, i) => (
+              <div key={name} className="team-header-cell team-header-left">
+                <span className="team-header-label">
+                  <span className="team-header-name">{name}</span>
+                  <span className="team-header-score">: <span>{[12, 9][i]}</span> Punkte</span>
+                </span>
+                <HeaderJokersPreviewRow
+                  side="left"
+                  enabled={SHOWCASE_JOKERS}
+                  used={i === 1 ? ['comeback'] : []}
+                />
+              </div>
+            ))}
+          </div>
+          <div id="gameNumber">Spiel 3 von 8</div>
+          <div className="team-header-stack team-header-stack-right">
+            {(['Team 3', 'Team 4'] as const).map((name, i) => (
+              <div key={name} className="team-header-cell team-header-right">
+                <HeaderJokersPreviewRow
+                  side="right"
+                  enabled={SHOWCASE_JOKERS}
+                  used={i === 1 ? ['call-friend'] : []}
+                />
+                <span className="team-header-label">
+                  <span className="team-header-name">{name}</span>
+                  <span className="team-header-score">: <span>{[7, 4][i]}</span> Punkte</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </header>
+      </Section>
+
+      <Section title="Team-Anzahl-Warnung (Startseite)">
+        {/* Non-blocking notice listing the games that cannot be scored at the
+            configured team count. See specs/team-count.md. */}
+        <div className="cache-preflight-banner team-count-warning" role="status">
+          <div className="cache-preflight-banner__head">
+            <span className="cache-preflight-banner__icon" aria-hidden="true">⚠️</span>
+            <strong>2 Spiele passen nicht zu 3 Teams und werden ohne Wertung gespielt</strong>
+          </div>
+          <ul className="cache-preflight-banner__list">
+            <li>Einsatzquiz <span className="team-count-warning__type">(Einsatzquiz)</span> · Runde 5</li>
+            <li>Wer kennt mehr? <span className="team-count-warning__type">(Wer kennt mehr?)</span> · Runde 6</li>
+          </ul>
+        </div>
       </Section>
 
       <Section title="Führungswechsel-Banner (Lead Change)">
@@ -726,6 +786,32 @@ function FrontendShowcase() {
         </GlassCard>
       </Section>
 
+      <Section title="Award Points (4 Teams, Unentschieden)">
+        <GlassCard>
+          <h2 style={{ fontSize: '1.6em', marginBottom: 4 }}>Punkte vergeben</h2>
+          <p className="award-points-hint">Unentschieden — Team 1 und Team 3 erhalten Punkte</p>
+          <div className="award-teams" data-team-count={4}>
+            {(['Team 1', 'Team 2', 'Team 3', 'Team 4'] as const).map((name, i) => {
+              const won = i === 0 || i === 2;
+              return (
+                <button
+                  key={name}
+                  type="button"
+                  className={`award-team-card${won ? ' is-selected' : ''}`}
+                  aria-pressed={won}
+                  style={{ animation: 'none' }}
+                >
+                  <span className="award-team-card-name">{name}</span>
+                  <span className="award-team-card-points">{won ? '+6 Punkte' : '0 Punkte'}</span>
+                  <span className="award-team-card-count">{[3, 2, 3, 1][i]} richtige Antworten</span>
+                </button>
+              );
+            })}
+          </div>
+          <button className="quiz-button award-confirm">Punkte vergeben &amp; weiter</button>
+        </GlassCard>
+      </Section>
+
       <Section title="Guessing Game Tipps">
         <GlassCard>
           <div className="guess-form">
@@ -946,6 +1032,23 @@ function FrontendShowcase() {
         </div>
       </Section>
 
+      <Section title="Zu langer Team-Name (Überschrift wird gekürzt)">
+        <div id="teams" data-team-count={4} style={{ marginTop: 0 }}>
+          <div className="team">
+            <h2 className="team-name-editable" title="Zum Umbenennen klicken">Die absolut unbesiegbaren Adler vom Nordhang</h2>
+          </div>
+          <div className="team">
+            <h2 className="team-name-editable" title="Zum Umbenennen klicken">aaaaaaaaaaaaaaaaaaaaaaaaaaaa</h2>
+          </div>
+          <div className="team">
+            <h2 className="team-name-editable" title="Zum Umbenennen klicken">Isi allein zu Haus</h2>
+          </div>
+          <div className="team">
+            <h2 className="team-name-editable" title="Zum Umbenennen klicken">Team 4</h2>
+          </div>
+        </div>
+      </Section>
+
       <Section title="Team-Roster bearbeiten (inline)">
         <div className="team" style={{ minWidth: 260 }}>
           <h2 className="team-name-editable" title="Zum Umbenennen klicken">Team 1</h2>
@@ -1089,11 +1192,11 @@ function HeaderJokersRowPreview({ heading, enabled, team1Used, team2Used, isLast
             <span className="team-header-name">Team 1</span>
             <span className="team-header-score">: <span>7</span> Punkte</span>
           </span>
-          <HeaderJokersPreviewRow team="team1" enabled={enabled} used={team1Used} lockedIds={team1Locked} />
+          <HeaderJokersPreviewRow side="left" enabled={enabled} used={team1Used} lockedIds={team1Locked} />
         </div>
         <div id="gameNumber">Spiel 3 von 8</div>
         <div className="team-header-cell team-header-right">
-          <HeaderJokersPreviewRow team="team2" enabled={enabled} used={team2Used} lockedIds={team2Locked} />
+          <HeaderJokersPreviewRow side="right" enabled={enabled} used={team2Used} lockedIds={team2Locked} />
           <span className="team-header-label">
             <span className="team-header-name">Team 2</span>
             <span className="team-header-score">: <span>5</span> Punkte</span>
@@ -1105,15 +1208,17 @@ function HeaderJokersRowPreview({ heading, enabled, team1Used, team2Used, isLast
 }
 
 interface HeaderJokersPreviewRowProps {
-  team: 'team1' | 'team2';
+  /** Which header half the cell sits in — drives the separator side + tooltip
+      direction, exactly as in `TeamJokers`. */
+  side: 'left' | 'right';
   enabled: string[];
   used: string[];
   lockedIds?: string[];
 }
 
-function HeaderJokersPreviewRow({ team, enabled, used, lockedIds = [] }: HeaderJokersPreviewRowProps) {
+function HeaderJokersPreviewRow({ side, enabled, used, lockedIds = [] }: HeaderJokersPreviewRowProps) {
   return (
-    <div className={`header-jokers header-jokers-${team}`} role="group" aria-label="Joker (Vorschau)">
+    <div className={`header-jokers header-jokers-${side}`} role="group" aria-label="Joker (Vorschau)">
       {enabled.map(id => {
         const def = getJoker(id);
         if (!def) return null;

@@ -182,7 +182,7 @@ the client to know whether a match is already ignored (and which "Ignorieren" to
 
 ## Required WebSocket channels
 
-Nearly all admin channels are server→client push: CMS writes go through HTTP endpoints, which the server broadcasts to everyone via WS. The **one exception is the Session tab**, which reads *and* writes live team state on `gamemaster-team-state` — there is no HTTP endpoint for team points, they live only in each client's `localStorage` (see the Session-tab section below).
+Nearly all admin channels are server→client push: CMS writes go through HTTP endpoints, which the server broadcasts to everyone via WS. The **one exception is the Session tab**, which reads *and* writes live team state on `gamemaster-team-state-v2` — there is no HTTP endpoint for team points, they live only in each client's `localStorage` (see the Session-tab section below).
 
 | Channel | Cached? | Purpose |
 |---------|---------|---------|
@@ -196,13 +196,13 @@ Nearly all admin channels are server→client push: CMS writes go through HTTP e
 | `cache-started` | no | A segment encode started. |
 | `cache-ready` | no | A segment encode finished. |
 | `content-changed` | no | `{ config?, theme?, games? }`. On `theme`, re-fetch `GET /api/theme` so a theme switch made elsewhere applies live. (The admin's own `PUT /api/theme` write triggers this same event back to it — re-applying the value it just set is a harmless no-op.) |
-| `gamemaster-team-state` | **yes** | Live team members / names / points / jokers. **Subscribe AND publish** — see below. |
+| `gamemaster-team-state-v2` | **yes** | Live team members / names / points / jokers, for teams 1-4 (`team3`/`team4` only in a 3-4 team show; see specs/team-count.md). **Subscribe AND publish** — see below. |
 | `gamemaster-question-tally` | **yes** | Correct-answer tally nested per question (`gameIndex → questionKey → { team1, team2 }`), same provider. |
 
 ### Session tab: live team state (read *and* write)
 
 Team points have no HTTP endpoint — they are client state synced over the cached
-`gamemaster-team-state` channel. A replacement admin must therefore:
+`gamemaster-team-state-v2` channel. A replacement admin must therefore:
 
 1. **Re-render its fields from every inbound message**, not just on mount. An award
    made on the gamemaster arrives here; a tab that seeds its inputs once will show
@@ -251,7 +251,7 @@ Endpoints that either short-circuit to JSON or stream SSE:
 
 ## What NOT to do from a replacement admin
 
-- **Don't write to `gamemaster-*` WebSocket channels** other than `gamemaster-team-state` / `gamemaster-question-tally` from the Session tab (see above). `gamemaster-answer`, `gamemaster-controls` and `gamemaster-command` are the show/gamemaster contract.
+- **Don't write to `gamemaster-*` WebSocket channels** other than `gamemaster-team-state-v2` / `gamemaster-question-tally` from the Session tab (see above). `gamemaster-answer`, `gamemaster-controls` and `gamemaster-command` are the show/gamemaster contract.
 - **Don't publish a team-state snapshot built from mount-time inputs**, and don't publish one without a fresh `rev`. Both revert points on every other device.
 - **Don't directly edit files in `games/`, `config.json`, or `local-assets/` from the client.** The admin PWA always goes through the `/api/backend/*` endpoints so the server can enforce atomicity, validation, and reference rewrites.
 - **Don't cache `/api/backend/config` across mutations.** The server re-reads `config.json` per request; downstream `/api/game/:index` must see the same values.

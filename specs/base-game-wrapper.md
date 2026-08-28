@@ -42,3 +42,10 @@ Every game component shares an identical phase flow (landing → rules → game 
 - Per-game phase customisation (e.g. skipping landing)
 - Animated transitions between phases
 - Persisting phase history across game changes (going back to a previous game reopens it at its landing screen, not where it was left)
+
+## Team count
+`onAwardPoints(team: TeamKey, points)` accepts any of the four team keys. The wrapper books points for
+every team in the award screen's selection, and its gamemaster `award-selection` group renders one
+`award-toggle-<teamKey>` per active team. The legacy `award-team1` / `award-team2` / `award-draw` ids
+are still honoured for a gamemaster on an older cached bundle — `award-draw` awards every active team.
+See [team-count.md](team-count.md).

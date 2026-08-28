@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { useGameContext } from '@/context/GameContext';
-import { teamName } from '@/utils/teamNames';
+import { teamName, hasNamedTeams } from '@/utils/teamNames';
 
 /**
  * Gamemaster scoring-undo panel. Shows the most recent point mutations (newest
  * first) with a one-tap undo per entry, so a mis-award is corrected without
  * recomputing totals by hand. Reads the audit log that rides the cached
- * gamemaster-team-state channel; dispatching UNDO_SCORE_ENTRY mutates local
+ * gamemaster-team-state-v2 channel; dispatching UNDO_SCORE_ENTRY mutates local
  * team state, which re-broadcasts so the show converges. See
  * specs/gamemaster-cockpit.md.
  */
@@ -42,7 +42,11 @@ export default function ScoreHistoryPanel() {
       {!collapsed && (
         <ul id="gm-score-history-body" className="gm-score-history-list">
           {recent.map(entry => {
-            const name = teamName(state.teams, entry.team === 'team1' ? 1 : 2);
+            // At 0-1 teams there is no team to name; the delta and the game are the
+            // whole story. See specs/team-count.md.
+            const name = hasNamedTeams(state.settings.teamCount)
+              ? teamName(state.teams, entry.team)
+              : '';
             const positive = entry.delta > 0;
             return (
               <li key={entry.id} className="gm-score-history-item">
@@ -50,7 +54,7 @@ export default function ScoreHistoryPanel() {
                   {positive ? '+' : '−'}{Math.abs(entry.delta)}
                 </span>
                 <span className="gm-score-history-meta">
-                  <span className="gm-score-history-team">{name}</span>
+                  {name && <span className="gm-score-history-team">{name}</span>}
                   {typeof entry.gameIndex === 'number' && (
                     <span className="gm-score-history-game">Spiel {entry.gameIndex + 1}</span>
                   )}

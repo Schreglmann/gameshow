@@ -3,14 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { useGameContext } from '@/context/GameContext';
 import { useGamemasterSync, useGamemasterControlsSync, useGamemasterCommandListener } from '@/hooks/useGamemasterSync';
 import type { GamemasterCommand } from '@/types/game';
-import { teamName } from '@/utils/teamNames';
+import { teamName, joinTeamNames } from '@/utils/teamNames';
+import { leadingTeams, teamKeys, teamPoints, teamRoster } from '@/utils/teams';
 import confetti from 'canvas-confetti';
 
 export default function SummaryScreen() {
   const { state } = useGameContext();
   const navigate = useNavigate();
-  const { team1Points, team2Points, team1, team2 } = state.teams;
-  const { pointSystemEnabled } = state.settings;
+  const { pointSystemEnabled, teamCount } = state.settings;
 
   const capitalize = (name: string) => name.charAt(0).toUpperCase() + name.slice(1);
 
@@ -45,28 +45,43 @@ export default function SummaryScreen() {
     return () => window.removeEventListener('keydown', onKey);
   }, [handleBack]);
 
+  const activeTeams = useMemo(() => teamKeys(teamCount), [teamCount]);
+  // The team(s) on the top score. Everybody tied (including a solo team, which
+  // trivially leads) is not a "win" — a single team just finishes with its score.
+  const winners = useMemo(() => leadingTeams(state.teams, activeTeams), [state.teams, activeTeams]);
+  const hasWinner = winners.length === 1 && activeTeams.length > 1;
+
   const result = useMemo(() => {
-    if (!pointSystemEnabled) {
+    if (!pointSystemEnabled || activeTeams.length === 0) {
       return { text: 'Das Spiel ist zu Ende!', subtitle: 'Vielen Dank fürs Spielen!', members: [] };
     }
-    if (team1Points > team2Points) {
+    if (activeTeams.length === 1) {
+      const solo = activeTeams[0]!;
+      // A solo show has no team to name — the audience played the show itself, so
+      // the closing line is just the score it reached. See specs/team-count.md.
       return {
-        text: `${teamName(state.teams, 1)} hat gewonnen!`,
-        subtitle: '',
-        members: team1.map(capitalize),
+        text: `${teamPoints(state.teams, solo)} Punkte`,
+        subtitle: 'Vielen Dank fürs Spielen!',
+        members: teamRoster(state.teams, solo).map(capitalize),
       };
     }
-    if (team2Points > team1Points) {
+    if (hasWinner) {
+      const winner = winners[0]!;
       return {
-        text: `${teamName(state.teams, 2)} hat gewonnen!`,
+        text: `${teamName(state.teams, winner)} hat gewonnen!`,
         subtitle: '',
-        members: team2.map(capitalize),
+        members: teamRoster(state.teams, winner).map(capitalize),
       };
     }
-    return { text: 'Es ist ein Unentschieden!', subtitle: '', members: [] };
-  }, [pointSystemEnabled, team1Points, team2Points, team1, team2, state.teams]);
+    // Several teams share the top score. With more than two in play, naming them
+    // is the only way the room knows who tied.
+    const subtitle = winners.length > 0 && winners.length < activeTeams.length
+      ? `${joinTeamNames(state.teams, winners)} liegen gleichauf`
+      : '';
+    return { text: 'Es ist ein Unentschieden!', subtitle, members: [] };
+  }, [pointSystemEnabled, activeTeams, hasWinner, winners, state.teams]);
 
-  const showConfetti = pointSystemEnabled && team1Points !== team2Points;
+  const showConfetti = pointSystemEnabled && hasWinner;
 
   useEffect(() => {
     if (!showConfetti) return;

@@ -540,6 +540,21 @@
   color: rgba(var(--text-rgb), 0.85);
 }
 
+/* A switch whose value is dictated by something else — currently the active
+   gameshow's team count, which forces the point system off at 0 teams and the
+   team randomization off at 0-1. It shows its EFFECTIVE value and cannot be
+   toggled; the note beside it says why. The stored config value is untouched, so
+   raising the team count restores whatever the operator had chosen.
+   See specs/team-count.md. */
+.be-toggle.is-locked {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.be-toggle.is-locked:hover {
+  color: rgba(var(--text-rgb), max(0.6, var(--text-fade-floor, 0)));
+}
+
 /* ── Buttons ── */
 
 .be-icon-btn {
@@ -3133,6 +3148,17 @@
   color: rgba(var(--text-rgb), max(0.45, var(--text-fade-floor, 0)));
   white-space: nowrap;
   flex-shrink: 0;
+}
+
+/* Team count sits in the same row as the player roster. It holds one short
+   option, so cap it — left to grow it took half the row and pushed the roster
+   combobox into the Planung button. See specs/team-count.md. */
+.gs-team-count {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 130px;
+  max-width: 170px;
+  margin-right: 10px;
 }
 
 /* ── Overlap badges ── */

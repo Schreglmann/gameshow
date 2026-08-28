@@ -4,7 +4,7 @@ import { THEMES } from '@/context/ThemeContext';
 import { saveGame, renameGame, unlockPrecheck, fetchConfig, deleteGameInstance, convertGameToMulti, fetchGame, fetchGames, ApiError } from '@/services/backendApi';
 import PlayerStatsModal from './PlayerStatsModal';
 import { useWsChannel } from '@/services/useBackendSocket';
-import { GAME_TYPE_INFO, GAME_TYPE_TEMPLATES, gameTypesShareQuestionShape } from '@/data/gameTypeInfo';
+import { GAME_TYPE_INFO, GAME_TYPE_TEMPLATES, gameTypesShareQuestionShape, teamCountSupportLabel } from '@/data/gameTypeInfo';
 import RulesEditor from './RulesEditor';
 import InstanceEditor from './InstanceEditor';
 import StatusMessage from './StatusMessage';
@@ -732,6 +732,14 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
                 <option key={t} value={t}>{GAME_TYPE_INFO[t].label}</option>
               ))}
             </select>
+            {/* Which team counts this type can be SCORED at. A gameshow may still
+                use it at any other count — the round just plays without scoring.
+                See specs/team-count.md. */}
+            {data.type && (
+              <p className="be-field-hint" style={{ color: undefined }}>
+                Wertung möglich mit: {teamCountSupportLabel(data.type, (data as { scoringMode?: string }).scoringMode)}
+              </p>
+            )}
           </div>
           <div>
             <label className="be-label">Theme-Override</label>

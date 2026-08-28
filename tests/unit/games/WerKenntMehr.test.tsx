@@ -6,6 +6,8 @@ import { GameProvider } from '@/context/GameContext';
 import { MusicProvider } from '@/context/MusicContext';
 import WerKenntMehr from '@/components/games/WerKenntMehr';
 import { __emitChannelForTests } from '@/services/useBackendSocket';
+import * as backendSocket from '@/services/useBackendSocket';
+import { fetchSettings } from '@/services/api';
 import type { WerKenntMehrConfig } from '@/types/config';
 
 vi.mock('@/services/api', () => ({
@@ -725,7 +727,7 @@ describe('WerKenntMehr — standard mode: Aufholjoker + round-win tally', () => 
 
     const tally = document.querySelector('.award-points-note');
     expect(tally).toBeInTheDocument();
-    expect(tally?.textContent?.replace(/\s+/g, ' ').trim()).toBe('Rundenstand: Team 1 2 – 0 Team 2');
+    expect(tally?.textContent?.replace(/\s+/g, ' ').trim()).toBe('Rundenstand: Team 1 2 · Team 2 0');
   });
 
   it('clears a round-win record when the same winner is tapped again (no tally shown)', async () => {
@@ -751,5 +753,113 @@ describe('WerKenntMehr — standard mode: Aufholjoker + round-win tally', () => 
 
     // Nothing recorded → the guidance tally line is not rendered at all.
     expect(document.querySelector('.award-points-note')).not.toBeInTheDocument();
+  });
+
+  it('records a round shared by several teams, and offers no Unentschieden button', async () => {
+    const user = userEvent.setup();
+    const sendWsSpy = vi.spyOn(backendSocket, 'sendWs');
+    renderStd(0);
+    await waitFor(() => expect(screen.getByText('Test WKM')).toBeInTheDocument());
+    await advanceToGame();
+    await navForward(user); // reveal Beispiel
+    await navForward(user); // -> Frage 1
+    await waitFor(() => expect(screen.getByText('Frage 1 von 2')).toBeInTheDocument());
+    await navForward(user); // reveal Frage 1
+
+    // One toggle per active team — a draw is "several teams selected", so the
+    // recorder carries no separate Unentschieden entry.
+    await waitFor(() => {
+      const group = lastControls(sendWsSpy).find(c => c.id === 'round-winner');
+      expect(group?.buttons?.map(b => b.id)).toEqual(['round-team1', 'round-team2']);
+    });
+
+    const ts = Date.now();
+    act(() => { __emitChannelForTests('gamemaster-command', { controlId: 'round-team1', timestamp: ts }); });
+    act(() => { __emitChannelForTests('gamemaster-command', { controlId: 'round-team2', timestamp: ts + 1 }); });
+    // Both stay active: the round is shared, not overwritten by the second press.
+    await waitFor(() => {
+      const buttons = lastControls(sendWsSpy).find(c => c.id === 'round-winner')?.buttons ?? [];
+      expect(buttons.map(b => b.active)).toEqual([true, true]);
+    });
+
+    await navForward(user); // -> Frage 2
+    await navForward(user); // reveal Frage 2
+    await navForward(user); // -> summary
+    await waitFor(() => expect(screen.getByText('Punkte vergeben')).toBeInTheDocument());
+
+    // A shared round counts as a win for each team it was shared by.
+    const tally = document.querySelector('.award-points-note');
+    expect(tally?.textContent?.replace(/\s+/g, ' ').trim()).toBe('Rundenstand: Team 1 1 · Team 2 1');
+    sendWsSpy.mockRestore();
+  });
+});
+
+/** Last `gamemaster-controls` payload published by the game. */
+type Ctrl = { id: string; buttons?: { id: string; active?: boolean }[]; disabled?: boolean };
+function lastControls(spy: { mock: { calls: unknown[][] } }): Ctrl[] {
+  const calls = spy.mock.calls.filter(([ch]) => ch === 'gamemaster-controls');
+  return (calls[calls.length - 1]?.[1] as { controls?: Ctrl[] })?.controls ?? [];
+}
+
+// Teams 3 and 4 must be fully usable in the GM: recordable per round and
+// awardable on the summary. See specs/team-count.md.
+describe('WerKenntMehr — standard mode with 4 teams', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.clearAllMocks();
+    vi.mocked(fetchSettings).mockResolvedValue({
+      pointSystemEnabled: true,
+      teamCount: 4,
+      teamRandomizationEnabled: false,
+      globalRules: [],
+    } as unknown as Awaited<ReturnType<typeof fetchSettings>>);
+  });
+
+  it('records team 3 as the round winner and awards it from the GM', async () => {
+    const user = userEvent.setup();
+    const sendWsSpy = vi.spyOn(backendSocket, 'sendWs');
+    render(
+      <MemoryRouter>
+        <GameProvider>
+          <MusicProvider>
+            <WerKenntMehr {...defaultProps} currentIndex={2} config={makeConfig({ scoringMode: 'standard' })} />
+          </MusicProvider>
+        </GameProvider>
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(screen.getByText('Test WKM')).toBeInTheDocument());
+    await advanceToGame();
+    await navForward(user); // reveal Beispiel
+    await navForward(user); // -> Frage 1
+    await waitFor(() => expect(screen.getByText('Frage 1 von 2')).toBeInTheDocument());
+    await navForward(user); // reveal Frage 1
+
+    await waitFor(() => {
+      const group = lastControls(sendWsSpy).find(c => c.id === 'round-winner');
+      expect(group?.buttons?.map(b => b.id)).toEqual(['round-team1', 'round-team2', 'round-team3', 'round-team4']);
+    });
+    act(() => { __emitChannelForTests('gamemaster-command', { controlId: 'round-team3', timestamp: Date.now() }); });
+    await waitFor(() => {
+      const buttons = lastControls(sendWsSpy).find(c => c.id === 'round-winner')?.buttons ?? [];
+      expect(buttons.find(b => b.id === 'round-team3')?.active).toBe(true);
+    });
+
+    await navForward(user); // -> Frage 2
+    await navForward(user); // reveal Frage 2
+    await navForward(user); // -> summary
+    await waitFor(() => expect(screen.getByText('Punkte vergeben')).toBeInTheDocument());
+
+    const tally = document.querySelector('.award-points-note');
+    expect(tally?.textContent?.replace(/\s+/g, ' ').trim())
+      .toBe('Rundenstand: Team 1 0 · Team 2 0 · Team 3 1 · Team 4 0');
+
+    // The round leader is preselected, so the GM's confirm is enabled (it used to
+    // look only at teams 1/2 and stayed disabled for a team-3-only pick).
+    await waitFor(() =>
+      expect(lastControls(sendWsSpy).find(c => c.id === 'final-confirm')?.disabled).toBe(false));
+    act(() => { __emitChannelForTests('gamemaster-command', { controlId: 'final-confirm', timestamp: Date.now() }); });
+    await waitFor(() => expect(defaultProps.onAwardPoints).toHaveBeenCalledWith('team3', 3));
+    expect(defaultProps.onAwardPoints).toHaveBeenCalledTimes(1);
+    sendWsSpy.mockRestore();
   });
 });

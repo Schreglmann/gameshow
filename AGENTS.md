@@ -87,6 +87,7 @@ config.json (git-crypt encrypted)
 | `src/utils/rulesPreset.ts` | Shared preset resolver + `PLACEHOLDER_TASK_LINE`, used by both server (`loadGameConfig`) and admin client |
 | `src/utils/questionOrder.ts` + `src/utils/gamePlaythroughStore.ts` | Live-stable question ordering. Questions have no id, so `questionOrder.ts` establishes identity by content diff and reconciles the play order against each new source array; the store keeps that order (plus the shuffle seed and a high-water mark) per `gameId` for the session. Consumed via `useQuestionOrder` + `useLiveQuestionIndex` — **every game that tracks a current question must use both**, or editing that game's questions mid-show re-deals the deck. Per-question effects key on the returned `qKey` (identity), NOT on `qIdx` (position) — see [specs/live-question-order.md](specs/live-question-order.md) |
 | `src/data/jokers.ts` | Hardcoded joker catalog (`JOKER_CATALOG`) — add new entries via the `add-joker` skill |
+| `src/utils/teams.ts` + `server/team-count.ts` | Team identity for the **0–4 team** model: `TeamKey` (`team1`…`team4`), `ALL_TEAM_KEYS`, `teamKeys(count)`, the tolerant accessors (`teamPoints`/`teamRoster`/`teamJokersUsed` — teams 3/4 are OPTIONAL on `TeamState`, never index them directly) and the standings helpers (`leadingTeams`/`trailingTeams`). The server module resolves the effective count and decides, per game, whether it can be scored. `GameTypeInfo.supportedTeamCounts` + `gameSupportsTeamCount()` in `src/data/gameTypeInfo.ts` are the compatibility matrix — see [specs/team-count.md](specs/team-count.md) |
 | `src/components/common/TeamJokers.tsx` + `JokerIcon.tsx` | Per-team joker UI rendered in the `Header` (stroke-SVG icons — no emoji) — see [specs/jokers.md](specs/jokers.md) |
 | `src/components/common/QuestionScorePanel.tsx` + `src/utils/questionScores.ts` + `src/utils/correctAnswers.ts` | Gamemaster "Wertung pro Frage" breakdown: which team scored on which question, with explicit "keine Wertung" gaps. Two feeds, one row model — the manual `+`/`−` tally (nested `gameIndex → questionKey`, per-game totals *derived*) for normal games, and `scoreHistory` grouped by `questionNumber` for the inline-scored ones. A cell netting several deltas is marked `2×` so a re-judge never reads as "nothing happened" — see [specs/gamemaster-question-scores.md](specs/gamemaster-question-scores.md) |
 | `src/entries/{frontend,admin,gamemaster}.tsx` | Three separate React entry points, one per installable PWA (see [specs/pwa.md](specs/pwa.md)) |
@@ -104,7 +105,7 @@ config.json (git-crypt encrypted)
 
 | Endpoint | Returns |
 |----------|---------|
-| `GET /api/settings` | `SettingsResponse` |
+| `GET /api/settings` | `SettingsResponse` (incl. `teamCount` + `incompatibleGames`) |
 | `GET /api/game/:index` | `GameDataResponse` |
 | `GET /api/background-music` | `string[]` of MP3 filenames |
 
@@ -221,25 +222,29 @@ Referenced as `"allgemeinwissen/v1"`. Instance fields override base fields.
 
 Full field semantics + config examples for every type: [GAME_TYPES.md](GAME_TYPES.md).
 
-| Type | Questions source | Points awarded by |
-|------|-----------------|-------------------|
-| `simple-quiz` | JSON `questions[]` | `AwardPoints` (host picks winner) |
-| `bet-quiz` | JSON `questions[]` (with `category`) | Inline per-question (±bet, one team per question); `scoringMode`: `standard` (default — only the answering team) or `transfer` (zero-sum — opponent moves opposite) |
-| `guessing-game` | JSON `questions[]` | `AwardPoints`; `scoringMode`: `auto` (**default** — the show counts the closer team per question and the award screen opens with that team preselected; one press books the positional points) or `standard` (host picks the winner) |
-| `q1` | JSON `questions[]` (3 true + 1 false) | `AwardPoints` |
-| `four-statements` | JSON `questions[]` (up to 4 clues → text/image answer) | `AwardPoints` |
-| `fact-or-fake` | JSON `questions[]` | `AwardPoints` |
-| `audio-guess` | JSON `questions[]` | `AwardPoints` |
-| `video-guess` | JSON `questions[]` | `AwardPoints` |
-| `quizjagd` | JSON `{ easy, medium, hard }` | Inline per-question (can be negative) |
-| `final-quiz` | JSON `questions[]`, teams bet | Inline per-question, per team |
-| `bandle` | JSON `questions[]` with `tracks[]` | `AwardPoints` |
-| `image-guess` | JSON `questions[]` | `AwardPoints` |
-| `colorguess` | JSON `questions[]` (image + answer; colors auto-extracted server-side) | `AwardPoints` |
-| `ranking` | JSON `questions[]` (ordered `answers[]`, progressive reveal; optional `answerAudio` + trigger, optional shuffled `items[]` candidate pool) | `AwardPoints` |
-| `wer-kennt-mehr` | JSON `questions[]` (question + *optional* example `answer`/`answerList` — no correct answer exists) | `scoringMode`: `standard` (default — positional points at game end), `count` (inline, higher count wins, tie splits), `count-penalty` (loser also loses the count, floored at 0) |
-| `random-frame` | JSON `questions[]` (video + answer; random still frame extracted at runtime via `GET /api/random-frame`, black frames skipped; GM can re-roll, admin prerenders fallback frames) | `AwardPoints` — see [specs/games/random-frame.md](specs/games/random-frame.md) |
-| `city-compass` | JSON `questions[]` (hidden `center` city + 3–8 `neighbors`, drawn as inline SVG at their true bearing; km in the label, admin "Auto" fills the list) | `AwardPoints` — see [specs/games/city-compass.md](specs/games/city-compass.md) |
+Every type can be *played* at any team count; the last column says which counts it can be **scored**
+at (0 = the no-teams play-through, always allowed). At an unsupported count the server serves the game
+`pointSystemEnabled: false` and it plays through without an award — see [specs/team-count.md](specs/team-count.md).
+
+| Type | Questions source | Points awarded by | Scorable at |
+|------|-----------------|-------------------|-------------|
+| `simple-quiz` | JSON `questions[]` | `AwardPoints` (host picks winner) | 0–4 |
+| `bet-quiz` | JSON `questions[]` (with `category`) | Inline per-question (±bet, one team per question); `scoringMode`: `standard` (default — only the answering team) or `transfer` (zero-sum — opponent moves opposite) | 0–4 (`transfer`: 0, 2) |
+| `guessing-game` | JSON `questions[]` | `AwardPoints`; `scoringMode`: `auto` (**default** — the show counts the closer team per question and the award screen opens with that team preselected; one press books the positional points) or `standard` (host picks the winner) | 0–4 (`auto`: 0, 2–4) |
+| `q1` | JSON `questions[]` (3 true + 1 false) | `AwardPoints` | 0–4 |
+| `four-statements` | JSON `questions[]` (up to 4 clues → text/image answer) | `AwardPoints` | 0–4 |
+| `fact-or-fake` | JSON `questions[]` | `AwardPoints` | 0–4 |
+| `audio-guess` | JSON `questions[]` | `AwardPoints` | 0–4 |
+| `video-guess` | JSON `questions[]` | `AwardPoints` | 0–4 |
+| `quizjagd` | JSON `{ easy, medium, hard }` | Inline per-question (can be negative) | 0–4 |
+| `final-quiz` | JSON `questions[]`, teams bet | Inline per-question, per team | 0–4 |
+| `bandle` | JSON `questions[]` with `tracks[]` | `AwardPoints` | 0–4 |
+| `image-guess` | JSON `questions[]` | `AwardPoints` | 0–4 |
+| `colorguess` | JSON `questions[]` (image + answer; colors auto-extracted server-side) | `AwardPoints` | 0–4 |
+| `ranking` | JSON `questions[]` (ordered `answers[]`, progressive reveal; optional `answerAudio` + trigger, optional shuffled `items[]` candidate pool) | `AwardPoints` | 0–4 |
+| `wer-kennt-mehr` | JSON `questions[]` (question + *optional* example `answer`/`answerList` — no correct answer exists) | `scoringMode`: `standard` (default — positional points at game end), `count` (inline, higher count wins, tie splits), `count-penalty` (loser also loses the count, floored at 0) | 0–4 (`count`: 0, 2–4; `count-penalty`: 0, 2) |
+| `random-frame` | JSON `questions[]` (video + answer; random still frame extracted at runtime via `GET /api/random-frame`, black frames skipped; GM can re-roll, admin prerenders fallback frames) | `AwardPoints` — see [specs/games/random-frame.md](specs/games/random-frame.md) | 0–4 |
+| `city-compass` | JSON `questions[]` (hidden `center` city + 3–8 `neighbors`, drawn as inline SVG at their true bearing; km in the label, admin "Auto" fills the list) | `AwardPoints` — see [specs/games/city-compass.md](specs/games/city-compass.md) | 0–4 |
 
 ---
 
@@ -251,6 +256,7 @@ The mandatory sequence: **Spec → Types → Implementation → Tests → Verify
 
 1. **Spec** — write `specs/games/<type>.md`, confirm with the user before any code
 2. **Types** — question + config interfaces in `src/types/config.ts`; extend `GameType` and `GameConfig` unions
+2b. **Team support** — declare `supportedTeamCounts` on the type's `GAME_TYPE_INFO` entry (tsc forces this); add a `SCORING_MODE_TEAM_COUNTS` entry if a scoring mode narrows it further. See [specs/team-count.md](specs/team-count.md)
 3. **Component** — `src/components/games/MyGame.tsx`, wrapped in `<BaseGameWrapper>`; call `onGameComplete()` when done
 4. **Register** — add `case 'my-type':` in `GameFactory.tsx`
 5. **Server** — only if questions come from the filesystem; add builder in `server/index.ts`

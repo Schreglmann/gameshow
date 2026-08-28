@@ -3,10 +3,11 @@ import { createPortal } from 'react-dom';
 import DeadlineTimer from '@/components/common/DeadlineTimer';
 import { useKeyboardNavigation } from '@/hooks/useKeyboardNavigation';
 import { useGamemasterSync, useGamemasterControlsSync, useGamemasterCommandListener } from '@/hooks/useGamemasterSync';
-import AwardPoints, { type AwardPointsWinners, type AutoAwardVerdict } from '@/components/common/AwardPoints';
+import AwardPoints, { selectedTeams, drawHint, type AwardPointsWinners, type AutoAwardVerdict } from '@/components/common/AwardPoints';
 import { useGameContext } from '@/context/GameContext';
 import { teamName } from '@/utils/teamNames';
 import { teamDisplayOrder } from '@/utils/teamOrder';
+import { isTeamKey, teamKeys, type TeamKey } from '@/utils/teams';
 import { tallyLeader, tallyTotals } from '@/utils/correctAnswers';
 import { detectShowScrollAnchors, scrollShowToAnchor } from '@/utils/scrollToCardAnchor';
 import { FullscreenProvider, type FullscreenMedia } from '@/context/FullscreenContext';
@@ -19,7 +20,7 @@ import { PHASE_SCREEN_LABELS } from '@/types/game';
 type Phase = GamePhase;
 
 /** Nothing picked yet on the award screen. Module-level so the identity is stable. */
-const NO_WINNERS: AwardPointsWinners = { team1: false, team2: false };
+const NO_WINNERS: AwardPointsWinners = {};
 
 interface BaseGameWrapperProps {
   title: string;
@@ -45,7 +46,7 @@ interface BaseGameWrapperProps {
   onRulesShow?: () => void;
   /** Called when the award-points phase is shown (or at game completion if points are skipped) */
   onNextShow?: () => void;
-  onAwardPoints: (team: 'team1' | 'team2', points: number) => void;
+  onAwardPoints: (team: TeamKey, points: number) => void;
   onNextGame: () => void;
   /** Navigate back to the previous game (its title screen). Invoked when the
    * user presses back on the landing phase and this isn't the first game. */
@@ -357,6 +358,11 @@ export default function BaseGameWrapper({
     [gameDispatch],
   );
 
+  // The teams this gameshow runs with. Memoised: it is a dependency of the award
+  // callbacks and the controls memo, both of which feed the gamemaster sync.
+  const teamCount = gameState.settings.teamCount;
+  const activeTeams = useMemo(() => teamKeys(teamCount), [teamCount]);
+
   const shouldShowPoints = !skipPointsScreen && (pointSystemEnabled || requiresPoints);
 
   const handleNav = useCallback(() => {
@@ -434,19 +440,18 @@ export default function BaseGameWrapper({
   // flag clears. Multiply the POSITIONAL value (never hardcode 2). Hoisted out of
   // `handleComplete` so an auto verdict can STATE the same numbers it awards.
   const ptsFor = useCallback(
-    (team: 'team1' | 'team2') => (gameState.teams.doubleNextGame === team ? pointValue * 2 : pointValue),
+    (team: TeamKey) => (gameState.teams.doubleNextGame === team ? pointValue * 2 : pointValue),
     [gameState.teams.doubleNextGame, pointValue],
   );
 
   const handleComplete = useCallback(
     (winners: AwardPointsWinners) => {
       const armed = gameState.teams.doubleNextGame;
-      if (winners.team1) onAwardPoints('team1', ptsFor('team1'));
-      if (winners.team2) onAwardPoints('team2', ptsFor('team2'));
+      for (const team of selectedTeams(winners, activeTeams)) onAwardPoints(team, ptsFor(team));
       if (armed) gameDispatch({ type: 'CLEAR_DOUBLE_NEXT_GAME' });
       onNextGame();
     },
-    [onAwardPoints, ptsFor, onNextGame, gameState.teams.doubleNextGame, gameDispatch]
+    [onAwardPoints, ptsFor, onNextGame, gameState.teams.doubleNextGame, gameDispatch, activeTeams]
   );
 
   // What the award screen starts with: a verdict the game worked out, else whoever
@@ -454,55 +459,76 @@ export default function BaseGameWrapper({
   // into state) so a tally edit arriving from another device still moves it — until
   // the host picks, which pins the selection.
   const gameTally = gameState.correctAnswersByGame[String(currentIndex)];
-  const preselectedWinners = useMemo(
-    () => autoAward?.winners ?? tallyLeader(gameTally),
-    [autoAward, gameTally],
-  );
+  const preselectedWinners = useMemo((): AwardPointsWinners | null => {
+    if (autoAward) return autoAward.winners;
+    const leaders = tallyLeader(gameTally, activeTeams);
+    if (leaders) {
+      const winners: AwardPointsWinners = {};
+      for (const team of leaders) winners[team] = true;
+      return winners;
+    }
+    // With a single team the screen has nothing to choose BETWEEN — it is a
+    // confirmation, not a decision. Preselect the one card so the host presses
+    // confirm and moves on; deselecting it is still possible, for a round the
+    // audience did not win. See specs/team-count.md.
+    if (activeTeams.length === 1) return { [activeTeams[0]!]: true };
+    return null;
+  }, [autoAward, gameTally, activeTeams]);
   const selectedWinners = pickedWinners ?? preselectedWinners ?? NO_WINNERS;
-  const anyWinnerSelected = selectedWinners.team1 || selectedWinners.team2;
+  const winnerKeys = selectedTeams(selectedWinners, activeTeams);
+  const anyWinnerSelected = winnerKeys.length > 0;
 
   // What each team would receive, from the same `ptsFor` the award books with — so
   // the preview and the booked points cannot diverge.
-  const awardPointsPreview = useMemo(
-    () => ({ team1: ptsFor('team1'), team2: ptsFor('team2') }),
-    [ptsFor],
-  );
+  const awardPointsPreview = useMemo(() => {
+    const preview: Partial<Record<TeamKey, number>> = {};
+    for (const team of activeTeams) preview[team] = ptsFor(team);
+    return preview;
+  }, [ptsFor, activeTeams]);
 
   // The cards' third line: won questions from an auto verdict, otherwise the
   // gamemaster's tally. Dropped entirely when nothing was tallied — "0 richtige
-  // Antworten" on both cards states nothing.
+  // Antworten" on every card states nothing.
   const awardCounts = useMemo(() => {
+    const line: Partial<Record<TeamKey, string>> = {};
     if (autoAward) {
-      const won = (n: number) => `${n} ${n === 1 ? 'gewonnene Frage' : 'gewonnene Fragen'}`;
-      return { team1: won(autoAward.team1Wins), team2: won(autoAward.team2Wins) };
+      for (const team of activeTeams) {
+        const n = autoAward.wins[team] ?? 0;
+        line[team] = `${n} ${n === 1 ? 'gewonnene Frage' : 'gewonnene Fragen'}`;
+      }
+      return line;
     }
     const totals = tallyTotals(gameTally);
-    if (totals.team1 === 0 && totals.team2 === 0) return null;
-    const correct = (n: number) => `${n} ${n === 1 ? 'richtige Antwort' : 'richtige Antworten'}`;
-    return { team1: correct(totals.team1), team2: correct(totals.team2) };
-  }, [autoAward, gameTally]);
+    if (activeTeams.every(t => totals[t] === 0)) return null;
+    for (const team of activeTeams) {
+      const n = totals[team];
+      line[team] = `${n} ${n === 1 ? 'richtige Antwort' : 'richtige Antworten'}`;
+    }
+    return line;
+  }, [autoAward, gameTally, activeTeams]);
 
   // An untouched auto verdict states its own reason; once the host overrides it, the
   // screen falls back to its generic wording.
+  const autoWinnerKeys = autoAward ? selectedTeams(autoAward.winners, activeTeams) : [];
   const awardHint = pickedWinners === null && autoAward
-    ? (autoAward.winners.team1 && autoAward.winners.team2
-      ? 'Unentschieden — beide Teams erhalten Punkte'
-      : `${teamName(gameState.teams, autoAward.winners.team1 ? 1 : 2)} hat mehr Fragen gewonnen`)
+    ? (autoWinnerKeys.length > 1
+      ? drawHint(gameState.teams, autoWinnerKeys, activeTeams)
+      : `${teamName(gameState.teams, autoWinnerKeys[0] ?? activeTeams[0]!)} hat mehr Fragen gewonnen`)
     : undefined;
 
-  const toggleWinner = useCallback((team: 'team1' | 'team2') => {
+  const toggleWinner = useCallback((team: TeamKey) => {
     // Toggling against what is currently SHOWN, so the first press after a
     // preselection deselects that team instead of starting from an empty pick.
     setPickedWinners(prev => {
       const base = prev ?? preselectedWinners ?? NO_WINNERS;
-      return { ...base, [team]: !base[team] };
+      return { ...base, [team]: base[team] !== true };
     });
   }, [preselectedWinners]);
 
   const confirmAward = useCallback(() => {
-    if (!(selectedWinners.team1 || selectedWinners.team2)) return;
+    if (selectedTeams(selectedWinners, activeTeams).length === 0) return;
     handleComplete(selectedWinners);
-  }, [selectedWinners, handleComplete]);
+  }, [selectedWinners, handleComplete, activeTeams]);
 
   // Leaving the award screen drops the pick so it can't leak into the next game.
   useEffect(() => {
@@ -528,16 +554,17 @@ export default function BaseGameWrapper({
       // An auto-scored game states its standing as a read-only line; the winner it
       // worked out is preselected below, where the host can still override it.
       if (autoAward) {
-        const t1 = teamName(gameState.teams, 1);
-        const t2 = teamName(gameState.teams, 2);
-        const isDraw = autoAward.winners.team1 && autoAward.winners.team2;
-        const winnerLabel = isDraw
-          ? 'Unentschieden'
-          : `${autoAward.winners.team1 ? t1 : t2} gewinnt`;
+        const winners = selectedTeams(autoAward.winners, activeTeams);
+        const standing = activeTeams
+          .map(t => `${teamName(gameState.teams, t)}: ${autoAward.wins[t] ?? 0}`)
+          .join(' · ');
+        const winnerLabel = winners.length === 1
+          ? `${teamName(gameState.teams, winners[0]!)} gewinnt`
+          : 'Unentschieden';
         controls.push({
           type: 'info',
           id: 'award-auto-summary',
-          text: `${t1}: ${autoAward.team1Wins} · ${t2}: ${autoAward.team2Wins} → ${winnerLabel}`,
+          text: `${standing} → ${winnerLabel}`,
         });
       }
       // Toggles mirroring the show's cards, then one confirm — the same shape
@@ -546,12 +573,17 @@ export default function BaseGameWrapper({
       controls.push({
         type: 'button-group',
         id: 'award-selection',
-        label: 'Welches Team hat gewonnen? (beide = unentschieden)',
-        buttons: teamDisplayOrder(gameState.teams.orderSwapped, true, gameState.settings.teamMirrorEnabled).map(teamKey => ({
+        label: 'Welches Team hat gewonnen? (mehrere = unentschieden)',
+        buttons: teamDisplayOrder(
+          gameState.teams.orderSwapped,
+          true,
+          gameState.settings.teamMirrorEnabled,
+          teamCount,
+        ).map(teamKey => ({
           id: `award-toggle-${teamKey}`,
-          label: teamName(gameState.teams, teamKey === 'team1' ? 1 : 2),
+          label: teamName(gameState.teams, teamKey),
           variant: 'primary' as const,
-          active: selectedWinners[teamKey],
+          active: selectedWinners[teamKey] === true,
         })),
       });
       controls.push({
@@ -564,9 +596,9 @@ export default function BaseGameWrapper({
       return controls;
     }
     return [];
-  }, [phase, gameControls, navState.hideForward, navState.hideBack, gameState.teams, gameState.settings.teamMirrorEnabled, autoAward, selectedWinners, anyWinnerSelected]);
+  }, [phase, gameControls, navState.hideForward, navState.hideBack, gameState.teams, gameState.settings.teamMirrorEnabled, teamCount, activeTeams, autoAward, selectedWinners, anyWinnerSelected]);
 
-  useGamemasterControlsSync(allControls, phase, currentIndex, hideCorrectTracker, gameState.currentGame?.totalGames, deadlineActive, timerActive, timerPaused, answerRevealed, scrollAnchors, fullscreenMedia !== null, fullscreenOpen, broadcastRemainingMs ?? undefined, activeTotalSeconds ?? undefined, activeKind ?? undefined, tickMuted, autoScored);
+  useGamemasterControlsSync(allControls, phase, currentIndex, hideCorrectTracker, gameState.currentGame?.totalGames, deadlineActive, timerActive, timerPaused, answerRevealed, scrollAnchors, fullscreenMedia !== null, fullscreenOpen, broadcastRemainingMs ?? undefined, activeTotalSeconds ?? undefined, activeKind ?? undefined, tickMuted, autoScored, !pointSystemEnabled);
 
   // Report which scroll jump-points the show currently exposes so the GM
   // toolbar can offer them — but only while the card overflows the viewport.
@@ -794,24 +826,30 @@ export default function BaseGameWrapper({
       }
     } else if (cmd.controlId === 'nav-back') {
       handleBackNav();
-    } else if (cmd.controlId === 'award-toggle-team1' || cmd.controlId === 'award-toggle-team2') {
+    } else if (cmd.controlId.startsWith('award-toggle-')) {
       // Mirrors a tap on the show's team card. Phase-guarded so a late command from a
       // GM that hasn't caught up can't pick a winner for a game still being played.
-      if (phase === 'points') toggleWinner(cmd.controlId === 'award-toggle-team1' ? 'team1' : 'team2');
+      const team = cmd.controlId.slice('award-toggle-'.length);
+      if (phase === 'points' && isTeamKey(team)) toggleWinner(team);
     } else if (cmd.controlId === 'award-confirm') {
       confirmAward();
-    } else if (cmd.controlId === 'award-team1' || cmd.controlId === 'award-team2' || cmd.controlId === 'award-draw' || cmd.controlId === 'award-auto') {
+    } else if (cmd.controlId === 'award-auto') {
+      if (autoAward) handleComplete(autoAward.winners);
+    } else if (cmd.controlId === 'award-draw' || cmd.controlId === 'award-team1' || cmd.controlId === 'award-team2') {
       // The pre-toggle award ids. The three PWAs are cached separately, so a
       // gamemaster running an older bundle still emits these — honour them as an
-      // immediate award rather than dropping the host's press on the floor.
-      if (cmd.controlId === 'award-auto') {
-        if (autoAward) handleComplete(autoAward.winners);
+      // immediate award rather than dropping the host's press on the floor. Such a
+      // bundle only knows two teams, so `award-draw` means "everyone" here.
+      const winners: AwardPointsWinners = {};
+      if (cmd.controlId === 'award-draw') {
+        for (const team of activeTeams) winners[team] = true;
       } else {
-        handleComplete({ team1: cmd.controlId !== 'award-team2', team2: cmd.controlId !== 'award-team1' });
+        winners[cmd.controlId === 'award-team1' ? 'team1' : 'team2'] = true;
       }
+      handleComplete(winners);
     } else if (cmd.controlId === 'use-joker' && cmd.value && typeof cmd.value === 'object') {
       const { team, jokerId, used } = cmd.value as { team?: string; jokerId?: string; used?: string };
-      if ((team === 'team1' || team === 'team2') && typeof jokerId === 'string') {
+      if (isTeamKey(team) && typeof jokerId === 'string') {
         gameDispatch({
           type: 'SET_JOKER_USED',
           payload: { team, jokerId, used: used !== 'false' },
@@ -891,7 +929,7 @@ export default function BaseGameWrapper({
     } else {
       commandHandler?.(cmd);
     }
-  }, [handleNav, handleBackNav, handleComplete, autoAward, phase, toggleWinner, confirmAward, commandHandler, gameDispatch, resumePausedAudio, freezeActiveTimer, resumeActiveTimer]));
+  }, [handleNav, handleBackNav, handleComplete, autoAward, activeTeams, phase, toggleWinner, confirmAward, commandHandler, gameDispatch, resumePausedAudio, freezeActiveTimer, resumeActiveTimer]));
 
   return (
     <FullscreenProvider value={fullscreenValue}>

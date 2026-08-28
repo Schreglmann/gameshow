@@ -40,11 +40,11 @@ Source files (line numbers link to the declaration):
 | Method | Path | Zone | Line | Purpose | Request shape | Response shape |
 |--------|------|------|------|---------|---------------|----------------|
 | `GET` | `/api/background-music` | `frontend` | [2059](../../server/index.ts#L2059) | List `.mp3` filenames in `local-assets/background-music/`. Optional `?theme=` filters to a theme subfolder. | Query: `theme?: string` | `string[]` (bare array of filenames) |
-| `GET` | `/api/settings` | `shared` | [2073](../../server/index.ts#L2073) | Returns active gameshow's global settings (active key, team sizes, point system, teamRandomizationEnabled, joker config incl. `jokersInLastGame` + operator-editable `jokerRules` explanation text, activeGameshowTitle, isCleanInstall, gameCount, `players` roster for the HomeScreen randomization prefill). | — | `SettingsResponse` |
+| `GET` | `/api/settings` | `shared` | [2073](../../server/index.ts#L2073) | Returns active gameshow's global settings (active key, team sizes, point system, teamRandomizationEnabled — forced false below 2 teams, joker config incl. `jokersInLastGame` + operator-editable `jokerRules` explanation text, activeGameshowTitle, isCleanInstall, gameCount, `players` roster for the HomeScreen randomization prefill, `teamCount` 0-4, and `incompatibleGames` — the gameOrder entries that cannot be scored at that count). | — | `SettingsResponse` |
 | `GET` | `/api/theme` | `shared` | [2124](../../server/index.ts#L2124) | Current theme selection for frontend and admin PWAs. | — | `{ frontend: string; admin: string }` |
 | `PUT` | `/api/theme` | `shared` | [2128](../../server/index.ts#L2128) | Update one or both theme names. Persisted to `theme-settings.json`. | Body: `Partial<{ frontend: string; admin: string }>` | `{ frontend: string; admin: string }` |
 | `GET` | `/api/video-hdr` | `frontend` | [2145](../../server/index.ts#L2145) | Probe an asset path and return whether the video is HDR. Used by the player to choose between `/videos-compressed` and `/videos-sdr`. | Query: `path: string` (asset-relative) | `{ isHdr: boolean }` |
-| `GET` | `/api/game/:index` | `shared` | [2178](../../server/index.ts#L2178) | Loaded game data for slot `index` in the active gameshow's `gameOrder`. The server resolves `gameOrder[index]` → `games/<name>.json` and returns a type-tagged union. | Path: `index: number` | `GameDataResponse` |
+| `GET` | `/api/game/:index` | `shared` | [2178](../../server/index.ts#L2178) | Loaded game data for slot `index` in the active gameshow's `gameOrder`. The server resolves `gameOrder[index]` → `games/<name>.json` and returns a type-tagged union. Its `pointSystemEnabled` is **per game**: true only when the show has teams AND this game's type + scoringMode can be scored at that count (see specs/team-count.md). | Path: `index: number` | `GameDataResponse` |
 
 ### 1.3 Admin backend — games CRUD
 
@@ -231,9 +231,9 @@ All channels multiplex on a single WebSocket endpoint. The wire format is `{ cha
 | `cache-started` | S→C | no | [server/index.ts:1622](../../server/index.ts#L1622) | `admin` | `{ kind: 'sdr' \| 'compressed'; video; start; end; track? }`. A segment encode started. |
 | `cache-ready` | S→C | no | [server/index.ts:1763](../../server/index.ts#L1763) | `admin` | `{ kind; video; start; end; track? }`. A segment encode finished. |
 | `gamemaster-answer` | C→S→C | **yes** | any PWA | `shared` (show writes, gamemaster reads) | Current answer card state. Show-PWA emits; only the *active* show's emits are kept. |
-| `gamemaster-controls` | C→S→C | **yes** | any PWA | `shared` (show writes, gamemaster reads) | Current controls / phase / gameIndex. Show-PWA emits; gamemaster reads. |
+| `gamemaster-controls` | C→S→C | **yes** | any PWA | `shared` (show writes, gamemaster reads) | Current controls / phase / gameIndex, plus `pointsDisabled` (the playing game awards no points — see specs/team-count.md). Show-PWA emits; gamemaster reads. |
 | `gamemaster-command` | C→S→C | **no** (ephemeral) | gamemaster PWA | `shared` (gamemaster writes, show reads) | One-shot command from gamemaster to show (`next`, `award`, `use-joker`, ...). |
-| `gamemaster-team-state` | C→S→C | **yes** | any PWA | `shared` | Team members, points, joker usage, and `scoreHistory` (bounded scoring-undo audit log). Any PWA may emit; all others reconcile. **Version-guarded:** the server relays a snapshot only if its `rev` beats the cached one, and returns the cached value to a rejected writer (equal rev → first write wins). `null` resets the cache. |
+| `gamemaster-team-state-v2` | C→S→C | **yes** | any PWA | `shared` | Team members, points, joker usage, and `scoreHistory` (bounded scoring-undo audit log), for teams 1-4 (`team3`/`team4` present only in a 3-4 team show). Renamed from `gamemaster-team-state` when teams 3/4 were added, so a stale cached PWA fails to sync rather than silently dropping them. Any PWA may emit; all others reconcile. **Version-guarded:** the server relays a snapshot only if its `rev` beats the cached one, and returns the cached value to a rejected writer (equal rev → first write wins). `null` resets the cache. |
 | `gamemaster-question-tally` | C→S→C | **yes** | any PWA | `shared` | `{ [gameIndex]: { [questionKey]: { team1, team2 } } }` correct-answer tally, nested per question (`"0"` = example, `"none"` = no question attributable). Per-game totals are derived, not transmitted. See [specs/gamemaster-question-scores.md](../gamemaster-question-scores.md). |
 | `music-state` | C→S→C | **yes** | active show PWA | `shared` (show writes, gamemaster reads) | `{ isPlaying, currentSong, currentTime, duration, volume }` background-music snapshot. Active show emits (~1 Hz while playing); gamemaster reads it for its docked remote-control player. See [specs/gamemaster-music-control.md](../gamemaster-music-control.md). |
 | `music-command` | C→S→C | **no** (ephemeral) | gamemaster PWA | `shared` (gamemaster writes, show reads) | Background-music command (`toggle` / `skip` / `volume` / `seek`). GM emits; the active show applies it to its player. Timestamp-deduped. See [specs/gamemaster-music-control.md](../gamemaster-music-control.md). |
@@ -279,7 +279,7 @@ This is the raw material for the three `docs/replace-*.md` guides. For each zone
 **WebSocket channels (subscribe):**
 - `gamemaster-controls` — receive phase/gameIndex changes pushed by gamemaster
 - `gamemaster-command` — receive one-shot commands from gamemaster
-- `gamemaster-team-state` — receive team/joker state changes
+- `gamemaster-team-state-v2` — receive team/joker state changes
 - `gamemaster-question-tally` — receive per-question correct-answer tallies
 - `music-command` — receive background-music commands from gamemaster (active show applies them)
 - `show-presence` — receive active-show status
@@ -290,7 +290,7 @@ This is the raw material for the three `docs/replace-*.md` guides. For each zone
 **WebSocket channels (publish):**
 - `gamemaster-answer` — publish current answer state for gamemaster to see
 - `gamemaster-controls` — publish current controls/phase/gameIndex
-- `gamemaster-team-state` — publish local mutations (team points, joker used)
+- `gamemaster-team-state-v2` — publish local mutations (team points, joker used)
 - `gamemaster-question-tally` — publish local mutations
 - `music-state` — publish the active show's background-music snapshot for the gamemaster
 
@@ -310,14 +310,14 @@ This is the raw material for the three `docs/replace-*.md` guides. For each zone
 - `yt-download-status`, `audio-cover-status`
 - `caches-cleared`, `cache-started`, `cache-ready`
 - `content-changed` — re-fetch the theme live when theme-settings.json changes on disk
-- `gamemaster-team-state` — keep the Session tab's team/points fields on the LIVE
+- `gamemaster-team-state-v2` — keep the Session tab's team/points fields on the LIVE
   score while games run (it mounts the shared `GameProvider`). A replacement admin
   that only polls on mount will display a stale score, and any full-snapshot write
   it then makes reverts points on every other device.
 - `gamemaster-question-tally` — same provider, same reason
 
 **WebSocket channels (publish):**
-- `gamemaster-team-state` — operator edits to team members / names / points. Must
+- `gamemaster-team-state-v2` — operator edits to team members / names / points. Must
   carry a `rev` above the highest seen, and must merge onto the latest received
   state rather than a snapshot captured when the tab opened.
 
@@ -330,14 +330,14 @@ This is the raw material for the three `docs/replace-*.md` guides. For each zone
 **WebSocket channels (subscribe):**
 - `gamemaster-answer` — read current answer state from active show
 - `gamemaster-controls` — read current controls/phase/gameIndex
-- `gamemaster-team-state` — read current team/joker state
+- `gamemaster-team-state-v2` — read current team/joker state
 - `gamemaster-question-tally` — read current per-question tallies
 - `music-state` — read the active show's background-music snapshot (docked remote-control player)
 - `gm-presence` — receive own presence echo (broadcast to all)
 
 **WebSocket channels (publish):**
 - `gamemaster-command` — emit commands to the show
-- `gamemaster-team-state` — mutate team/joker state from gamemaster
+- `gamemaster-team-state-v2` — mutate team/joker state from gamemaster
 - `gamemaster-question-tally` — mutate tallies from gamemaster
 - `music-command` — emit background-music commands (`toggle`/`skip`/`volume`/`seek`) to the active show
 
@@ -381,7 +381,7 @@ Types marked with `🆕` have no TS definition today and will be introduced as J
 | `GamemasterControlsData` | ✅ [src/hooks/useGamemasterSync.ts](../../src/hooks/useGamemasterSync.ts) | `gamemaster-controls` channel |
 | `GamemasterCommand` | ✅ [src/hooks/useGamemasterSync.ts](../../src/hooks/useGamemasterSync.ts) | `gamemaster-command` channel |
 | `MusicPlayerState`, `MusicCommand` | ✅ [src/types/game.ts](../../src/types/game.ts) | `music-state` + `music-command` channels (via [src/hooks/useMusicSync.ts](../../src/hooks/useMusicSync.ts)) |
-| `TeamState`, `GlobalSettings`, `CurrentGame` | ✅ [src/types/game.ts](../../src/types/game.ts) | `gamemaster-team-state` channel + client state |
+| `TeamState`, `GlobalSettings`, `CurrentGame` | ✅ [src/types/game.ts](../../src/types/game.ts) | `gamemaster-team-state-v2` channel + client state |
 
 No 🆕 types required — everything is already typed in the TypeScript codebase.
 

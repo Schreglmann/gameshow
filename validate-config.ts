@@ -10,6 +10,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import type { GameType, AppConfig, GameConfig } from './src/types/config.js';
 import { JOKER_CATALOG } from './src/data/jokers.js';
+import { gameSupportsTeamCount, teamCountSupportLabel } from './src/data/gameTypeInfo.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -194,6 +195,23 @@ function validateConfig(): void {
       if (!show.name) {
         warnings.push(`Gameshow "${showKey}": missing "name" field`);
       }
+      // Team count (0-4). Absent means the historic 2. See specs/team-count.md.
+      let teamCount = 2;
+      if (show.teamCount !== undefined) {
+        if (typeof show.teamCount !== 'number' || !Number.isInteger(show.teamCount)
+          || show.teamCount < 0 || show.teamCount > 4) {
+          errors.push(`Gameshow "${showKey}": "teamCount" must be an integer between 0 and 4`);
+        } else {
+          teamCount = show.teamCount;
+        }
+      }
+      if (config.pointSystemEnabled === false && teamCount > 0) {
+        warnings.push(
+          `Gameshow "${showKey}": teamCount=${teamCount} is overridden by the global ` +
+          `"pointSystemEnabled": false — the show runs with no teams at all`,
+        );
+      }
+
       if (show.enabledJokers !== undefined) {
         if (!Array.isArray(show.enabledJokers)) {
           errors.push(`Gameshow "${showKey}": "enabledJokers" must be an array`);
@@ -229,7 +247,7 @@ function validateConfig(): void {
             return;
           }
 
-          const { errors: gameErrors, warnings: gameWarnings } = validateGame(gameRef, gameConfig, validPresetIds);
+          const { errors: gameErrors, warnings: gameWarnings } = validateGame(gameRef, gameConfig, validPresetIds, teamCount);
           errors.push(...gameErrors);
           warnings.push(...gameWarnings);
         });
@@ -261,7 +279,13 @@ function validateConfig(): void {
   process.exit(errors.length > 0 ? 1 : 0);
 }
 
-function validateGame(gameRef: string, game: GameConfig, validPresetIds: Set<string>): { errors: string[]; warnings: string[] } {
+function validateGame(
+  gameRef: string,
+  game: GameConfig,
+  validPresetIds: Set<string>,
+  /** Teams the referencing gameshow plays with (0-4). See specs/team-count.md. */
+  teamCount = 2,
+): { errors: string[]; warnings: string[] } {
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -380,7 +404,21 @@ function validateGame(gameRef: string, game: GameConfig, validPresetIds: Set<str
   // array, so it needs its own branch. Without one the whole file went
   // unchecked and a malformed pool white-screened the show at that round.
   if (game.type === 'quizjagd') {
-    errors.push(...validateQuizjagd(gameRef, gameRaw));
+    errors.push(...validateQuizjagd(gameRef, gameRaw, teamCount, warnings));
+  }
+
+  // A game whose mechanic can't be scored at this gameshow's team count still
+  // plays — the server serves it `pointSystemEnabled: false` — so this is a
+  // warning, never an error. See specs/team-count.md.
+  if (game.type && VALID_GAME_TYPES.includes(game.type) && teamCount > 0) {
+    const scoringMode = (game as { scoringMode?: string }).scoringMode;
+    if (!gameSupportsTeamCount(game.type, teamCount, scoringMode)) {
+      warnings.push(
+        `Game "${gameRef}": type "${game.type}"${scoringMode ? ` (scoringMode "${scoringMode}")` : ''} ` +
+        `cannot be scored with ${teamCount} team(s) — supports ${teamCountSupportLabel(game.type, scoringMode)}. ` +
+        `It will be played WITHOUT scoring.`,
+      );
+    }
   }
 
   if (game.type && typesNeedingQuestions.includes(game.type)) {
@@ -414,7 +452,12 @@ function validateGame(gameRef: string, game: GameConfig, validPresetIds: Set<str
  * and the game needs `questionsPerTeam × 2` of them. Falling short used to hard-
  * lock the show on the difficulty screen with every button greyed out.
  */
-export function validateQuizjagd(gameRef: string, gameRaw: Record<string, any>): string[] {
+export function validateQuizjagd(
+  gameRef: string,
+  gameRaw: Record<string, any>,
+  teamCount = 2,
+  supplyWarnings: string[] = [],
+): string[] {
   const errors: string[] = [];
   const qs = gameRaw.questions;
   if (!qs) {
@@ -467,13 +510,18 @@ export function validateQuizjagd(gameRef: string, gameRaw: Record<string, any>):
   }
 
   // Supply check. Each pool's first entry is the Beispielfrage and is not played.
+  // How many questions are needed depends on the TEAM COUNT of the gameshow being
+  // played (`questionsPerTeam × teamCount`), and one game file may be referenced
+  // by gameshows with different counts — so this is reported by the caller as a
+  // warning per referencing gameshow, not as a hard error here.
+  // See specs/team-count.md.
   const questionsPerTeam = typeof gameRaw.questionsPerTeam === 'number' ? gameRaw.questionsPerTeam : 10;
   const playable = Object.values(pools).reduce((sum, pool) => sum + Math.max(0, pool.length - 1), 0);
-  const needed = questionsPerTeam * 2;
-  if (playable < needed) {
-    errors.push(
+  const needed = questionsPerTeam * teamCount;
+  if (teamCount > 0 && playable < needed) {
+    supplyWarnings.push(
       `Game "${gameRef}": only ${playable} playable question(s) across all difficulty pools, ` +
-      `but questionsPerTeam=${questionsPerTeam} needs ${needed} ` +
+      `but questionsPerTeam=${questionsPerTeam} with ${teamCount} teams needs ${needed} ` +
       `(the first entry of each pool is its Beispielfrage and is not played)`,
     );
   }

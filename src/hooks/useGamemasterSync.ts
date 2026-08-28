@@ -202,8 +202,9 @@ export function useGamemasterControlsSync(
   timerKind?: GamemasterControlsData['timerKind'],
   timerMuted?: boolean,
   tallyReadOnly?: boolean,
+  pointsDisabled?: boolean,
 ): void {
-  const payload = controls ? { controls, phase, gameIndex, totalGames, hideCorrectTracker, tallyReadOnly, deadlineActive, timerActive, timerPaused, answerRevealed, scrollAnchors, fullscreenAvailable, fullscreenOpen, timerRemainingMs, timerTotalSeconds, timerKind, timerMuted } : null;
+  const payload = controls ? { controls, phase, gameIndex, totalGames, hideCorrectTracker, tallyReadOnly, pointsDisabled, deadlineActive, timerActive, timerPaused, answerRevealed, scrollAnchors, fullscreenAvailable, fullscreenOpen, timerRemainingMs, timerTotalSeconds, timerKind, timerMuted } : null;
   const serialized = JSON.stringify(payload);
   const latestRef = useRef<GamemasterControlsData | null>(payload);
   latestRef.current = payload;

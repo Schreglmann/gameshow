@@ -2,7 +2,8 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { isTouchDevice } from '@/utils/isTouchDevice';
 import type { GameshowConfig, GameFileSummary, GameType } from '@/types/config';
 import { fetchGames } from '@/services/backendApi';
-import { gameTypeMatchesQuery } from '@/data/gameTypeInfo';
+import { gameTypeMatchesQuery, gameSupportsTeamCount, teamCountSupportLabel } from '@/data/gameTypeInfo';
+import { DEFAULT_TEAM_COUNT, normalizeTeamCount } from '@/utils/teams';
 import { useDragReorder } from './useDragReorder';
 import { JOKER_CATALOG } from '@/data/jokers';
 import JokerIcon from '@/components/common/JokerIcon';
@@ -363,6 +364,15 @@ function ProvenanceList({ refValue, ctx, gameshows }: { refValue: string; ctx: O
   );
 }
 
+/**
+ * The effective scoring mode of one `gameOrder` entry. Single-instance files
+ * store it under `''`; multi-instance files under the instance key.
+ */
+function scoringModeOf(game: GameFileSummary | undefined, instance: string): string | undefined {
+  if (!game?.scoringModes) return undefined;
+  return game.isSingleInstance ? game.scoringModes[''] : game.scoringModes[instance];
+}
+
 function PlanningOverview({ games, ctx, gameshows, addedRefs, onAdd, showBadges }: PlanningProps) {
   const [search, setSearch] = useState('');
 
@@ -508,6 +518,25 @@ export default function GameshowEditor({ id, gameshow, allGameshows, activeGames
     return ai >= 0 && ci >= 0 && ci < ai;
   }, [allGameshows, id, activeGameshow]);
   const badgeCtx = isPlayedShow ? undefined : overlapCtx;
+
+  // Which gameOrder entries can't be scored at this gameshow's team count. They
+  // still play — the server serves them `pointSystemEnabled: false` — so this
+  // only drives the warnings. See specs/team-count.md.
+  const teamCount = normalizeTeamCount(gameshow.teamCount ?? DEFAULT_TEAM_COUNT);
+  const unscorableRefs = useMemo(() => {
+    const refs = new Set<string>();
+    // At 0 teams nothing scores anyway, so there is nothing to warn about.
+    if (teamCount === 0) return refs;
+    for (const ref of gameshow.gameOrder) {
+      const slash = ref.indexOf('/');
+      const name = slash >= 0 ? ref.slice(0, slash) : ref;
+      const inst = slash >= 0 ? ref.slice(slash + 1) : '';
+      const data = availableGames.find(g => g.fileName === name);
+      if (!data) continue; // a broken reference is a different problem
+      if (!gameSupportsTeamCount(data.type, teamCount, scoringModeOf(data, inst))) refs.add(ref);
+    }
+    return refs;
+  }, [gameshow.gameOrder, availableGames, teamCount]);
   const addedRefs = useMemo(() => new Set(gameshow.gameOrder), [gameshow.gameOrder]);
   const pickerGames = useMemo(() => availableGames.filter(g => {
     if (g.disabled) return false; // whole game disabled — never offered (specs/game-disable.md)
@@ -620,8 +649,27 @@ export default function GameshowEditor({ id, gameshow, allGameshows, activeGames
         &nbsp;·&nbsp; {totalQuestions} Frage{totalQuestions !== 1 ? 'n' : ''}
       </div>
 
-      {/* Players field */}
+      {/* Team count + players */}
       <div className="gs-players-row">
+        <label className="gs-players-label" htmlFor={`teams-${id}`}>Teams</label>
+        <select
+          id={`teams-${id}`}
+          className="be-select gs-team-count"
+          value={gameshow.teamCount ?? DEFAULT_TEAM_COUNT}
+          onChange={e => {
+            const next = Number(e.target.value);
+            // 2 is the default — store it as absent so untouched gameshows keep
+            // a clean config.json, exactly like scoringMode's "Standard".
+            onChange({ ...gameshow, teamCount: next === DEFAULT_TEAM_COUNT ? undefined : next as 0 | 1 | 3 | 4 });
+          }}
+          title="Mit wie vielen Teams diese Gameshow gespielt wird. 0 = ohne Wertung, 1 = Publikum gegen die Show (Punkte, aber keine Teameinteilung)."
+        >
+          <option value={0}>0 – ohne Wertung</option>
+          <option value={1}>1 – Publikum gegen die Show</option>
+          <option value={2}>2 Teams</option>
+          <option value={3}>3 Teams</option>
+          <option value={4}>4 Teams</option>
+        </select>
         <label className="gs-players-label">Spieler</label>
         <PlayersCombobox
           selected={currentPlayers}
@@ -652,6 +700,17 @@ export default function GameshowEditor({ id, gameshow, allGameshows, activeGames
       )}
 
       {/* Game order list */}
+      {unscorableRefs.size > 0 && (
+        <div className="be-conflict-banner" role="status" style={{ marginBottom: 10 }}>
+          <span className="be-conflict-banner-icon" aria-hidden="true">⚠</span>
+          <span className="be-conflict-banner-text">
+            {unscorableRefs.size === 1 ? '1 Spiel passt' : `${unscorableRefs.size} Spiele passen`} nicht zu{' '}
+            {teamCount} {teamCount === 1 ? 'Team' : 'Teams'} und {unscorableRefs.size === 1 ? 'wird' : 'werden'}{' '}
+            ohne Wertung gespielt.
+          </span>
+        </div>
+      )}
+
       {gameshow.gameOrder.length === 0 ? (
         <div className="be-empty" style={{ padding: '12px 0' }}>Keine Spiele — füge unten welche hinzu</div>
       ) : (
@@ -668,6 +727,10 @@ export default function GameshowEditor({ id, gameshow, allGameshows, activeGames
           // in this gameshow. Mark it so the operator can see it's disabled. See
           // specs/game-disable.md.
           const isRefDisabled = !!gameData && (gameData.disabled === true || (!isSingle && (gameData.disabledInstances ?? []).includes(instance)));
+          // This game's mechanic can't be scored at the configured team count, so
+          // it will play without scoring. It still runs — this is a heads-up, not
+          // an error. See specs/team-count.md.
+          const isUnscorable = unscorableRefs.has(ref);
 
           return (
             <div
@@ -712,6 +775,21 @@ export default function GameshowEditor({ id, gameshow, allGameshows, activeGames
                   gameData={gameData}
                   ctx={badgeCtx}
                 />
+              )}
+              {isUnscorable && (
+                <span
+                  title={`"${gameData?.title ?? gameName}" unterstützt ${teamCountSupportLabel(gameData!.type, scoringModeOf(gameData, instance))} — bei ${teamCount} Teams wird diese Runde ohne Wertung gespielt.`}
+                  style={{
+                    flexShrink: 0,
+                    fontSize: 'var(--admin-sz-11, 11px)',
+                    padding: '2px 7px',
+                    borderRadius: 6,
+                    whiteSpace: 'nowrap',
+                    background: 'rgba(var(--warning-rgb), 0.14)',
+                    color: 'var(--warning)',
+                    border: '1px solid rgba(var(--warning-rgb), 0.45)',
+                  }}
+                >Ohne Wertung</span>
               )}
               {isRefDisabled && (
                 <span

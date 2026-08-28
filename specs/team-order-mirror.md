@@ -15,9 +15,13 @@ A boolean `orderSwapped` (physical seating — is the frontend's left team `team
 Both come from one helper, [`src/utils/teamOrder.ts`](../src/utils/teamOrder.ts):
 
 ```ts
-teamDisplayOrder(swapped: boolean | undefined, mirror = false): [TeamKey, TeamKey]
-// leftIsTeam2 = mirror ? !swapped : Boolean(swapped)
+teamDisplayOrder(swapped: boolean | undefined, mirror = false, enabled = true, count = 2): TeamKey[]
+// reversed = mirror ? !swapped : Boolean(swapped)   → the list is reversed when true
 ```
+
+The helper returns the `count` active teams (0–4, see [team-count.md](team-count.md)); a swap
+REVERSES the whole list and the gamemaster mirror reverses it again. At two teams this is exactly the
+`[team2, team1]` / `[team1, team2]` behaviour described above.
 
 The GM mirror is **fixed** (not a separate toggle). The swap is operator-controlled.
 
@@ -28,20 +32,21 @@ The whole feature is **opt-in**: `GlobalSettings.teamMirrorEnabled` (from `confi
 ### State & sync
 - [x] `TeamState.orderSwapped?: boolean` added; defaults to `false` (undefined ⇒ not swapped).
 - [x] New reducer action `SET_TEAM_ORDER { swapped: boolean }` sets it and persists `localStorage['teamOrderSwapped']`.
-- [x] Restored from `localStorage` in `getInitialState`; persisted by `SET_TEAM_STATE`; rides the existing `gamemaster-team-state` WS broadcast so all devices (show/GM/admin) stay in sync — no new channel/endpoint.
-- [x] The inbound `gamemaster-team-state` handler **copies `orderSwapped` through**, always as an explicit boolean (`payload.orderSwapped === true`). It sanitizes the payload into a field whitelist, and a field missing from that whitelist is silently dropped — which breaks every GM surface that computes its own order (see below) while leaving the pre-ordered `gamemaster-controls` surfaces looking correct.
+- [x] Restored from `localStorage` in `getInitialState`; persisted by `SET_TEAM_STATE`; rides the existing `gamemaster-team-state-v2` WS broadcast so all devices (show/GM/admin) stay in sync — no new channel/endpoint.
+- [x] The inbound `gamemaster-team-state-v2` handler **copies `orderSwapped` through**, always as an explicit boolean (`payload.orderSwapped === true`). It sanitizes the payload into a field whitelist, and a field missing from that whitelist is silently dropped — which breaks every GM surface that computes its own order (see below) while leaving the pre-ordered `gamemaster-controls` surfaces looking correct.
 - [x] `SET_TEAM_STATE` **preserves** `orderSwapped` when the payload omits it — partial callers (the admin `SessionTab`) must not move the furniture as a side effect of saving names or points. Only an explicit boolean changes it; the inbound WS path always supplies one, so a remote `false` still clears a local swap.
 - [x] `RESET_POINTS` **keeps** `orderSwapped` (a score reset doesn't move furniture); `CLEAR_ALL` resets it to `false` and removes the key.
 
 ### Frontend order (mirror = false)
 - [x] `Header` shows the two team cells in `teamDisplayOrder(swapped)` order; the mirror-image cell layout (label/joker order, border side, tooltip direction) is **position-based** (left vs right), so a swapped team on the left still gets the left-cell layout. The team's data/jokers follow its identity.
+- [x] The mirror-image **cell layout** is unchanged at 3-4 teams: each side is a column of pills (`.team-header-stack`), and every pill in it still follows its side's layout — left cells `name | jokers`, right cells `jokers | name`. Only ONE team occupies each row, so no two joker grids are ever adjacent. See [header.md](header.md).
 - [x] `HomeScreen` `#teams` renders both team cards in swapped order.
 - [x] `AwardPoints` orders the two team cards in swapped order; each card keeps toggling its own team.
 - [x] `BetQuiz` (category host panel team-choice), `FinalQuiz` (bet inputs + judgment groups), `GuessingGame` (guess inputs + result rows) and `WerKenntMehr` (host-panel team-choice + summary buttons) render their two-team columns in swapped order.
 
 ### Gamemaster order (mirror = true)
 - [x] `GamemasterView` joker cards and `CorrectAnswersTracker` render the two teams in mirrored order.
-- [x] The GM **control panels** built by `BetQuiz` (`team-selection`), `FinalQuiz` (`betting-submit` inputs + the two judgment button-groups), `GuessingGame` (`guess-submit` inputs), `WerKenntMehr` (`round-winner` + `winner-selection` + `final-winner`) and `BaseGameWrapper` (the end-of-game `award-selection` button-group) list their team entries in mirrored order; non-team entries ("Unentschieden"/draw) stay last.
+- [x] The GM **control panels** built by `BetQuiz` (`team-selection`), `FinalQuiz` (`betting-submit` inputs + the two judgment button-groups), `GuessingGame` (`guess-submit` inputs), `WerKenntMehr` (`round-winner` + `winner-selection` + `final-winner`, all pure team toggles) and `BaseGameWrapper` (the end-of-game `award-selection` button-group) list their team entries in mirrored order; non-team entries ("Unentschieden"/draw) stay last.
 - [x] The gamemaster **team-setup controls** in `HomeScreen` mirror too: the "Teamname ändern" buttons (`edit-team1`/`edit-team2`) and, in manual mode, the per-team add-player inputs + tap-to-remove member lists.
 - [x] `Quizjagd` is unchanged (turn-based — one team at a time, no side-by-side layout).
 
@@ -59,7 +64,7 @@ The whole feature is **opt-in**: `GlobalSettings.teamMirrorEnabled` (from `confi
 - `AppState.teams.orderSwapped?: boolean`
 - Action: `SET_TEAM_ORDER { swapped: boolean }`
 - localStorage key: `teamOrderSwapped` (`"true"`/`"false"`)
-- WS: no new channel — carried in the existing `gamemaster-team-state` `TeamState` payload (added the optional field to `specs/api/asyncapi.yaml`)
+- WS: no new channel — carried in the existing `gamemaster-team-state-v2` `TeamState` payload (added the optional field to `specs/api/asyncapi.yaml`)
 - Config: `AppConfig.teamMirrorEnabled?: boolean` → `SettingsResponse.teamMirrorEnabled` (`GET /api/settings`, in `specs/api/openapi.yaml`) → `GlobalSettings.teamMirrorEnabled` (opt-in, default `false` via `=== true`)
 - Helper `teamDisplayOrder(swapped, mirror, enabled)` in [src/utils/teamOrder.ts](../src/utils/teamOrder.ts) — `enabled=false` forces `[team1, team2]`
 
@@ -72,4 +77,3 @@ The whole feature is **opt-in**: `GlobalSettings.teamMirrorEnabled` (from `confi
 - A separate toggle to disable the GM mirror (it is always on).
 - Reordering surfaces that show only one team at a time (`Quizjagd` turn label, `SummaryScreen` winner, `BetQuiz`/`FinalQuiz` single-team banners).
 - Persisting `orderSwapped` in `config.json` (it lives only in live team state, like team names).
-- More than two teams.

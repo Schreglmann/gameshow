@@ -4,6 +4,7 @@ import StatusMessage from './StatusMessage';
 import ConflictBanner from './ConflictBanner';
 import { useEditableConfig } from './useEditableConfig';
 import { GENERIC_JOKER_RULES } from '@/data/jokers';
+import { DEFAULT_TEAM_COUNT, normalizeTeamCount } from '@/utils/teams';
 
 export default function ConfigTab() {
   const { theme, setTheme, adminTheme, setAdminTheme } = useTheme();
@@ -11,6 +12,25 @@ export default function ConfigTab() {
 
   if (loading) return <div className="be-loading">Lade Config...</div>;
   if (!config) return <div className="be-loading">Config konnte nicht geladen werden.</div>;
+
+  // The active gameshow's team count OVERRIDES two of the global switches below,
+  // so they are shown at their effective value and locked rather than silently
+  // contradicting the running show:
+  //   0 teams → nothing can be scored, so the point system is off.
+  //   0-1 teams → there is no second team to split players between, so the
+  //               randomization is off (the server enforces both — see
+  //               `hasTeamSplit` in server/team-count.ts).
+  // The STORED values are deliberately left untouched: raising the count back to
+  // 2 must restore whatever the operator had chosen, not a value we overwrote.
+  // See specs/team-count.md.
+  const showTeamCount = normalizeTeamCount(
+    config.gameshows?.[config.activeGameshow]?.teamCount ?? DEFAULT_TEAM_COUNT,
+  );
+  const pointsLockedOff = showTeamCount === 0;
+  const randomizationLockedOff = showTeamCount <= 1 || config.pointSystemEnabled === false;
+  const lockNote = (why: string) => (
+    <span className="be-hint" style={{ marginLeft: 8, fontStyle: 'italic' }}>{why}</span>
+  );
 
   return (
     <div>
@@ -76,23 +96,31 @@ export default function ConfigTab() {
       <div className="backend-card">
         <h3>Globale Einstellungen</h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'flex-start' }}>
-          <label className="be-toggle">
+          <label className={`be-toggle${pointsLockedOff ? ' is-locked' : ''}`}>
             <input
               type="checkbox"
-              checked={config.pointSystemEnabled !== false}
+              checked={!pointsLockedOff && config.pointSystemEnabled !== false}
+              disabled={pointsLockedOff}
               onChange={e => setConfig({ ...config, pointSystemEnabled: e.target.checked })}
             />
             <span className="be-toggle-track" />
             <span className="be-toggle-label">Punktesystem aktiviert</span>
+            {pointsLockedOff && lockNote('— aus, weil die aktive Gameshow mit 0 Teams läuft')}
           </label>
-          <label className="be-toggle">
+          <label className={`be-toggle${randomizationLockedOff ? ' is-locked' : ''}`}>
             <input
               type="checkbox"
-              checked={config.teamRandomizationEnabled !== false}
+              checked={!randomizationLockedOff && config.teamRandomizationEnabled !== false}
+              disabled={randomizationLockedOff}
               onChange={e => setConfig({ ...config, teamRandomizationEnabled: e.target.checked })}
             />
             <span className="be-toggle-track" />
             <span className="be-toggle-label">Team-Randomisierung aktiviert</span>
+            {randomizationLockedOff && lockNote(
+              showTeamCount <= 1
+                ? `— aus, weil die aktive Gameshow mit ${showTeamCount} Team${showTeamCount === 1 ? '' : 's'} läuft`
+                : '— aus, weil das Punktesystem deaktiviert ist',
+            )}
           </label>
           <label
             className="be-toggle"

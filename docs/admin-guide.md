@@ -112,6 +112,27 @@ A **gameshow** is a named collection of games played in order.
 
 Each gameshow is shown as a collapsible card. On load, only the **active** gameshow is expanded; the rest are collapsed. Click a card's chevron (▶) to expand or collapse it. Activating a different gameshow while you're on the page doesn't change which cards are open.
 
+### Setting the number of teams
+
+Each gameshow card has a **Teams** dropdown next to the player roster: **0 – ohne Wertung**,
+**1 – Publikum gegen die Show**, or **2**–**4 Teams** (default 2). It decides how many teams the
+show is played with — the start screen, the header, the award screen and the gamemaster all follow it.
+
+The two lowest settings both run *without any team assignment* — there is no roster to fill in and
+no random split, the host just starts the show. They differ only in whether points exist:
+
+- **0 – ohne Wertung**: identical to switching the point system off. The show runs purely to present
+  the questions — no score anywhere, no jokers, no award screen at the end of a game.
+- **1 – Publikum gegen die Show**: points *are* awarded exactly as usual (one card on the award
+  screen, the running score in the header), but there is only one side — the audience plays against
+  the show rather than against another team. Rename that side in the admin if you'd rather it read
+  "Publikum" than "Team 1".
+
+Some games can only be scored with certain team counts (for example the Einsatzquiz in *transfer*
+mode needs exactly two). If your gameshow contains such a game, the card shows a warning and the
+affected rows get an **"Ohne Wertung"** badge. Those games still play in full — they simply don't
+award points, and the same warning appears on the show's start screen so the host knows in advance.
+
 ### Step 2 — Add a new gameshow
 
 Click **"+ Neue Gameshow"**. A new card appears, already expanded for editing.

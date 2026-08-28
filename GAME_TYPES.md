@@ -2,6 +2,24 @@
 
 This document provides detailed information about each game type available in the gameshow system.
 
+## Team count
+
+A gameshow runs with **0–4 teams** (`GameshowConfig.teamCount`, default 2). Every type can be
+*played* at any count; most can also be *scored* at any count. Three scoring modes are narrower,
+because their mechanic needs a specific number of opponents:
+
+| Type / mode | Scorable at | Why |
+|---|---|---|
+| `bet-quiz` · `transfer` | 0, 2 | Zero-sum: the bet moves off *the* opponent |
+| `wer-kennt-mehr` · `count-penalty` | 0, 2 | Winner `+n` / loser `−n` is head-to-head |
+| `wer-kennt-mehr` · `count` | 0, 2–4 | "Who named more" needs at least one opponent |
+| `guessing-game` · `auto` | 0, 2–4 | "Closest guess" needs at least one opponent |
+| everything else | 0–4 | — |
+
+At an unsupported count the game still plays in full — the server just serves it
+`pointSystemEnabled: false`, so it never reaches an award — and the operator is warned in the admin
+and on the show's start screen. See [specs/team-count.md](specs/team-count.md).
+
 ---
 
 ## 1. Simple Quiz (`simple-quiz`)
@@ -723,7 +741,7 @@ Both teams compete to name *more* of a given thing than the other team (e.g. "Ne
 
 Three **scoring modes** (config `scoringMode`, default `standard`):
 
-- **`standard`** (default — a **mid-show** game like any other): no points are awarded per round, but the gamemaster can record who named more each round ("Wer hatte mehr?" → Team 1 / Team 2 / Unentschieden); a running **round-win tally** is shown on the GM as scorekeeping guidance (the show frontend stays clean). After the last question a reward screen shows the tally and awards the **positional game points** (`currentIndex + 1`) to the team the host selects (both cards = a draw) and confirms — the shared award screen, rendered inside the game's card. Honors the **Aufholjoker** (×2 for the armed team), like every other positional-points game.
+- **`standard`** (default — a **mid-show** game like any other): no points are awarded per round, but the gamemaster can record who named more each round ("Wer hatte mehr?" → one toggle per team, several selected = a shared round); a running **round-win tally** is shown on the GM as scorekeeping guidance (the show frontend stays clean). After the last question a reward screen shows the tally and awards the **positional game points** (`currentIndex + 1`) to the team(s) the host selects (several cards = a draw) and confirms — the shared award screen, rendered inside the game's card. Honors the **Aufholjoker** (×2 for the armed team), like every other positional-points game.
 - **`count`** (a **final** game): the team that named more wins the round and is awarded **points equal to that count** — so a strong round can swing the global score hard. A tie (both teams selected) splits the points (`floor(count / 2)` each).
 - **`count-penalty`** (a **final** game, high stakes): like `count`, but the losing team also **loses** that count (floored at 0). A tie changes nothing.
 

@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 import multer from 'multer';
 import type { AppConfig, GameConfig, MultiInstanceGameFile, GameFileSummary, AssetCategory, RulesPreset } from '../src/types/config.js';
 import { resolveRulesPreset } from '../src/utils/rulesPreset.js';
+import { effectiveTeamCount, gameIsScorable, listIncompatibleGames, hasTeamSplit } from './team-count.js';
 import { isAudioFile, normalizeAudioFile } from './normalize.js';
 import { fetchAndSavePoster, videoFilenameToSlug, MOVIE_POSTERS_SUBDIR } from './movie-posters.js';
 import { fetchAndSaveAudioCover, audioCoverFilename, AUDIO_COVERS_SUBDIR, audioFilenameToSearchQuery, searchItunes, type CoverSearchResult } from './audio-covers.js';
@@ -3790,14 +3791,42 @@ app.get('/api/background-music', async (req, res) => {
   res.json(await listAudioFiles(musicDir));
 });
 
+/**
+ * Resolve the active gameOrder and report which entries cannot be scored at
+ * `teamCount`. They still play — `GET /api/game/:index` serves them
+ * `pointSystemEnabled: false` — so this only feeds the HomeScreen warning.
+ * The pure decision lives in server/team-count.ts. See specs/team-count.md.
+ */
+async function resolveIncompatibleGames(config: AppConfig, teamCount: number) {
+  if (teamCount === 0) return [];
+  const gameOrder = getActiveGameOrder(config);
+  const resolved = await Promise.all(gameOrder.map(async gameRef => {
+    const { gameName, instanceName } = parseGameRef(gameRef);
+    try {
+      const cfg = await loadGameConfig(gameName, instanceName, config.rulesPresets);
+      return { type: cfg.type, title: cfg.title || gameName, scoringMode: (cfg as { scoringMode?: string }).scoringMode };
+    } catch {
+      return null; // a broken reference is a different problem
+    }
+  }));
+  return listIncompatibleGames(resolved, teamCount);
+}
+
 app.get('/api/settings', async (_req, res) => {
   try {
     const config = await loadConfig();
     const activeShow = config.gameshows?.[config.activeGameshow];
-    const pointSystemEnabled = config.pointSystemEnabled !== false;
+    const teamCount = effectiveTeamCount(config);
+    // `pointSystemEnabled` is exactly "there is at least one team". Kept on the
+    // wire so a client that predates `teamCount` still behaves correctly.
+    const pointSystemEnabled = teamCount > 0;
     res.json({
       pointSystemEnabled,
-      teamRandomizationEnabled: config.teamRandomizationEnabled !== false,
+      teamCount,
+      incompatibleGames: await resolveIncompatibleGames(config, teamCount),
+      // Randomization splits players BETWEEN teams, so it needs at least two of
+      // them. Forced off at 0 and 1 teams rather than left to each client.
+      teamRandomizationEnabled: hasTeamSplit(teamCount) && config.teamRandomizationEnabled !== false,
       teamMirrorEnabled: config.teamMirrorEnabled === true,
       globalRules: config.globalRules || [
         'Es gibt mehrere Spiele.',
@@ -3937,11 +3966,19 @@ app.get('/api/game/:index', async (req, res) => {
       gameConfig = { ...gameConfig, questions: enrichedQuestions };
     }
 
+    // Scoring is enabled for THIS game only when the show has teams AND this
+    // game's mechanic can be scored with that many. An incompatible game still
+    // plays in full — every game type implements the scoring-off path — it just
+    // never reaches an award. This one expression is the whole "disable scoring
+    // for that game" feature. See specs/team-count.md.
     const baseResponse = {
       gameId: gameRef,
       currentIndex: index,
       totalGames: gameOrder.length,
-      pointSystemEnabled: config.pointSystemEnabled !== false,
+      pointSystemEnabled: gameIsScorable(
+        { type: gameConfig.type, scoringMode: (gameConfig as { scoringMode?: string }).scoringMode },
+        effectiveTeamCount(config),
+      ),
     };
 
     res.json({ ...baseResponse, config: gameConfig });
@@ -4021,6 +4058,20 @@ app.get('/api/backend/games', async (_req, res) => {
               .filter(k => k !== 'template' && (content.instances[k] as { disabled?: unknown })?.disabled === true);
             if (keys.length) disabledInstances = keys;
           }
+          // Effective scoring mode per instance (`''` for a single-instance file),
+          // so the admin can tell a team-count-restricted mode (`transfer`,
+          // `count-penalty`) from an unrestricted one without loading every game
+          // file. Instance value overrides the base. See specs/team-count.md.
+          let scoringModes: Record<string, string> | undefined;
+          const baseMode = typeof content.scoringMode === 'string' ? content.scoringMode : undefined;
+          if (isSingleInstance) {
+            if (baseMode) scoringModes = { '': baseMode };
+          } else if (content.instances) {
+            for (const [key, inst] of Object.entries(content.instances as Record<string, { scoringMode?: unknown }>)) {
+              const mode = typeof inst?.scoringMode === 'string' ? inst.scoringMode : baseMode;
+              if (mode) (scoringModes ??= {})[key] = mode;
+            }
+          }
           return {
             fileName,
             type: content.type,
@@ -4031,6 +4082,7 @@ app.get('/api/backend/games', async (_req, res) => {
             questionCounts,
             disabled,
             disabledInstances,
+            scoringModes,
           };
         } catch (err) {
           console.warn(`Skipping invalid game file "${file}": ${(err as Error).message}`);

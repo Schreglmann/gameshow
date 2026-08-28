@@ -313,6 +313,20 @@ main {
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
 }
 
+/* Team names are free text, so one can be far longer than its card — or a single
+   unbroken word with nowhere to wrap. The heading must never grow the card or
+   spill over its edge: it wraps inside the card, breaks a word that has no space
+   in it, and is cut off with an ellipsis after two lines. With 3-4 cards sharing
+   the row the clamp tightens to one line (below). */
+.team h2 {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+}
+
 /* House-color accents — themes may set --team1-house / --team2-house to tint
    the two team cards (e.g. Harry Potter: Gryffindor crimson + Slytherin green).
    Defaults to transparent, so other themes render the plain card. */
@@ -362,4 +376,276 @@ main {
 
 .swap-teams-button:active {
     transform: scale(0.92);
+}
+
+/* ── Team-count warning (HomeScreen pre-flight) ── */
+/* Reuses the cache pre-flight banner's amber glass card; only the per-item type
+   label needs its own treatment. See specs/team-count.md. */
+.team-count-warning__type {
+    color: rgba(var(--text-rgb), max(0.55, var(--text-fade-floor, 0)));
+}
+
+/* ── Solo header (1 team) ── */
+/* With one team the three-column split has nothing to balance: the score sat in
+   the left column and an invisible spacer held the right, which read as a
+   scoreboard missing its other half. There are only two things to show — the
+   score and the game counter — so they are centred as a PAIR, the spacer is
+   dropped, and the score is sized like the counter rather than like a team pill:
+   it is the show's only score, not one of several. See specs/team-count.md. */
+header[data-team-count="1"] {
+    justify-content: center;
+    column-gap: clamp(14px, 3.5vw, 56px);
+    flex-wrap: wrap;
+    row-gap: clamp(3px, 0.8vw, 6px);
+    /* A wrapped flex line reports its MIN-CONTENT width as scrollWidth, and the
+       nowrap score cannot shrink — so on a phone with jokers the header claimed
+       a wider scroll area than it draws and the whole page scrolled sideways.
+       `clip` (not `hidden`) with `overflow-y: visible` keeps the Führungswechsel
+       banner, absolutely positioned BELOW the header, from being cut off. */
+    overflow-x: clip;
+    overflow-y: visible;
+}
+
+header[data-team-count="1"] div:empty {
+    display: none;
+}
+
+header[data-team-count="1"] .team-header-cell,
+header[data-team-count="1"] #gameNumber {
+    flex: 0 1 auto;
+}
+
+/* Both items share one size so neither reads as subordinate. `header #gameNumber`
+   sets `flex-grow: 0.7` for the split layout; here nothing needs to grow. */
+header[data-team-count="1"] .team-header-cell,
+header[data-team-count="1"] #gameNumber {
+    font-size: clamp(1em, 2.2vw, 1.6em);
+}
+
+/* ── Multi-team header (3-4 teams) ── */
+/* The header keeps the two-team shape at every count — a side, the counter, a
+   side — because above two teams each SIDE becomes a column of team pills
+   (team 1 over team 2 on the left, team 3 over team 4 on the right) instead of
+   more pills competing for the one row. Everything else is the two-team styling,
+   just stepped down enough to fit two rows in one header. Header.tsx wraps each
+   side in `.team-header-stack`. See specs/team-count.md and specs/header.md. */
+header[data-team-count="3"] .team-header-stack,
+header[data-team-count="4"] .team-header-stack {
+    display: flex;
+    flex-direction: column;
+    /* The two stacks are the two equal flex columns the counter is centred
+       between — exactly the role the single team cell plays at two teams, so it
+       inherits that cell's `flex: 1` and outer margin. */
+    flex: 1;
+    gap: clamp(3px, 0.5vw, 6px);
+    /* Reset the generic `header div` pill chrome: the wrapper is scaffolding,
+       the pills inside it are what render as cards. */
+    background: none;
+    padding: 0;
+    margin: 0 clamp(4px, 1vw, 10px);
+    min-width: 0;
+}
+
+header[data-team-count="3"] .team-header-stack:hover,
+header[data-team-count="4"] .team-header-stack:hover {
+    box-shadow: none;
+}
+
+/* Two pills stacked where one used to sit, so each keeps its full width but
+   halves its height: tighter vertical padding, everything else as at two teams.
+   `width: 100%` makes both pills in a stack exactly as wide as each other, which
+   is what puts their joker separators — and therefore their labels — on a shared
+   vertical line instead of centring each row at its own width. */
+header[data-team-count="3"] .team-header-cell,
+header[data-team-count="4"] .team-header-cell {
+    padding: clamp(3px, 0.6vw, 8px) clamp(10px, 1.4vw, 18px);
+    margin: 0;
+    gap: clamp(6px, 1vw, 12px);
+    width: 100%;
+}
+
+/* Both rows of a stack read as one column rather than two independently centred
+   labels: each label butts up against the joker separator — flush right on the
+   left side, flush left on the right — so the names and points line up between
+   the two teams and the scores can be compared at a glance.
+   Inner, not outer: pushed to the header's outer edges the names sit too far
+   apart to read as a scoreboard, and the two-team header's own names are not at
+   the edge either (its `justify-content: center` cell keeps them inboard).
+   The label grows to fill whatever the joker grid leaves, and the cell's own
+   alignment covers the last game, where the jokers are gone and the label is the
+   cell's only child. Doubling up the cell class (`.team-header-cell.team-header-left`)
+   is what beats the generic centring rule in header-jokers.css — that file is
+   imported AFTER this one, so equal specificity would lose. */
+header[data-team-count="3"] .team-header-cell .team-header-label,
+header[data-team-count="4"] .team-header-cell .team-header-label {
+    flex: 1 1 auto;
+}
+
+header[data-team-count="3"] .team-header-cell.team-header-left,
+header[data-team-count="4"] .team-header-cell.team-header-left,
+header[data-team-count="3"] .team-header-cell.team-header-left .team-header-label,
+header[data-team-count="4"] .team-header-cell.team-header-left .team-header-label {
+    justify-content: flex-end;
+}
+
+header[data-team-count="3"] .team-header-cell.team-header-right,
+header[data-team-count="4"] .team-header-cell.team-header-right,
+header[data-team-count="3"] .team-header-cell.team-header-right .team-header-label,
+header[data-team-count="4"] .team-header-cell.team-header-right .team-header-label {
+    justify-content: flex-start;
+}
+
+/* One step down in type size buys the second row back. Overrides the generic
+   `header div` rule, which is why it targets the same `div` specificity. */
+header[data-team-count="3"] div,
+header[data-team-count="4"] div {
+    font-size: clamp(0.9em, 1.85vw, 1.4em);
+}
+
+/* The counter has a whole column to itself between the two stacks and only ever
+   holds "Spiel N von M", so it takes the space rather than matching the pills:
+   it is the one thing in the header a player reads from the back of the room. */
+header[data-team-count="3"] #gameNumber,
+header[data-team-count="4"] #gameNumber {
+    font-size: clamp(1.2em, 2.8vw, 2.1em);
+}
+
+/* The joker grid drops from two rows to ONE (`grid-auto-flow: column` with no
+   explicit template puts every icon on a single track), and the icons step down
+   with it. That is what keeps a stacked pill roughly half the height of a
+   two-team one — with the 3×2 grid intact, two stacked pills would have made the
+   header twice as tall as the layout it replaces. */
+header[data-team-count="3"] .header-jokers,
+header[data-team-count="4"] .header-jokers {
+    grid-auto-flow: column;
+    grid-template-columns: none;
+    gap: clamp(2px, 0.3vw, 4px);
+}
+
+header[data-team-count="3"] .header-joker,
+header[data-team-count="4"] .header-joker {
+    width: clamp(24px, 2vw, 34px);
+    height: clamp(24px, 2vw, 34px);
+}
+
+/* The setup screen's team cards wrap into a grid once there are more than two,
+   so four rosters don't squeeze into four narrow columns on a laptop. */
+#teams[data-team-count="3"],
+#teams[data-team-count="4"] {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+    gap: clamp(12px, 2vw, 28px);
+}
+
+/* Three or four cards share the row, so the team heading has to fit a narrower
+   card. Without the smaller font the wider digits ("Team 2/3/4") wrapped onto a
+   second line while "Team 1" did not, leaving the row visibly ragged — so the
+   heading is clamped to a single ellipsised line instead of the two it gets at
+   one or two cards, and every card in the row stays the same height. */
+#teams[data-team-count="3"] .team h2,
+#teams[data-team-count="4"] .team h2 {
+    font-size: clamp(1.3rem, 2.4vw, 2rem);
+    -webkit-line-clamp: 1;
+    line-clamp: 1;
+}
+
+#teams[data-team-count="3"] .team,
+#teams[data-team-count="4"] .team {
+    padding: clamp(14px, 2vw, 26px);
+}
+
+/* Below a tablet the two side-by-side stacks get too narrow for a name plus a
+   joker row, so the header wraps into a single full-width column: the counter
+   on top, then all the pills under it. */
+@media (max-width: 768px) {
+    header[data-team-count="3"],
+    header[data-team-count="4"] {
+        flex-wrap: wrap;
+        row-gap: clamp(3px, 0.8vw, 6px);
+        font-size: clamp(0.72em, 3vw, 1em);
+        /* A wrapped flex line reports its MIN-CONTENT width as scrollWidth, and
+           the nowrap ": N Punkte" score cannot shrink — so the header claimed a
+           wider scroll area than it draws and the whole page became scrollable
+           sideways. Nothing here is ever scrolled horizontally, so clip that
+           axis. `clip` (not `hidden`) with `overflow-y: visible` keeps the
+           Führungswechsel banner, absolutely positioned BELOW the header, from
+           being cut off. */
+        overflow-x: clip;
+        overflow-y: visible;
+        /* Four stacked rows plus the counter is a tall header on a 667px-high
+           phone, so the outer padding tightens along with the rows below. */
+        padding-block: clamp(6px, 1.2vw, 10px);
+    }
+
+    /* A full-width caption above the pills now, not a column beside them — so it
+       drops the glass pill and its padding. Left as a card it read as an extra
+       team-sized box and pushed the header needlessly tall. */
+    header[data-team-count="3"] #gameNumber,
+    header[data-team-count="4"] #gameNumber {
+        order: -1;
+        flex-basis: 100%;
+        background: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    header[data-team-count="3"] .team-header-stack,
+    header[data-team-count="4"] .team-header-stack {
+        flex-basis: 100%;
+        margin: 0;
+        gap: clamp(3px, 0.8vw, 6px);
+    }
+
+    /* One pill per row now, so the label sits left and the joker strip right —
+       and both sides read the same way, since the mirror only makes sense while
+       the two sides face each other across the counter. */
+    header[data-team-count="3"] .team-header-right .team-header-label,
+    header[data-team-count="4"] .team-header-right .team-header-label {
+        order: -1;
+    }
+
+    header[data-team-count="3"] .header-jokers-left,
+    header[data-team-count="4"] .header-jokers-left,
+    header[data-team-count="3"] .header-jokers-right,
+    header[data-team-count="4"] .header-jokers-right {
+        border-right: none;
+        padding-right: 0;
+        border-left: 1px solid rgba(var(--text-rgb), 0.22);
+        padding-left: clamp(8px, 2vw, 12px);
+        border-top: none;
+        width: auto;
+    }
+
+    /* Cancel the generic mobile rule that stacks label over jokers and stretches
+       the icons — a full-width pill has room for the row layout. */
+    header[data-team-count="3"] .team-header-cell,
+    header[data-team-count="3"] .team-header-cell:has(.header-jokers),
+    header[data-team-count="4"] .team-header-cell,
+    header[data-team-count="4"] .team-header-cell:has(.header-jokers) {
+        flex-direction: row;
+        justify-content: center;
+        gap: clamp(6px, 2vw, 12px);
+        padding: clamp(2px, 0.5vw, 4px) clamp(10px, 2vw, 14px);
+    }
+
+    header[data-team-count="3"] .header-joker,
+    header[data-team-count="4"] .header-joker {
+        flex: 0 0 auto;
+        width: clamp(20px, 5vw, 24px);
+        height: clamp(20px, 5vw, 24px);
+        max-width: none;
+    }
+}
+
+/* One award card per team — a fluid grid so 1, 3 and 4 cards all sit sensibly
+   and collapse to a single column on a phone. */
+.award-teams[data-team-count="1"] {
+    grid-template-columns: minmax(0, 320px);
+    justify-content: center;
+}
+
+.award-teams[data-team-count="3"],
+.award-teams[data-team-count="4"] {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
 }

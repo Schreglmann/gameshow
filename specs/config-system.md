@@ -40,3 +40,9 @@ All gameshow content — which games run, in what order, with what questions —
 - In-browser config editing
 - Multiple simultaneous active gameshows
 - Runtime config hot-reload without a page reload
+
+## Team count per gameshow
+`GameshowConfig.teamCount?: 0 | 1 | 2 | 3 | 4` sets how many teams that gameshow is played with.
+Omitted means 2 (the historic default), so every pre-existing gameshow is unchanged; `0` means no
+teams at all. The global `pointSystemEnabled: false` still overrides every gameshow to 0.
+Edited in the admin Gameshows tab. See [team-count.md](team-count.md).

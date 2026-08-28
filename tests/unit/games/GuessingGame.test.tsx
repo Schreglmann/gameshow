@@ -326,7 +326,7 @@ describe('GuessingGame automatic scoring', () => {
     // The verdicts are filed in the shared per-question tally (game 0, questions 1 + 2),
     // which is what the gamemaster's score boxes and "Wertung pro Frage" read.
     expect(readTally()).toEqual({
-      '0': { '1': { team1: 1, team2: 0 }, '2': { team1: 1, team2: 0 } },
+      '0': { '1': { team1: 1 }, '2': { team1: 1 } },
     });
 
     // No winner selection — a single confirm books the points and advances.
@@ -405,15 +405,15 @@ describe('GuessingGame automatic scoring', () => {
     await user.type(screen.getByLabelText('Tipp Team 2:'), '150');
     await user.click(screen.getByText('Tipp Abgeben'));
     await waitFor(() => expect(screen.getByText('Nächste Frage')).toBeInTheDocument());
-    expect(readTally()['0']['1']).toEqual({ team1: 1, team2: 0 });
+    expect(readTally()['0']['1']).toEqual({ team1: 1 });
   });
 
   it('clears this game\'s tally when the host starts it from the title screen', async () => {
     const user = userEvent.setup();
     // A full standing from an earlier run of this game position.
     localStorage.setItem('correctAnswersByQuestion', JSON.stringify({
-      '0': { '1': { team1: 1, team2: 0 }, '2': { team1: 0, team2: 1 } },
-      '4': { '1': { team1: 1, team2: 0 } },
+      '0': { '1': { team1: 1 }, '2': { team1: 0, team2: 1 } },
+      '4': { '1': { team1: 1 } },
     }));
     renderGame(autoConfig([
       { question: 'Example', answer: 50 },
@@ -425,7 +425,7 @@ describe('GuessingGame automatic scoring', () => {
 
     // Game 0 starts from a clean slate; another game's record is left alone.
     expect(readTally()['0']).toBeUndefined();
-    expect(readTally()['4']).toEqual({ '1': { team1: 1, team2: 0 } });
+    expect(readTally()['4']).toEqual({ '1': { team1: 1 } });
   });
 
   it('ignores tally entries for questions this playthrough never reached', async () => {
@@ -444,7 +444,7 @@ describe('GuessingGame automatic scoring', () => {
     // would turn this into a 1:1 draw.
     act(() => {
       __emitChannelForTests('gamemaster-question-tally', {
-        '0': { '1': { team1: 1, team2: 0 }, '2': { team1: 0, team2: 1 } },
+        '0': { '1': { team1: 1 }, '2': { team1: 0, team2: 1 } },
       });
     });
 

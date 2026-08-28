@@ -105,3 +105,11 @@ Both teams submit a numeric guess; the team whose answer is closest to the corre
 
 ## Known limitations
 - The points a previous run of the same game already awarded stay in the team totals — starting the game again resets its per-question tally, not the score. Undo them in "Letzte Wertungen" or reset the show's points in admin
+
+## Team count
+- `standard` — **1–4 teams**: one guess input per team, the host picks the winner.
+- `auto` — **2–4 teams**: the verdict is the smallest absolute difference, and **every** team tied at
+  that minimum wins the question. "Closest guess" needs an opponent, so a solo show falls back to
+  playing without scoring.
+
+See [../team-count.md](../team-count.md).
