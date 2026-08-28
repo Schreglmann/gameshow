@@ -140,7 +140,7 @@ No new chrome: the status goes in the **existing bottom-right toast box**.
 `be-toast` markup, shared with the Theme Showcase so the showcase cannot drift);
 [SaveStatusIndicator](../src/components/backend/SaveStatusIndicator.tsx) subscribes to the queue and
 owns the 2.5 s "Gespeichert" flash, the 500 ms announce delay and the retry countdown. It is mounted
-once as a sibling of `<UploadOverlay />` in `AdminScreen`, outside every pane, and is
+once as a sibling of `<ProgressOverlay />` in `AdminScreen`, outside every pane, and is
 `role="status" aria-live="polite"`.
 
 Both it and the per-pane [StatusMessage](../src/components/backend/StatusMessage.tsx) portal into one

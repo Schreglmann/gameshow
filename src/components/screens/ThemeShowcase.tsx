@@ -1742,33 +1742,165 @@ function AdminShowcase() {
         </div>
       </Section>
 
-      <Section title="Progress overlays (minimized)">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-start' }}>
+      <Section title="Progress overlays">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'flex-start' }}>
+          {/* One job — the row opens expanded, no group header */}
+          <div className="upload-progress-box progress-group">
+            <div className="progress-group-rows">
+              <div className="progress-row">
+                <div className="progress-row-head">
+                  <button type="button" className="progress-row-toggle">
+                    <span className="progress-row-chevron">▾</span>
+                    <span className="progress-row-label">YouTube: Interstellar — Main Theme</span>
+                    <span className="progress-row-detail">42 %</span>
+                  </button>
+                  <button type="button" className="upload-progress-minimize-btn">▬</button>
+                  <button type="button" className="progress-row-cancel">✕</button>
+                </div>
+                <div className="upload-progress-track progress-row-track">
+                  <div className="upload-progress-fill" style={{ width: '42%' }} />
+                </div>
+                <div className="progress-row-detail-block">
+                  <div className="upload-progress-phase">Audio wird von YouTube heruntergeladen…</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Three jobs — grouped, one row expanded, one failed */}
+          <div className="upload-progress-box progress-group">
+            <div className="progress-group-header">
+              <div className="progress-group-header-row">
+                <span className="progress-group-title">Aktivität · 3</span>
+                <span className="progress-group-summary">2 aktiv · 58 %</span>
+                <button type="button" className="upload-progress-minimize-btn">▬</button>
+              </div>
+              <div className="upload-progress-track">
+                <div className="upload-progress-fill" style={{ width: '58%' }} />
+              </div>
+            </div>
+            <div className="progress-group-rows">
+              <div className="progress-row">
+                <div className="progress-row-head">
+                  <button type="button" className="progress-row-toggle">
+                    <span className="progress-row-chevron">▸</span>
+                    <span className="progress-row-label">Upload: soundtrack-collection-2024.mp3</span>
+                    <span className="progress-row-detail">3 / 12</span>
+                  </button>
+                  <button type="button" className="progress-row-cancel">✕</button>
+                </div>
+                <div className="upload-progress-track progress-row-track">
+                  <div className="upload-progress-fill" style={{ width: '25%' }} />
+                </div>
+              </div>
+              <div className="progress-row">
+                <div className="progress-row-head">
+                  <button type="button" className="progress-row-toggle">
+                    <span className="progress-row-chevron">▾</span>
+                    <span className="progress-row-label">YouTube Playlist: Best of 80s</span>
+                    <span className="progress-row-detail">4 / 12</span>
+                  </button>
+                  <button type="button" className="progress-row-cancel">✕</button>
+                </div>
+                <div className="upload-progress-track progress-row-track">
+                  <div className="upload-progress-fill upload-progress-processing" style={{ width: '33%' }} />
+                </div>
+                <div className="progress-row-detail-block">
+                  <div className="progress-track-list">
+                    {[
+                      { n: '5', name: 'Take On Me — a-ha', w: '78%', cls: '' },
+                      { n: '6', name: 'Africa — Toto', w: '40%', cls: '' },
+                      { n: '~', name: 'Sweet Dreams — Eurythmics', w: '100%', cls: ' upload-progress-processing' },
+                    ].map((t, i) => (
+                      <div key={i} className="progress-track-row">
+                        <div className="progress-track-index">{t.n}</div>
+                        <div className="progress-track-body">
+                          <div className="progress-track-name">{t.name}</div>
+                          <div className="upload-progress-track progress-track-bar">
+                            <div className={`upload-progress-fill${t.cls}`} style={{ width: t.w }} />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="progress-row">
+                <div className="progress-row-head">
+                  <button type="button" className="progress-row-toggle">
+                    <span className="progress-row-chevron">▾</span>
+                    <span className="progress-row-label">YouTube: Ein privates Video</span>
+                    <span className="progress-row-detail">✕</span>
+                  </button>
+                  <button type="button" className="progress-row-cancel">✕</button>
+                </div>
+                <div className="upload-progress-track progress-row-track">
+                  <div className="upload-progress-fill upload-progress-error" style={{ width: '100%' }} />
+                </div>
+                <div className="progress-row-detail-block">
+                  <div className="progress-row-note progress-row-note--error">Video ist privat oder wurde entfernt</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Eight jobs — the row list scrolls instead of growing the panel */}
+          <div className="upload-progress-box progress-group">
+            <div className="progress-group-header">
+              <div className="progress-group-header-row">
+                <span className="progress-group-title">Aktivität · 8</span>
+                <span className="progress-group-summary">7 aktiv · 46 %</span>
+                <button type="button" className="upload-progress-minimize-btn">▬</button>
+              </div>
+              <div className="upload-progress-track">
+                <div className="upload-progress-fill" style={{ width: '46%' }} />
+              </div>
+            </div>
+            <div className="progress-group-rows">
+              {[
+                { name: 'Arrival — On the Nature of Daylight', d: '✓', w: '100%', cls: ' upload-progress-done' },
+                { name: 'Interstellar — Main Theme', d: '42 %', w: '42%', cls: '' },
+                { name: 'Dune — Paul’s Dream', d: '71 %', w: '71%', cls: '' },
+                { name: 'Blade Runner 2049 — Sea Wall', d: '', w: '100%', cls: ' upload-progress-resolving' },
+                { name: 'Inception — Time', d: '18 %', w: '18%', cls: '' },
+                { name: 'The Grand Budapest Hotel — Mr. Moustafa', d: '55 %', w: '55%', cls: '' },
+                { name: 'Gladiator — Now We Are Free', d: '', w: '100%', cls: ' upload-progress-processing' },
+                { name: 'Amélie — Comptine d’un autre été', d: '9 %', w: '9%', cls: '' },
+              ].map((r, i) => (
+                <div key={i} className="progress-row">
+                  <div className="progress-row-head">
+                    <button type="button" className="progress-row-toggle">
+                      <span className="progress-row-chevron">▸</span>
+                      <span className="progress-row-label">YouTube: {r.name}</span>
+                      <span className="progress-row-detail">{r.d}</span>
+                    </button>
+                    <button type="button" className="progress-row-cancel">✕</button>
+                  </div>
+                  <div className="upload-progress-track progress-row-track">
+                    <div className={`upload-progress-fill${r.cls}`} style={{ width: r.w }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Whole group collapsed */}
           <div className="upload-progress-minimized" style={{ pointerEvents: 'none' }}>
             <div className="upload-progress-minimized-row">
-              <span className="upload-progress-minimized-label">YouTube Playlist: Demo Songs</span>
-              <span className="upload-progress-minimized-detail">4 / 12</span>
+              <span className="upload-progress-minimized-label">Aktivität</span>
+              <span className="upload-progress-minimized-detail">3 aktiv · 58 %</span>
             </div>
             <div className="upload-progress-track">
-              <div className="upload-progress-fill" style={{ width: '33%' }} />
+              <div className="upload-progress-fill" style={{ width: '58%' }} />
             </div>
           </div>
           <div className="upload-progress-minimized" style={{ pointerEvents: 'none' }}>
             <div className="upload-progress-minimized-row">
-              <span className="upload-progress-minimized-label">Upload: song-42.mp3</span>
-              <span className="upload-progress-minimized-detail">12 / 12</span>
+              <span className="upload-progress-minimized-label">Aktivität</span>
+              <span className="upload-progress-minimized-detail">✓ 4 fertig</span>
             </div>
             <div className="upload-progress-track">
               <div className="upload-progress-fill upload-progress-done" style={{ width: '100%' }} />
-            </div>
-          </div>
-          <div className="upload-progress-minimized" style={{ pointerEvents: 'none' }}>
-            <div className="upload-progress-minimized-row">
-              <span className="upload-progress-minimized-label">Audio Covers</span>
-              <span className="upload-progress-minimized-detail">✕</span>
-            </div>
-            <div className="upload-progress-track">
-              <div className="upload-progress-fill upload-progress-error" style={{ width: '60%' }} />
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
