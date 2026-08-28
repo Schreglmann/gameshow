@@ -9,6 +9,7 @@
 
 import { readFile, writeFile, rename } from 'fs/promises';
 import type { AppConfig } from '../src/types/config.js';
+import { DEFAULT_POINT_MODE, pointModeRule } from '../src/utils/pointMode.js';
 
 /**
  * git-crypt encrypts files with a magic header of `\0GITCRYPT\0` followed by
@@ -37,7 +38,9 @@ export function buildDefaultConfig(): AppConfig {
     globalRules: [
       'Es gibt mehrere Spiele.',
       'Bei jedem Spiel wird am Ende entschieden welches Team das Spiel gewonnen hat.',
-      'Das erste Spiel ist 1 Punkt wert, das zweite 2 Punkte, etc.',
+      // A clean install has no gameshow yet, so it scores positionally. Taken from
+      // the helper so this line cannot drift from the one /api/settings serves.
+      pointModeRule(DEFAULT_POINT_MODE),
       'Das Team mit den meisten Punkten gewinnt am Ende.',
     ],
     rulesPresets: [

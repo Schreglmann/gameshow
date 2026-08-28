@@ -36,7 +36,6 @@ export default function CityCompass(props: GameComponentProps) {
       rules={config.rules || ['Errate die Stadt, die im Zentrum des Kompass liegt.']}
       totalQuestions={totalQuestions}
       pointSystemEnabled={props.pointSystemEnabled}
-      pointValue={props.currentIndex + 1}
       currentIndex={props.currentIndex}
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}

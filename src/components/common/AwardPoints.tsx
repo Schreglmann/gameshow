@@ -75,6 +75,12 @@ interface AwardPointsProps {
    *  own card (WerKenntMehr's summary), where a nested `#awardPointsContainer`
    *  would stack a second surface with the wrong text colour. */
   inline?: boolean;
+  /** The `per-correct-answer` point mode: the tally already decided the outcome, so the
+   *  cards state it instead of asking. They become inert (no toggle, no `aria-pressed`),
+   *  every card shows its points right away, and confirm is never disabled — an empty
+   *  tally is a valid result the host must be able to advance past.
+   *  See specs/point-system.md. */
+  readOnly?: boolean;
 }
 
 /**
@@ -84,7 +90,7 @@ interface AwardPointsProps {
  * until a preselection (an auto verdict, the gamemaster's tally) fills it in.
  * See specs/point-system.md and specs/team-count.md.
  */
-export default function AwardPoints({ selected, points, onToggle, onConfirm, counts, hint, note, inline }: AwardPointsProps) {
+export default function AwardPoints({ selected, points, onToggle, onConfirm, counts, hint, note, inline, readOnly }: AwardPointsProps) {
   const { state } = useGameContext();
   const armed = state.teams.doubleNextGame;
   // The armed team's positional points double for this award (Aufholjoker).
@@ -105,7 +111,11 @@ export default function AwardPoints({ selected, points, onToggle, onConfirm, cou
   // render it, and a nameless card must read sensibly there too.
   // See specs/team-count.md.
   const named = hasNamedTeams(state.settings.teamCount);
-  const defaultHint = picked.length === 0
+  const defaultHint = readOnly
+    // Nothing was chosen here — the gamemaster's tally decided it. State the rule
+    // rather than a winner: in this mode every team is paid its own count.
+    ? 'Jede richtige Antwort zählt 1 Punkt'
+    : picked.length === 0
     // With a single team there is nothing to choose BETWEEN — the question is
     // whether the round was won at all.
     ? (order.length === 1
@@ -124,14 +134,8 @@ export default function AwardPoints({ selected, points, onToggle, onConfirm, cou
         {order.map(team => {
           const isSelected = selected[team] === true;
           const pts = points[team] ?? 0;
-          return (
-            <button
-              type="button"
-              key={team}
-              className={`award-team-card${isSelected ? ' is-selected' : ''}`}
-              aria-pressed={isSelected}
-              onClick={() => onToggle(team)}
-            >
+          const content = (
+            <>
               {/* Below two teams there is no name to put here — the card IS the
                   round's points. Its value carries the whole meaning, so it is
                   shown from the start rather than only once something is picked
@@ -142,20 +146,40 @@ export default function AwardPoints({ selected, points, onToggle, onConfirm, cou
                   {badge(team)}
                 </span>
               )}
-              {/* No points before anything is picked — until then nobody knows who gets what. */}
-              {(picked.length > 0 || !named) && (
+              {/* No points before anything is picked — until then nobody knows who
+                  gets what. Read-only is the exception: nothing is being picked, so
+                  the numbers ARE the screen. */}
+              {(picked.length > 0 || !named || readOnly) && (
                 <span className="award-team-card-points">
-                  {isSelected && pts > 0 ? `+${pts} ${pts === 1 ? 'Punkt' : 'Punkte'}` : '0 Punkte'}
+                  {pts > 0 && (isSelected || readOnly) ? `+${pts} ${pts === 1 ? 'Punkt' : 'Punkte'}` : '0 Punkte'}
                 </span>
               )}
               {counts && <span className="award-team-card-count">{counts[team] ?? ''}</span>}
-            </button>
+            </>
           );
+          const className = `award-team-card${isSelected ? ' is-selected' : ''}${readOnly ? ' is-readonly' : ''}`;
+          // A read-only card is a statement, not a control: no button element, so it
+          // is neither focusable nor announced as pressable.
+          return readOnly
+            ? <div key={team} className={className}>{content}</div>
+            : (
+              <button
+                type="button"
+                key={team}
+                className={className}
+                aria-pressed={isSelected}
+                onClick={() => onToggle(team)}
+              >
+                {content}
+              </button>
+            );
         })}
       </div>
       <button
         className="quiz-button award-confirm"
-        disabled={picked.length === 0}
+        // Never blocked in read-only: an empty tally means nobody scored, which the
+        // host still has to be able to confirm and move past.
+        disabled={!readOnly && picked.length === 0}
         onClick={onConfirm}
       >
         Punkte vergeben &amp; weiter

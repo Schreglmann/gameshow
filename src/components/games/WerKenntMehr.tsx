@@ -9,6 +9,7 @@ import { teamDisplayOrder } from '@/utils/teamOrder';
 import { useQuestionOrder, type QuestionOrderHandle } from '@/hooks/useQuestionOrder';
 import { useLiveQuestionIndex } from '@/hooks/useLiveQuestionIndex';
 import { EXAMPLE_SLOT_ID } from '@/utils/questionOrder';
+import { gamePointValue } from '@/utils/pointMode';
 import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
 import BaseGameWrapper from './BaseGameWrapper';
 import QuizQuestionView from './QuizQuestionView';
@@ -22,6 +23,12 @@ export default function WerKenntMehr(props: GameComponentProps) {
   const { questions, order } = useQuestionOrder(config.questions, config.randomizeQuestions, config.questionLimit, props.gameId);
   const totalQuestions = questions.length > 0 ? questions.length - 1 : 0;
   const scoringMode = config.scoringMode ?? 'standard';
+  // Standard mode awards the game's points on its own summary screen, so it has to
+  // follow the gameshow's point mode itself. `per-correct-answer` never applies here:
+  // the game hides the correct-answer tracker, so there is no tally to pay out — it
+  // falls back to the positional value (see specs/point-system.md).
+  const { state } = useGameContext();
+  const pointValue = gamePointValue(state.settings.pointMode, props.currentIndex);
 
   return (
     <BaseGameWrapper
@@ -29,8 +36,9 @@ export default function WerKenntMehr(props: GameComponentProps) {
       rules={config.rules || [
         'Beide Teams nennen nacheinander so viele passende Begriffe wie möglich.',
         'Das Team mit den meisten richtigen Nennungen gewinnt die Runde.',
-        // 'standard' (default) scores like every other game (positional points), so
-        // it carries no count-based scoring line. 'count' / 'count-penalty' do.
+        // 'standard' (default) scores like every other game (whatever the gameshow's
+        // point mode says), so it carries no count-based scoring line — 'count' /
+        // 'count-penalty' do, because they define their own point values.
         ...(scoringMode === 'count'
           ? [
               'Der Gewinner erhält so viele Punkte, wie es Begriffe genannt hat.',
@@ -46,7 +54,6 @@ export default function WerKenntMehr(props: GameComponentProps) {
       ]}
       totalQuestions={totalQuestions}
       pointSystemEnabled={props.pointSystemEnabled}
-      pointValue={props.currentIndex + 1}
       currentIndex={props.currentIndex}
       requiresPoints
       skipPointsScreen
@@ -65,7 +72,7 @@ export default function WerKenntMehr(props: GameComponentProps) {
           gameTitle={config.title}
           scoringMode={scoringMode}
           pointSystemEnabled={props.pointSystemEnabled}
-          pointValue={props.currentIndex + 1}
+          pointValue={pointValue}
           onGameComplete={onGameComplete}
           onAwardPoints={props.onAwardPoints}
           setNavHandler={setNavHandler}
@@ -97,7 +104,8 @@ interface InnerProps {
   /** When false the point system is off: all scoring UI is hidden and the host
    *  advances through every round with plain nav-forward, never awarding points. */
   pointSystemEnabled: boolean;
-  /** Positional game points (currentIndex + 1) awarded to the winner in standard mode. */
+  /** The game's points under the gameshow's point mode, awarded to the winner in
+   *  standard mode. Resolved by the outer component via `gamePointValue`. */
   pointValue: number;
   onGameComplete: () => void;
   onAwardPoints: (team: TeamKey, points: number) => void;

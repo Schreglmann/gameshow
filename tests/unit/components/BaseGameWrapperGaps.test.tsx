@@ -27,7 +27,7 @@ describe('BaseGameWrapper - Gaps', () => {
     rules: ['Rule 1'],
     totalQuestions: 5,
     pointSystemEnabled: true,
-    pointValue: 3,
+    currentIndex: 2,
     onAwardPoints: vi.fn(),
     onNextGame: vi.fn(),
     children: vi.fn(({ onGameComplete }) => (
@@ -75,9 +75,9 @@ describe('BaseGameWrapper - Gaps', () => {
     expect(screen.getByText('Punkte vergeben')).toBeInTheDocument();
   });
 
-  it('calls onAwardPoints with pointValue when team1 wins', async () => {
+  it('calls onAwardPoints with the positional value when team1 wins', async () => {
     const user = userEvent.setup();
-    render(<BaseGameWrapper {...defaultProps} pointValue={7} />);
+    render(<BaseGameWrapper {...defaultProps} currentIndex={6} />);
 
     advanceToGame();
     await user.click(screen.getByTestId('complete-game'));
@@ -93,9 +93,9 @@ describe('BaseGameWrapper - Gaps', () => {
     expect(defaultProps.onNextGame).toHaveBeenCalled();
   });
 
-  it('calls onAwardPoints with pointValue when team2 wins', async () => {
+  it('calls onAwardPoints with the positional value when team2 wins', async () => {
     const user = userEvent.setup();
-    render(<BaseGameWrapper {...defaultProps} pointValue={5} />);
+    render(<BaseGameWrapper {...defaultProps} currentIndex={4} />);
 
     advanceToGame();
     await user.click(screen.getByTestId('complete-game'));
@@ -109,7 +109,7 @@ describe('BaseGameWrapper - Gaps', () => {
 
   it('calls onAwardPoints for both teams when both are selected (draw)', async () => {
     const user = userEvent.setup();
-    render(<BaseGameWrapper {...defaultProps} pointValue={4} />);
+    render(<BaseGameWrapper {...defaultProps} currentIndex={3} />);
 
     advanceToGame();
     await user.click(screen.getByTestId('complete-game'));
@@ -152,7 +152,7 @@ describe('BaseGameWrapper - Gaps', () => {
     expect(screen.queryByText('Punkte vergeben')).toBeNull();
   });
 
-  it('uses default pointValue of 1 when not specified', async () => {
+  it('falls back to 1 point when no game index is given', async () => {
     const user = userEvent.setup();
     const onAwardPoints = vi.fn();
     render(

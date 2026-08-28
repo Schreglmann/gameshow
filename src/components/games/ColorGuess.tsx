@@ -186,7 +186,6 @@ export default function ColorGuess(props: GameComponentProps) {
       rules={config.rules || ['Ihr seht nur die Farbverteilung eines Bildes — erratet, was zu sehen ist!']}
       totalQuestions={totalQuestions}
       pointSystemEnabled={props.pointSystemEnabled}
-      pointValue={props.currentIndex + 1}
       currentIndex={props.currentIndex}
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}

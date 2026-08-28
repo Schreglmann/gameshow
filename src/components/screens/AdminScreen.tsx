@@ -12,6 +12,7 @@ import AnswersTab from '@/components/backend/AnswersTab';
 import { UploadProvider, useUpload, type YtPlaylistTrack, type AudioCoverProgress } from '@/components/backend/UploadContext';
 import { SpellcheckSettingsProvider } from '@/components/backend/SpellcheckSettingsContext';
 import LektoratTab from '@/components/backend/LektoratTab';
+import SaveStatusIndicator from '@/components/backend/SaveStatusIndicator';
 import { Lightbox } from '@/components/layout/Lightbox';
 import { isUploadThrottled } from '@/services/backendApi';
 import '@/admin.css';
@@ -718,6 +719,11 @@ function AdminScreenInner() {
         )}
       </main>
       <UploadOverlay />
+      {/* Outside every pane on purpose: the panes unmount on a tab switch, and the
+          whole point of this is to keep reporting a save that outlived the pane that
+          queued it. Renders into the shared bottom-right toast stack — see
+          specs/admin-save-queue.md. */}
+      <SaveStatusIndicator />
     </div>
   );
 }

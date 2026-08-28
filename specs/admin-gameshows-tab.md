@@ -15,12 +15,12 @@ Move gameshow management out of the admin **Config** tab into its own **Gameshow
 - [ ] Activating a different gameshow while on the page does **not** change which cards are expanded: the previously-expanded card stays open and the newly-activated one is **not** auto-expanded.
 - [ ] Creating a new gameshow opens it expanded.
 - [ ] Renaming a gameshow keeps its expansion state across the id change.
-- [ ] Edits autosave to `config.json` and survive a reload.
+- [ ] Edits autosave to `config.json` and survive a reload — including a reload or tab switch inside the debounce window, see [admin-save-queue.md](admin-save-queue.md).
 
 ## State / data changes
 - No new `AppState` / `config.json` fields. `GameshowConfig`, `activeGameshow`, `gameshows` unchanged.
 - `GameFileSummary` (the `GET /api/backend/games` response item) gains `questionCount?` (single-instance) and `questionCounts?` (per-instance map) so the tab can sum totals without fetching every game file. OpenAPI updated accordingly.
-- New shared hook `src/components/backend/useEditableConfig.ts` encapsulates config fetch / 800 ms debounced save / `content-changed` WS reconciliation / conflict banner, used by both `ConfigTab` and `GameshowsTab`.
+- New shared hook `src/components/backend/useEditableConfig.ts` encapsulates config fetch / save / `content-changed` WS reconciliation / conflict banner, used by both `ConfigTab` and `GameshowsTab`. The debounce and the write itself live in the module-scope save queue (`src/services/saveQueue.ts`), not in the hook — see [admin-save-queue.md](admin-save-queue.md).
 - Expand state is **UI-only**, owned by `GameshowsTab` as a `Set<string>` of expanded gameshow ids; initialized once on first config load from `config.activeGameshow`. Not persisted.
 
 ## UI behaviour

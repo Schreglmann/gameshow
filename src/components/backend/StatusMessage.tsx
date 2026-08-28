@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { getToastRoot } from './toastRoot';
 
 export interface ToastAction {
   label: string;
@@ -64,8 +65,10 @@ export default function StatusMessage({ message }: Props) {
     }, EXIT_ANIMATION_MS);
   };
 
+  // Into the shared container, so a pane toast and the shell's save status stack
+  // instead of overlapping in the same corner.
   return createPortal(
-    <div className="be-toast-container">
+    <>
       {toasts.map(toast => (
         <div
           key={toast.id}
@@ -85,7 +88,7 @@ export default function StatusMessage({ message }: Props) {
           )}
         </div>
       ))}
-    </div>,
-    document.body,
+    </>,
+    getToastRoot(),
   );
 }

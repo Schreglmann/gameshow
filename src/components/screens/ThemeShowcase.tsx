@@ -17,6 +17,7 @@ import NavIcon from '@/components/backend/AdminNavIcons';
 import NasSyncConflictsCard from '@/components/backend/NasSyncConflictsCard';
 import type { NasSyncConflictEntry } from '@/services/backendApi';
 import ConflictBanner from '@/components/backend/ConflictBanner';
+import SaveStatusToast from '@/components/backend/SaveStatusToast';
 import RetryImage from '@/components/common/RetryImage';
 import AssetReloadButton from '@/components/common/AssetReloadButton';
 import type { RulesPreset } from '@/types/config';
@@ -807,6 +808,29 @@ function FrontendShowcase() {
                 </button>
               );
             })}
+          </div>
+          <button className="quiz-button award-confirm">Punkte vergeben &amp; weiter</button>
+        </GlassCard>
+      </Section>
+
+      <Section title="Award Points (1 Punkt pro richtiger Antwort)">
+        <GlassCard>
+          <h2 style={{ fontSize: '1.6em', marginBottom: 4 }}>Punkte vergeben</h2>
+          <p className="award-points-hint">Jede richtige Antwort zählt 1 Punkt</p>
+          {/* Read-only: the tally already decided the outcome, so the cards are
+              divs — no toggle, no aria-pressed, and every card shows its points
+              right away. See specs/point-system.md. */}
+          <div className="award-teams">
+            <div className="award-team-card is-selected is-readonly" style={{ animation: 'none' }}>
+              <span className="award-team-card-name">Team 1</span>
+              <span className="award-team-card-points">+4 Punkte</span>
+              <span className="award-team-card-count">4 richtige Antworten</span>
+            </div>
+            <div className="award-team-card is-selected is-readonly" style={{ animation: 'none' }}>
+              <span className="award-team-card-name">Team 2</span>
+              <span className="award-team-card-points">+2 Punkte</span>
+              <span className="award-team-card-count">2 richtige Antworten</span>
+            </div>
           </div>
           <button className="quiz-button award-confirm">Punkte vergeben &amp; weiter</button>
         </GlassCard>
@@ -2074,6 +2098,27 @@ function AdminShowcase() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <ConflictBanner what="Dieses Spiel" onReload={() => {}} onDismiss={() => {}} />
           <ConflictBanner what="Die Konfiguration" onReload={() => {}} onDismiss={() => {}} />
+        </div>
+      </Section>
+
+      <Section title="Speicher-Status (Admin-Shell)">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
+          <SaveStatusToast variant="saving" text="Speichern…" />
+          <SaveStatusToast variant="saved" text="✅ Gespeichert!" />
+          <SaveStatusToast
+            variant="offline"
+            text="Offline – Änderungen werden gespeichert, sobald die Verbindung zurück ist"
+          />
+          <SaveStatusToast
+            variant="retrying"
+            text="Speichern fehlgeschlagen – erneuter Versuch in 4 s"
+            action={{ label: 'Jetzt versuchen', onClick: () => {} }}
+          />
+          <SaveStatusToast
+            variant="error"
+            text="❌ Speichern fehlgeschlagen: invalid-config"
+            action={{ label: 'Erneut versuchen', onClick: () => {} }}
+          />
         </div>
       </Section>
 

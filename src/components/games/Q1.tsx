@@ -44,7 +44,6 @@ export default function Q1(props: GameComponentProps) {
       rules={config.rules || ['Findet die falsche Aussage.']}
       totalQuestions={totalQuestions}
       pointSystemEnabled={props.pointSystemEnabled}
-      pointValue={props.currentIndex + 1}
       currentIndex={props.currentIndex}
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}

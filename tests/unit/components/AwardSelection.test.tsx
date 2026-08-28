@@ -29,9 +29,9 @@ function render(ui: ReactElement, options?: RenderOptions) {
   });
 }
 
-/** Seed the gamemaster's per-question tally for game index 0. */
+/** Seed the gamemaster's per-question tally for the game index `props` renders (2). */
 function seedTally(team1: number, team2: number) {
-  localStorage.setItem('correctAnswersByQuestion', JSON.stringify({ 0: { 1: { team1, team2 } } }));
+  localStorage.setItem('correctAnswersByQuestion', JSON.stringify({ 2: { 1: { team1, team2 } } }));
 }
 
 const onAwardPoints = vi.fn();
@@ -42,8 +42,7 @@ const props = {
   rules: [],
   totalQuestions: 2,
   pointSystemEnabled: true,
-  pointValue: 3,
-  currentIndex: 0,
+  currentIndex: 2,
   onAwardPoints,
   onNextGame,
   children: ({ onGameComplete }: { onGameComplete: () => void }) => (

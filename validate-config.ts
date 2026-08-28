@@ -8,9 +8,10 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import type { GameType, AppConfig, GameConfig } from './src/types/config.js';
+import type { GameType, AppConfig, GameConfig, PointMode } from './src/types/config.js';
 import { JOKER_CATALOG } from './src/data/jokers.js';
-import { gameSupportsTeamCount, teamCountSupportLabel } from './src/data/gameTypeInfo.js';
+import { gameSupportsTeamCount, gameUsesCorrectAnswerTally, teamCountSupportLabel } from './src/data/gameTypeInfo.js';
+import { ALL_POINT_MODES, DEFAULT_POINT_MODE } from './src/utils/pointMode.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -205,6 +206,19 @@ function validateConfig(): void {
           teamCount = show.teamCount;
         }
       }
+      // Point mode (optional). Absent means the historic positional scoring.
+      // See specs/point-system.md.
+      let pointMode = DEFAULT_POINT_MODE;
+      if (show.pointMode !== undefined) {
+        if (!ALL_POINT_MODES.includes(show.pointMode)) {
+          errors.push(
+            `Gameshow "${showKey}": "pointMode" must be one of ${ALL_POINT_MODES.map(m => `"${m}"`).join(', ')}`,
+          );
+        } else {
+          pointMode = show.pointMode;
+        }
+      }
+
       if (config.pointSystemEnabled === false && teamCount > 0) {
         warnings.push(
           `Gameshow "${showKey}": teamCount=${teamCount} is overridden by the global ` +
@@ -247,7 +261,7 @@ function validateConfig(): void {
             return;
           }
 
-          const { errors: gameErrors, warnings: gameWarnings } = validateGame(gameRef, gameConfig, validPresetIds, teamCount);
+          const { errors: gameErrors, warnings: gameWarnings } = validateGame(gameRef, gameConfig, validPresetIds, teamCount, pointMode);
           errors.push(...gameErrors);
           warnings.push(...gameWarnings);
         });
@@ -285,6 +299,8 @@ function validateGame(
   validPresetIds: Set<string>,
   /** Teams the referencing gameshow plays with (0-4). See specs/team-count.md. */
   teamCount = 2,
+  /** How the referencing gameshow scores. See specs/point-system.md. */
+  pointMode: PointMode = DEFAULT_POINT_MODE,
 ): { errors: string[]; warnings: string[] } {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -419,6 +435,18 @@ function validateGame(
         `It will be played WITHOUT scoring.`,
       );
     }
+  }
+
+  // `per-correct-answer` pays out the gamemaster's correct-answer tally, which the
+  // inline-scored types never fill. They still play and still score — just by their
+  // own mechanic — so this is a warning about the mismatch, not an error. Like the
+  // team-count check above, it is a property of the pairing, not of the game file.
+  if (game.type && VALID_GAME_TYPES.includes(game.type) && teamCount > 0
+    && pointMode === 'per-correct-answer' && !gameUsesCorrectAnswerTally(game.type)) {
+    warnings.push(
+      `Game "${gameRef}": type "${game.type}" has no correct-answer tally, so the ` +
+      `"per-correct-answer" point mode does not apply — it keeps its own scoring.`,
+    );
   }
 
   if (game.type && typesNeedingQuestions.includes(game.type)) {

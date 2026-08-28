@@ -1,3 +1,4 @@
+import type { PointMode } from './config.js';
 import type { TeamKey } from '../utils/teams.js';
 
 /**
@@ -157,6 +158,13 @@ export interface GlobalSettings {
    * `teamCount > 0`. See specs/team-count.md.
    */
   teamCount: number;
+  /**
+   * How the active gameshow turns a game result into points: `positional`
+   * (default — game N is worth N points), `flat` (every game 1 point) or
+   * `per-correct-answer` (one point per correct answer, off the gamemaster's
+   * tally). Mirrors `PointMode` in config.ts. See specs/point-system.md.
+   */
+  pointMode: PointMode;
   /**
    * Games in the active gameshow that cannot be scored at `teamCount`. Empty
    * when everything fits (and always empty at `teamCount: 0`, where nothing

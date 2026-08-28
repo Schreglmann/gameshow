@@ -23,13 +23,16 @@ killing late-show tension without any house-ruling.
 - [x] Using it marks the joker used (existing `SET_JOKER_USED` + `use-joker` command) **and** arms a
       transient `TeamState.doubleNextGame = <that team>` via `ARM_DOUBLE_NEXT_GAME`; toggling off
       disarms via `CLEAR_DOUBLE_NEXT_GAME`.
-- [x] On the next **awarded** game (the `AwardPoints` reward screen), the armed team's positional
-      points are doubled — `pointValue * 2`, multiplying the positional value (`currentIndex + 1`),
-      never a hardcoded number — then the flag clears regardless of who won. On a draw, only the armed
-      team's points double.
-- [x] Standard-mode `wer-kennt-mehr` also honors the ×2: it sets `skipPointsScreen` and awards
-      positional points via its own inline summary reward screen, so its `finishGame` applies the same
-      `pointValue * 2` for the armed team (the wrapper's `handleComplete` multiplier is never reached
+- [x] On the next **awarded** game (the `AwardPoints` reward screen), the armed team's points are
+      doubled — the wrapper's `ptsFor` multiplies whatever the gameshow's `pointMode` resolved for
+      that team, never a hardcoded number — then the flag clears regardless of who won. On a draw,
+      only the armed team's points double. The doubled quantity is the mode's: the positional value
+      in `positional`, `1` → `2` in `flat`, and the team's own correct-answer count in
+      `per-correct-answer`. See [point-system.md](point-system.md).
+- [x] Standard-mode `wer-kennt-mehr` also honors the ×2: it sets `skipPointsScreen` and awards the
+      game's points via its own inline summary reward screen, so its `finishGame` applies the same
+      `pointValue * 2` for the armed team (its `pointValue` comes from the same `gamePointValue`
+      helper, so `flat` reaches it too) (the wrapper's `handleComplete` multiplier is never reached
       under `skipPointsScreen`); the flag is then cleared by the wrapper's inline `onGameComplete`
       branch. `count` / `count-penalty` modes remain out of scope.
 - [x] The `AwardPoints` screen shows a "×2 Aufholjoker" badge on the armed team's card while the
@@ -64,10 +67,10 @@ killing late-show tension without any house-ruling.
   `count-penalty`** modes) award points directly without the `AwardPoints` screen, so the ×2 does
   **not** apply to them. If the next game is one of these, the armed flag is cleared on its
   `onGameComplete` so it doesn't bleed into a later game. **Exception:** standard-mode `wer-kennt-mehr`
-  awards ordinary positional points (`currentIndex + 1`) on its own inline summary screen and **does**
-  double the armed team there (its `finishGame` applies the same multiplier). (Semantics: the
-  multiplier doubles the next positional-points resolution for the armed team — the `AwardPoints`
-  screen, or standard-mode wer-kennt-mehr's equivalent summary. Arm it at a game boundary.)
+  awards the game's points on its own inline summary screen and **does** double the armed team there
+  (its `finishGame` applies the same multiplier). (Semantics: the multiplier doubles the next
+  award-screen points resolution for the armed team — the `AwardPoints` screen, or standard-mode
+  wer-kennt-mehr's equivalent summary. Arm it at a game boundary.)
 - Stacking multiple multipliers.
 - Tracking exactly which game index is "next" — the flag applies to the next AwardPoints resolution.
 

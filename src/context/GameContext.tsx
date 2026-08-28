@@ -30,6 +30,7 @@ import {
   teamKeys,
   type TeamKey,
 } from '@/utils/teams';
+import { DEFAULT_POINT_MODE, normalizePointMode } from '@/utils/pointMode';
 
 type JokerTeam = TeamKey;
 
@@ -546,6 +547,7 @@ function getInitialState(): AppState {
     settings: {
       pointSystemEnabled: true,
       teamCount: DEFAULT_TEAM_COUNT,
+      pointMode: DEFAULT_POINT_MODE,
       incompatibleGames: [],
       teamRandomizationEnabled: true,
       teamMirrorEnabled: false,
@@ -969,6 +971,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         payload: {
           pointSystemEnabled: teamCount > 0,
           teamCount,
+          pointMode: normalizePointMode(data.pointMode),
           incompatibleGames: data.incompatibleGames ?? [],
           teamRandomizationEnabled: data.teamRandomizationEnabled !== false,
           teamMirrorEnabled: data.teamMirrorEnabled === true,

@@ -8,6 +8,12 @@ while it is still fixable, instead of only showing up as a per-game total that i
 Extends Piece 1 of [gamemaster-cockpit.md](gamemaster-cockpit.md) (the scoring audit log) and supersedes
 its "Out of scope: Per-game grouping / full session ledger UI" bullet.
 
+**The tally is load-bearing in one point mode.** Under `per-correct-answer` the counts kept here ARE the
+points: at the end of the game each team is booked its `tallyTotals`. Everything below still holds —
+the counters remain manual, nothing auto-increments from `AWARD_POINTS`, and the panel stays correctable
+— but a miscount now changes the score rather than only the award screen's preselection. Correct it
+before confirming the award; the show follows the tally live. See [point-system.md](point-system.md).
+
 ## Acceptance criteria
 
 ### Attribution — the `+`/`−` tally (normal games)

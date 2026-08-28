@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { GameProvider } from '@/context/GameContext';
 import AdminScreen from '@/components/screens/AdminScreen';
+import { enqueueSave } from '@/services/saveQueue';
 
 vi.mock('@/services/api', () => ({
   fetchSettings: vi.fn().mockResolvedValue({
@@ -28,7 +29,9 @@ vi.mock('@/services/backendApi', () => ({
   }),
   fetchAssets: vi.fn().mockResolvedValue({ files: [], subfolders: [] }),
   saveConfig: vi.fn().mockResolvedValue(undefined),
+  saveConfigBeacon: vi.fn(),
   saveGame: vi.fn().mockResolvedValue(undefined),
+  saveGameBeacon: vi.fn(),
   createGame: vi.fn().mockResolvedValue(undefined),
   deleteGame: vi.fn().mockResolvedValue(undefined),
   uploadAsset: vi.fn().mockResolvedValue('file.jpg'),
@@ -183,6 +186,21 @@ describe('AdminScreen', () => {
     expect(screen.getByText('Team Verwaltung')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /Spiele/ }));
     expect(screen.queryByText('Team Verwaltung')).not.toBeInTheDocument();
+  });
+
+  // The save-status pill lives outside every pane precisely so a write queued by the pane
+  // being unmounted keeps reporting. See specs/admin-save-queue.md.
+  it('keeps the save-status indicator mounted across a tab switch', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+    // A save that never lands, announced once it has been on the wire for 500 ms.
+    await act(async () => {
+      enqueueSave('config', { v: 1 }, () => new Promise(() => {}), { debounceMs: 0 });
+    });
+    await waitFor(() => expect(screen.getByText('Speichern…')).toBeInTheDocument(), { timeout: 2000 });
+
+    await user.click(screen.getByRole('button', { name: /Spiele/ }));
+    expect(screen.getByText('Speichern…')).toBeInTheDocument();
   });
 
   it('resets GamesTab state when switching back to Spiele tab', async () => {

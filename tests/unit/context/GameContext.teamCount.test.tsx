@@ -36,6 +36,7 @@ function Consumer() {
   return (
     <div>
       <div data-testid="count">{state.settings.teamCount}</div>
+      <div data-testid="point-mode">{state.settings.pointMode}</div>
       <div data-testid="pse">{String(state.settings.pointSystemEnabled)}</div>
       <div data-testid="incompatible">{JSON.stringify(state.settings.incompatibleGames)}</div>
       <div data-testid="teams">{JSON.stringify(
@@ -332,5 +333,29 @@ describe('WS sync of teams 3 and 4', () => {
     const teamStateSends = sendWs.mock.calls
       .filter(c => (c as unknown as [string])[0] === 'gamemaster-team-state-v2');
     expect(teamStateSends).toHaveLength(0);
+  });
+});
+
+/**
+ * The gameshow's point mode rides the same settings payload. See specs/point-system.md.
+ */
+describe('pointMode from /api/settings', () => {
+  it('adopts the mode the server serves', async () => {
+    fetchSettings.mockResolvedValue(settings({ pointMode: 'per-correct-answer' }));
+    render(<GameProvider><Consumer /></GameProvider>);
+    await waitFor(() => expect(screen.getByTestId('point-mode')).toHaveTextContent('per-correct-answer'));
+  });
+
+  it('falls back to positional when the server sends no mode (older backend)', async () => {
+    fetchSettings.mockResolvedValue(settings());
+    render(<GameProvider><Consumer /></GameProvider>);
+    await waitFor(() => expect(screen.getByTestId('point-mode')).toHaveTextContent('positional'));
+  });
+
+  it('falls back to positional for a value it does not know', async () => {
+    // An unreadable mode must never silently change how a live show scores.
+    fetchSettings.mockResolvedValue(settings({ pointMode: 'double-everything' }));
+    render(<GameProvider><Consumer /></GameProvider>);
+    await waitFor(() => expect(screen.getByTestId('point-mode')).toHaveTextContent('positional'));
   });
 });

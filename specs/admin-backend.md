@@ -69,7 +69,7 @@ Global app configuration only — gameshow management lives in its own **Gamesho
 - Themes: Gameshow theme + Admin theme selectors (gradient previews)
 - Global settings: `pointSystemEnabled`, `teamRandomizationEnabled`, `jokersInLastGame`, `jokerUsageScope` ("Joker pro Spiel zurücksetzen" toggle: on = `per-game`, off = `per-gameshow`) — all rendered as toggles
 - Global rules: add/remove/reorder string list
-- Save writes `config.json` atomically via `PUT /api/backend/config` (800 ms debounced autosave)
+- Save writes `config.json` atomically via `PUT /api/backend/config`, debounced 800 ms through the module-scope save queue — it survives the pane unmounting on a tab switch and retries a failed write with backoff. See [admin-save-queue.md](admin-save-queue.md)
 
 ### Gameshows
 Dedicated tab (sidebar position: between **Config** and **Spiele**) for creating and editing gameshows. Reads/writes the same `config.json` as the Config tab via the shared `useEditableConfig` hook. See [admin-gameshows-tab.md](admin-gameshows-tab.md).
@@ -83,7 +83,7 @@ Dedicated tab (sidebar position: between **Config** and **Spiele**) for creating
   - "Verfügbare Joker" checklist — one checkbox per catalog entry from [src/data/jokers.ts](../src/data/jokers.ts); toggling updates `enabledJokers` and is persisted via the same autosave flow. See [jokers.md](jokers.md).
 - **Collapse behavior:** on page load only the **active** gameshow is expanded; all others collapsed. Activating a different gameshow while on the page does **not** change which cards are expanded (the expand-active rule runs once on mount). Creating a gameshow ("+ Neue Gameshow") opens it expanded.
 - Add new gameshow button
-- Save writes `config.json` atomically via `PUT /api/backend/config`
+- Save writes `config.json` atomically via `PUT /api/backend/config`, through the same save queue as the Config tab — see [admin-save-queue.md](admin-save-queue.md)
 
 ### Assets (DAM)
 Category tabs: **Bilder** (`/images/`), **Audio** (`/audio/`), **Hintergrundmusik** (`/background-music/`), **Videos** (`/videos/`)

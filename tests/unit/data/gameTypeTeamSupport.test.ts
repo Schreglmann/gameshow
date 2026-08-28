@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   GAME_TYPE_INFO,
   gameSupportsTeamCount,
+  gameUsesCorrectAnswerTally,
   supportedTeamCounts,
   teamCountSupportLabel,
 } from '@/data/gameTypeInfo';
@@ -114,5 +115,29 @@ describe('teamCountSupportLabel', () => {
 
   it('drops 0 — "no teams" is not a scoring option the operator picks here', () => {
     expect(teamCountSupportLabel('simple-quiz')).not.toContain('0');
+  });
+});
+
+/**
+ * Which types feed the gamemaster's correct-answer tally — what the
+ * `per-correct-answer` point mode pays out. See specs/point-system.md.
+ */
+describe('gameUsesCorrectAnswerTally', () => {
+  it('declares a value for every game type', () => {
+    for (const type of ALL_TYPES) {
+      expect(typeof GAME_TYPE_INFO[type].usesCorrectAnswerTally, type).toBe('boolean');
+    }
+  });
+
+  it('excludes exactly the four inline-scored types', () => {
+    // These set `hideCorrectTracker` in their component, so no tally is ever
+    // filled for them — the mode has nothing to pay out and they keep their own
+    // scoring. The two lists must not drift apart.
+    const withoutTally = ALL_TYPES.filter(t => !gameUsesCorrectAnswerTally(t)).sort();
+    expect(withoutTally).toEqual(['bet-quiz', 'final-quiz', 'quizjagd', 'wer-kennt-mehr']);
+  });
+
+  it('treats an unknown type as tallied', () => {
+    expect(gameUsesCorrectAnswerTally('not-a-type' as GameType)).toBe(true);
   });
 });

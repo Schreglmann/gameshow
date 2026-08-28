@@ -33,7 +33,6 @@ export default function FourStatements(props: GameComponentProps) {
       rules={config.rules || ['Errate die Lösung anhand von bis zu 4 Hinweisen.']}
       totalQuestions={totalQuestions}
       pointSystemEnabled={props.pointSystemEnabled}
-      pointValue={props.currentIndex + 1}
       currentIndex={props.currentIndex}
       onRulesShow={hasAudio ? () => music.fadeOut(2000) : undefined}
       onNextShow={

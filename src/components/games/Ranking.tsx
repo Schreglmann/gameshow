@@ -38,7 +38,6 @@ export default function Ranking(props: GameComponentProps) {
       ]}
       totalQuestions={totalQuestions}
       pointSystemEnabled={props.pointSystemEnabled}
-      pointValue={props.currentIndex + 1}
       currentIndex={props.currentIndex}
       onRulesShow={hasAudio ? () => music.fadeOut(2000) : undefined}
       onNextShow={

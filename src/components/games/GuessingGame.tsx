@@ -68,7 +68,6 @@ export default function GuessingGame(props: GameComponentProps) {
       rules={config.rules || ['Jedes Team gibt seinen Tipp ab.']}
       totalQuestions={totalQuestions}
       pointSystemEnabled={props.pointSystemEnabled}
-      pointValue={props.currentIndex + 1}
       currentIndex={props.currentIndex}
       order={order}
       autoScored={autoScoring}

@@ -15,6 +15,16 @@ export interface GameTypeInfo {
    * — see SCORING_MODE_TEAM_COUNTS below. See specs/team-count.md.
    */
   supportedTeamCounts: readonly number[];
+  /**
+   * Whether this type feeds the gamemaster's per-question correct-answer tally.
+   *
+   * False for the four types that score inline and therefore set
+   * `hideCorrectTracker` — they have no tally to read, so the
+   * `per-correct-answer` point mode cannot pay them out and they keep the scoring
+   * their type defines. A `Record<GameType, …>` field, so tsc forces every present
+   * and future type to declare it. See specs/point-system.md.
+   */
+  usesCorrectAnswerTally: boolean;
 }
 
 /** Every count from 0 to 4 — a type whose mechanic is indifferent to how many teams play. */
@@ -29,86 +39,103 @@ export const GAME_TYPE_INFO: Record<GameType, GameTypeInfo> = {
     label: 'Klassisches Quiz',
     description: 'Freie Antworten – beide Teams schreiben, der Host wählt den Sieger.',
     supportedTeamCounts: ANY_TEAM_COUNT,
+    usesCorrectAnswerTally: true,
   },
   'bet-quiz': {
     label: 'Einsatzquiz',
     description: 'Teams setzen geheim Punkte auf eine Kategorie – das höhere Gebot antwortet.',
     supportedTeamCounts: ANY_TEAM_COUNT,
+    usesCorrectAnswerTally: false,
   },
   'guessing-game': {
     label: 'Schätzfrage',
     description: 'Zahlen schätzen – das Team mit dem näheren Wert gewinnt.',
     supportedTeamCounts: ANY_TEAM_COUNT,
+    usesCorrectAnswerTally: true,
   },
   'final-quiz': {
     label: 'Finalrunde',
     description: 'Beide Teams setzen vor jeder Frage eigene Punkte – richtig = Einsatz gewonnen, falsch = Einsatz verloren.',
     supportedTeamCounts: ANY_TEAM_COUNT,
+    usesCorrectAnswerTally: false,
   },
   'audio-guess': {
     label: 'Musikraten',
     description: 'Einen Song an einem sehr kurzen Ausschnitt erkennen.',
     supportedTeamCounts: ANY_TEAM_COUNT,
+    usesCorrectAnswerTally: true,
   },
   'video-guess': {
     label: 'Filmraten',
     description: 'Einen Film oder eine Szene an einem kurzen Video erkennen.',
     supportedTeamCounts: ANY_TEAM_COUNT,
+    usesCorrectAnswerTally: true,
   },
   'q1': {
     label: 'Q1 – Ein Hinweis ist falsch',
     description: 'Vier Aussagen beschreiben einen gesuchten Begriff – drei sind wahr, eine ist falsch.',
     supportedTeamCounts: ANY_TEAM_COUNT,
+    usesCorrectAnswerTally: true,
   },
   'four-statements': {
     label: 'Vier Hinweise',
     description: 'Bis zu vier Hinweise führen schrittweise zur gesuchten Lösung.',
     supportedTeamCounts: ANY_TEAM_COUNT,
+    usesCorrectAnswerTally: true,
   },
   'fact-or-fake': {
     label: 'Fakt oder Fake',
     description: 'Ist die Aussage wahr oder erfunden?',
     supportedTeamCounts: ANY_TEAM_COUNT,
+    usesCorrectAnswerTally: true,
   },
   'quizjagd': {
     label: 'Quizjagd',
     description: 'Teams wählen Schwierigkeit (3/5/7) – richtig = Punkte dazu, falsch = ab.',
     supportedTeamCounts: ANY_TEAM_COUNT,
+    usesCorrectAnswerTally: false,
   },
   'bandle': {
     label: 'Bandle',
     description: 'Einen Song Schicht für Schicht an immer mehr Instrumenten erraten.',
     supportedTeamCounts: ANY_TEAM_COUNT,
+    usesCorrectAnswerTally: true,
   },
   'image-guess': {
     label: 'Bilderrätsel',
     description: 'Ein Bild wird schrittweise enthüllt und muss erraten werden.',
     supportedTeamCounts: ANY_TEAM_COUNT,
+    usesCorrectAnswerTally: true,
   },
   'colorguess': {
     label: 'Logo-Farben',
     description: 'Nur die Farbverteilung eines Logos ist sichtbar.',
     supportedTeamCounts: ANY_TEAM_COUNT,
+    usesCorrectAnswerTally: true,
   },
   'ranking': {
     label: 'Reihenfolge',
     description: 'Antworten in der richtigen Reihenfolge erraten.',
     supportedTeamCounts: ANY_TEAM_COUNT,
+    usesCorrectAnswerTally: true,
   },
   'wer-kennt-mehr': {
     label: 'Wer kennt mehr?',
     description: 'Beide Teams nennen so viele Begriffe wie möglich – wer mehr nennt, gewinnt diese Anzahl als Punkte.',
     supportedTeamCounts: ANY_TEAM_COUNT,
+    usesCorrectAnswerTally: false,
   },
   'random-frame': {
     label: 'Zufallsbild',
     description: 'Ein zufälliges Standbild aus einem Video – aus welchem Film stammt es?',
     supportedTeamCounts: ANY_TEAM_COUNT,
+    usesCorrectAnswerTally: true,
   },
   'city-compass': {
     label: 'Städte-Kompass',
     description: 'Nachbarstädte stehen im richtigen Winkel – welche Stadt liegt im Zentrum?',
     supportedTeamCounts: ANY_TEAM_COUNT,
+    usesCorrectAnswerTally: true,
   },
 };
 
@@ -181,6 +208,18 @@ export function gameSupportsTeamCount(
   scoringMode?: string,
 ): boolean {
   return supportedTeamCounts(type, scoringMode).includes(teamCount);
+}
+
+/**
+ * Does this type feed the gamemaster's correct-answer tally?
+ *
+ * The `per-correct-answer` point mode pays out that tally, so a type answering
+ * `false` here keeps the scoring its own mechanic defines instead. An unknown type
+ * is treated as tallied — the same "assume compatible" stance
+ * `gameSupportsTeamCount` takes. See specs/point-system.md.
+ */
+export function gameUsesCorrectAnswerTally(type: GameType): boolean {
+  return GAME_TYPE_INFO[type]?.usesCorrectAnswerTally !== false;
 }
 
 /** German summary of a type's supported counts, for admin hints ("2 Teams", "1-4 Teams"). */

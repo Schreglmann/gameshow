@@ -69,7 +69,6 @@ export default function BetQuiz(props: GameComponentProps) {
       rules={rules}
       totalQuestions={totalQuestions}
       pointSystemEnabled={props.pointSystemEnabled}
-      pointValue={props.currentIndex + 1}
       currentIndex={props.currentIndex}
       requiresPoints
       skipPointsScreen

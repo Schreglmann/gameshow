@@ -46,3 +46,10 @@ All gameshow content — which games run, in what order, with what questions —
 Omitted means 2 (the historic default), so every pre-existing gameshow is unchanged; `0` means no
 teams at all. The global `pointSystemEnabled: false` still overrides every gameshow to 0.
 Edited in the admin Gameshows tab. See [team-count.md](team-count.md).
+
+## Point mode per gameshow
+`GameshowConfig.pointMode?: 'positional' | 'flat' | 'per-correct-answer'` sets how that gameshow turns
+a game result into points. Omitted means `positional` (game N is worth N points) — the historic
+behaviour, so every pre-existing gameshow is unchanged. Served on `GET /api/settings` as `pointMode`
+and resolved in a single place, `BaseGameWrapper`. Edited in the admin Gameshows tab next to the team
+count. See [point-system.md](point-system.md).

@@ -925,6 +925,16 @@
   color: var(--text-primary);
 }
 
+/* Neither success nor failure: the save is held up by something outside our control
+   (offline, server unreachable) and is still being retried. Deep amber rather than the
+   #facc15-ish tint the banners use — a solid toast fill needs to carry light text, and on
+   light themes the contrast token supplies ivory exactly as .be-toast-error does. */
+.be-toast-warning {
+  background: rgba(var(--warning-deep-rgb, 140, 94, 8), 0.92);
+  border: 1px solid rgba(var(--warning-deep-rgb, 140, 94, 8), 0.95);
+  color: var(--primary-contrast-text, var(--text-primary));
+}
+
 .be-toast-error {
   background: rgba(var(--error-deep-rgb), 0.88);
   border: 1px solid rgba(var(--error-deep-rgb), 0.95);
@@ -3136,10 +3146,15 @@
 
 /* ── Gameshow players row ── */
 
+/* Wraps as a whole when Teams + Punkte + the roster group's floor width (see
+   .gs-roster-group) don't fit one line — the roster group then drops to its own
+   line intact, rather than the combobox breaking apart internally. */
 .gs-players-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
+  row-gap: 10px;
   margin-bottom: 10px;
 }
 
@@ -3159,6 +3174,31 @@
   min-width: 130px;
   max-width: 170px;
   margin-right: 10px;
+}
+
+/* Point mode sits next to the team count. Capped for the same reason. See
+   specs/point-system.md. */
+.gs-point-mode {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 150px;
+  max-width: 210px;
+  margin-right: 10px;
+}
+
+/* The roster (label + combobox + Planung button) as one unbreakable unit.
+   flex-shrink: 0 is the actual mechanism: an item that CANNOT shrink below its
+   380px basis forces the flex-wrap row to push it to the next line whole,
+   instead of compressing it (which was letting the combobox get squeezed below
+   what its tags + input need, breaking the input onto its own line inside it).
+   Still grows on a wide row, so it isn't stuck at 380px once it has the line to
+   itself. See specs/point-system.md. */
+.gs-roster-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 0 380px;
+  min-width: 380px;
 }
 
 /* ── Overlap badges ── */
@@ -4737,13 +4777,9 @@
   /* Question blocks: allow wrapping */
   .question-block-row { flex-wrap: wrap; }
 
-  /* Gameshow picker row & players row: wrap */
+  /* Gameshow picker row: wrap. (.gs-players-row wraps unconditionally now — see
+     the base rule above — so it needs no mobile override here.) */
   .gs-picker-row {
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-
-  .gs-players-row {
     flex-wrap: wrap;
     gap: 6px;
   }

@@ -493,7 +493,27 @@ export interface GameshowConfig {
    * false`. See specs/team-count.md.
    */
   teamCount?: 0 | 1 | 2 | 3 | 4;
+  /**
+   * How this gameshow turns a game result into points. Omitted means
+   * `positional` — the historic behaviour, so every pre-existing gameshow is
+   * unchanged. See specs/point-system.md.
+   */
+  pointMode?: PointMode;
 }
+
+/**
+ * How a gameshow converts a game result into points.
+ *
+ * - `positional` (default) — game N is worth N points (`currentIndex + 1`).
+ * - `flat` — every game is worth exactly 1 point.
+ * - `per-correct-answer` — each team receives one point per correct answer it
+ *   gave in that game, read off the gamemaster's tally.
+ *
+ * Resolved in a single place (`BaseGameWrapper`, via `gamePointValue()` in
+ * [src/utils/pointMode.ts](../utils/pointMode.ts)), so no game component can opt
+ * out of it. See specs/point-system.md.
+ */
+export type PointMode = 'positional' | 'flat' | 'per-correct-answer';
 
 export interface RulesPreset {
   id: string;
@@ -634,6 +654,13 @@ export interface SettingsResponse {
    * back to 2 when scoring is on. See specs/team-count.md.
    */
   teamCount?: number;
+  /**
+   * How the active gameshow turns a game result into points
+   * (`GameshowConfig.pointMode`). Optional so existing test fixtures don't need
+   * it — a client that gets no value falls back to `positional`.
+   * See specs/point-system.md.
+   */
+  pointMode?: PointMode;
   /**
    * Games in the active gameshow that cannot be scored at `teamCount`. Empty or
    * omitted when everything fits (and always empty at `teamCount: 0`).

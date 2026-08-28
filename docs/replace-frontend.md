@@ -21,7 +21,7 @@ All return `application/json` unless noted. Full schemas: [openapi.yaml](../spec
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| `GET` | `/api/settings` | Global settings for the active gameshow (point system, rules, jokers, clean-install flag). |
+| `GET` | `/api/settings` | Global settings for the active gameshow (point system incl. `pointMode`, rules, jokers, clean-install flag). |
 | `GET` | `/api/theme` | Current theme names for frontend + admin. |
 | `PUT` | `/api/theme` | Partial theme update (show PWA writes `frontend` key). |
 | `GET` | `/api/game/:index` | Resolve `gameOrder[index]` → full `GameConfig` + navigation metadata. |

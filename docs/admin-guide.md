@@ -133,6 +133,27 @@ mode needs exactly two). If your gameshow contains such a game, the card shows a
 affected rows get an **"Ohne Wertung"** badge. Those games still play in full — they simply don't
 award points, and the same warning appears on the show's start screen so the host knows in advance.
 
+### Choosing how points are awarded
+
+Next to the **Teams** dropdown sits a **Punkte** dropdown deciding how each game's result becomes
+points. It applies to the whole gameshow:
+
+- **Nach Spielreihenfolge** (default): the classic rule — the first game is worth 1 point, the second
+  2, and so on. Later games matter more, so the show stays open until the end.
+- **Jedes Spiel 1 Punkt**: every game is worth exactly one point, whatever its position. Use it when
+  all rounds should count equally.
+- **1 Punkt pro richtiger Antwort**: each team collects one point per correct answer. The count comes
+  from the **+ / −** buttons the gamemaster presses during the game, so it only works if someone is
+  keeping score there. At the end of a game the award screen no longer asks who won — it lists each
+  team's correct answers and the points that follow from them, and the host just confirms. Correct a
+  miscount on the gamemaster before confirming; the screen follows along live.
+
+Four game types bring their own scoring and ignore the last setting: the **Einsatzquiz** and the
+**Finalrunde** (which pay out the teams' own stakes), the **Quizjagd** (3/5/7 per question) and
+**Wer kennt mehr** in its counting modes. If your gameshow contains one of these while
+*1 Punkt pro richtiger Antwort* is selected, the card shows a note and the affected rows get an
+**"Eigene Wertung"** badge. They still play and still score — just by their own rule.
+
 ### Step 2 — Add a new gameshow
 
 Click **"+ Neue Gameshow"**. A new card appears, already expanded for editing.
@@ -154,7 +175,10 @@ In the **Game Order** section of your gameshow card:
 ![Game Order](./screenshots/admin-config-game-order.png)
 > *Add screenshot: `docs/screenshots/admin-config-game-order.png` — the game order list with add/remove/reorder controls*
 
-Changes save automatically.
+Changes save automatically, and the save survives leaving the page: switch tabs or close the
+editor right after an edit and it is still written. The usual **"Gespeichert"** box in the
+bottom-right corner reports it, from whichever tab you are on. If the server is unreachable that
+box counts down and keeps retrying on its own — or press **Jetzt versuchen**.
 
 ---
 

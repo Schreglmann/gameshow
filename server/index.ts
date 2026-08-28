@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 import multer from 'multer';
 import type { AppConfig, GameConfig, MultiInstanceGameFile, GameFileSummary, AssetCategory, RulesPreset } from '../src/types/config.js';
 import { resolveRulesPreset } from '../src/utils/rulesPreset.js';
+import { normalizePointMode, pointModeRule } from '../src/utils/pointMode.js';
 import { effectiveTeamCount, gameIsScorable, listIncompatibleGames, hasTeamSplit } from './team-count.js';
 import { isAudioFile, normalizeAudioFile } from './normalize.js';
 import { fetchAndSavePoster, videoFilenameToSlug, MOVIE_POSTERS_SUBDIR } from './movie-posters.js';
@@ -3820,9 +3821,11 @@ app.get('/api/settings', async (_req, res) => {
     // `pointSystemEnabled` is exactly "there is at least one team". Kept on the
     // wire so a client that predates `teamCount` still behaves correctly.
     const pointSystemEnabled = teamCount > 0;
+    const pointMode = normalizePointMode(activeShow?.pointMode);
     res.json({
       pointSystemEnabled,
       teamCount,
+      pointMode,
       incompatibleGames: await resolveIncompatibleGames(config, teamCount),
       // Randomization splits players BETWEEN teams, so it needs at least two of
       // them. Forced off at 0 and 1 teams rather than left to each client.
@@ -3831,7 +3834,9 @@ app.get('/api/settings', async (_req, res) => {
       globalRules: config.globalRules || [
         'Es gibt mehrere Spiele.',
         'Bei jedem Spiel wird am Ende entschieden welches Team das Spiel gewonnen hat.',
-        'Das erste Spiel ist 1 Punkt wert, das zweite 2 Punkte, etc.',
+        // The scoring line has to follow the gameshow's point mode — the default
+        // rules would otherwise announce positional points to a flat-scored show.
+        pointModeRule(pointMode),
         'Das Team mit den meisten Punkten gewinnt am Ende.',
       ],
       isCleanInstall: cleanInstallActive,

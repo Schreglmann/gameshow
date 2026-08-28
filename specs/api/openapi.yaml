@@ -3253,6 +3253,8 @@ components:
             `pointSystemEnabled: false` forces 0, otherwise the active gameshow's
             `teamCount` (default 2). A client that receives no value falls back to 2
             while scoring is on. See specs/team-count.md.
+        pointMode:
+          $ref: '#/components/schemas/PointMode'
         incompatibleGames:
           type: array
           items: { $ref: '#/components/schemas/IncompatibleGame' }
@@ -3401,6 +3403,19 @@ components:
             How many teams this gameshow is played with. Omitted means 2 (the historic
             default), so pre-existing gameshows are unchanged. 0 means no teams at all.
             See specs/team-count.md.
+        pointMode:
+          $ref: '#/components/schemas/PointMode'
+
+    PointMode:
+      type: string
+      enum: [positional, flat, per-correct-answer]
+      description: >-
+        How a gameshow turns a game result into points. `positional` (the default when
+        omitted) — game N is worth N points. `flat` — every game is worth exactly 1
+        point. `per-correct-answer` — each team receives one point per correct answer it
+        gave in that game, read off the gamemaster's tally; the four inline-scored types
+        (bet-quiz, quizjagd, final-quiz, wer-kennt-mehr) have no tally and keep their own
+        scoring. See specs/point-system.md.
 
     GameFileSummary:
       type: object

@@ -21,6 +21,7 @@ import {
   type SpellRateStatus,
   type LanguageToolDockerStatus,
 } from '@/services/backendApi';
+import { gameSaveKey, enqueueSave, flushSave } from '@/services/saveQueue';
 import { segmentsForGameFile, applyReplacement, readAtPath, type SpellSegment } from '@/utils/spellcheckFields';
 import { useSpellcheckSettings } from './SpellcheckSettingsContext';
 import SpellCheckPanel, { type SpellGroup, type SpellIssue } from './SpellCheckPanel';
@@ -234,6 +235,10 @@ export default function LektoratTab({ onNavigateToGame }: Props) {
     // the meantime was silently overwritten, with a success tick shown. Read
     // fresh, verify the text is still what the match was computed against, then
     // splice.
+    // A save queued by the game editor is newer than disk, and the "changed in the
+    // meantime" guard below can't see it — it lives in our own queue, not in the file.
+    // Land it before reading. See specs/admin-save-queue.md.
+    try { await flushSave(gameSaveKey(fileName)); } catch { /* keeps retrying; read what's there */ }
     let fresh: Record<string, unknown>;
     try {
       fresh = (await fetchGame(fileName)) as Record<string, unknown>;
@@ -251,8 +256,11 @@ export default function LektoratTab({ onNavigateToGame }: Props) {
 
     const updated = applyReplacement(fresh, path, issue.match.offset, issue.match.length, replacement);
     gameFiles.current.set(fileName, updated);
+    // Through the queue so the write is serialized against the game editor's and lands in
+    // the self-write set (no spurious cross-tab conflict banner).
+    enqueueSave(gameSaveKey(fileName), updated, p => saveGame(fileName, p), { debounceMs: 0 });
     try {
-      await saveGame(fileName, updated);
+      await flushSave(gameSaveKey(fileName));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Speichern fehlgeschlagen.');
       return;

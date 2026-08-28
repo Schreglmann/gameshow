@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import GameEditor from '@/components/backend/GameEditor';
+import { getStatus } from '@/services/saveQueue';
 
 const mockSaveGame = vi.fn().mockResolvedValue(undefined);
 const mockDeleteGameInstance = vi.fn().mockResolvedValue({ success: true, removedRefs: [] });
@@ -9,6 +10,7 @@ const mockConvertGameToMulti = vi.fn();
 
 vi.mock('@/services/backendApi', () => ({
   saveGame: (...args: unknown[]) => mockSaveGame(...args),
+  saveGameBeacon: vi.fn(),
   deleteGameInstance: (...args: unknown[]) => mockDeleteGameInstance(...args),
   convertGameToMulti: (...args: unknown[]) => mockConvertGameToMulti(...args),
   fetchAssets: vi.fn().mockResolvedValue({ files: [], subfolders: [] }),
@@ -278,7 +280,10 @@ describe('GameEditor', () => {
     expect(mockSaveGame).not.toHaveBeenCalled();
   });
 
-  it('shows success toast after save', async () => {
+  // The "Gespeichert" toast is owned by the shell's SaveStatusIndicator, not by this editor —
+  // it has to survive the editor closing. Here we only assert the write itself; the toast is
+  // covered in SaveStatusIndicator.test.tsx. See specs/admin-save-queue.md.
+  it('reaches idle once the debounced save lands', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderEditor();
 
@@ -287,12 +292,15 @@ describe('GameEditor', () => {
 
     act(() => { vi.advanceTimersByTime(800); });
 
-    await waitFor(() => {
-      expect(screen.getByText('✅ Gespeichert!')).toBeInTheDocument();
-    });
+    await waitFor(() => expect(mockSaveGame).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(getStatus().state).toBe('idle'));
+    expect(screen.queryByText('✅ Gespeichert!')).not.toBeInTheDocument();
   });
 
-  it('shows error toast when save fails', async () => {
+  // A failed save is no longer reported by a toast in this editor — the editor can be
+  // closed before the failure is known. The queue keeps the payload and retries it, and
+  // the admin shell's save-status pill reports it. See specs/admin-save-queue.md.
+  it('keeps retrying a failed save instead of dropping it', async () => {
     mockSaveGame.mockRejectedValueOnce(new Error('Save failed'));
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderEditor();
@@ -301,10 +309,13 @@ describe('GameEditor', () => {
     await user.type(titleInput, 'x');
 
     act(() => { vi.advanceTimersByTime(800); });
+    await waitFor(() => expect(mockSaveGame).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(getStatus().state).toBe('retrying'));
 
-    await waitFor(() => {
-      expect(screen.getByText(/Save failed/)).toBeInTheDocument();
-    });
+    // First backoff step: 1s.
+    await act(async () => { vi.advanceTimersByTime(1000); });
+    await waitFor(() => expect(mockSaveGame).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(getStatus().state).toBe('idle'));
   });
 
   it('updates title in header when title input changes', async () => {

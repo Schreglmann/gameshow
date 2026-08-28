@@ -9,6 +9,7 @@ import { teamName } from '@/utils/teamNames';
 import { teamDisplayOrder } from '@/utils/teamOrder';
 import { isTeamKey, teamKeys, type TeamKey } from '@/utils/teams';
 import { tallyLeader, tallyTotals } from '@/utils/correctAnswers';
+import { gamePointValue } from '@/utils/pointMode';
 import { detectShowScrollAnchors, scrollShowToAnchor } from '@/utils/scrollToCardAnchor';
 import { FullscreenProvider, type FullscreenMedia } from '@/context/FullscreenContext';
 import { Lightbox, VideoLightbox } from '@/components/layout/Lightbox';
@@ -27,10 +28,10 @@ interface BaseGameWrapperProps {
   rules: string[];
   totalQuestions?: number;
   pointSystemEnabled: boolean;
-  /** Game index (0-based); when 0, hides 'back' nav on landing/rules phases */
+  /** Game index (0-based); when 0, hides 'back' nav on landing/rules phases. Also
+   *  the game's position, which is what the `positional` point mode scores by —
+   *  games do not pass a point value, the wrapper derives it. */
   currentIndex?: number;
-  /** Points awarded to the winning team (should be currentIndex + 1) */
-  pointValue?: number;
   /** If the game type always uses points (e.g. quizjagd, final-quiz) */
   requiresPoints?: boolean;
   /** Skip the award-points screen after game completion (e.g. final-quiz awards points inline) */
@@ -113,7 +114,6 @@ export default function BaseGameWrapper({
   totalQuestions,
   pointSystemEnabled,
   currentIndex,
-  pointValue = 1,
   requiresPoints,
   skipPointsScreen,
   hideCorrectTracker,
@@ -436,30 +436,55 @@ export default function BaseGameWrapper({
     }
   }, [shouldShowPoints, onNextShow, onNextGame, gameState.teams.doubleNextGame, gameDispatch]);
 
-  // Aufholjoker: the armed team's positional points double for this award, then the
-  // flag clears. Multiply the POSITIONAL value (never hardcode 2). Hoisted out of
+  const gameTally = gameState.correctAnswersByGame[String(currentIndex)];
+  const tallyByTeam = useMemo(() => tallyTotals(gameTally), [gameTally]);
+
+  // How this gameshow scores — resolved HERE and nowhere else, so no game can opt out
+  // of the operator's choice. `per-correct-answer` pays out the gamemaster's tally,
+  // which only exists for games that show the tracker: the four that hide it keep the
+  // scoring their type defines (see specs/point-system.md).
+  const pointMode = gameState.settings.pointMode;
+  const perCorrectAnswer = pointMode === 'per-correct-answer' && !hideCorrectTracker;
+  const basePoints = gamePointValue(pointMode, currentIndex ?? 0);
+
+  // Aufholjoker: the armed team's points double for this award, then the flag
+  // clears. Multiply the MODE'S value (never hardcode 2). Hoisted out of
   // `handleComplete` so an auto verdict can STATE the same numbers it awards.
   const ptsFor = useCallback(
-    (team: TeamKey) => (gameState.teams.doubleNextGame === team ? pointValue * 2 : pointValue),
-    [gameState.teams.doubleNextGame, pointValue],
+    (team: TeamKey) => {
+      const base = perCorrectAnswer ? (tallyByTeam[team] ?? 0) : basePoints;
+      return gameState.teams.doubleNextGame === team ? base * 2 : base;
+    },
+    [gameState.teams.doubleNextGame, perCorrectAnswer, tallyByTeam, basePoints],
   );
 
   const handleComplete = useCallback(
     (winners: AwardPointsWinners) => {
       const armed = gameState.teams.doubleNextGame;
-      for (const team of selectedTeams(winners, activeTeams)) onAwardPoints(team, ptsFor(team));
+      for (const team of selectedTeams(winners, activeTeams)) {
+        // A zero delta states nothing and would still take a slot in the capped score
+        // history — skip it. Only reachable in `per-correct-answer`, where selection
+        // follows the tally rather than the host.
+        const points = ptsFor(team);
+        if (points > 0) onAwardPoints(team, points);
+      }
       if (armed) gameDispatch({ type: 'CLEAR_DOUBLE_NEXT_GAME' });
       onNextGame();
     },
     [onAwardPoints, ptsFor, onNextGame, gameState.teams.doubleNextGame, gameDispatch, activeTeams]
   );
 
-  // What the award screen starts with: a verdict the game worked out, else whoever
-  // leads the gamemaster's correct-answer tally, else nothing. Derived (not seeded
-  // into state) so a tally edit arriving from another device still moves it — until
-  // the host picks, which pins the selection.
-  const gameTally = gameState.correctAnswersByGame[String(currentIndex)];
+  // What the award screen starts with: in `per-correct-answer` everyone who answered
+  // anything correctly — the screen is read-only there, so this IS the outcome —
+  // otherwise a verdict the game worked out, else whoever leads the gamemaster's
+  // correct-answer tally, else nothing. Derived (not seeded into state) so a tally edit
+  // arriving from another device still moves it — until the host picks, which pins it.
   const preselectedWinners = useMemo((): AwardPointsWinners | null => {
+    if (perCorrectAnswer) {
+      const winners: AwardPointsWinners = {};
+      for (const team of activeTeams) if ((tallyByTeam[team] ?? 0) > 0) winners[team] = true;
+      return winners;
+    }
     if (autoAward) return autoAward.winners;
     const leaders = tallyLeader(gameTally, activeTeams);
     if (leaders) {
@@ -473,10 +498,13 @@ export default function BaseGameWrapper({
     // audience did not win. See specs/team-count.md.
     if (activeTeams.length === 1) return { [activeTeams[0]!]: true };
     return null;
-  }, [autoAward, gameTally, activeTeams]);
-  const selectedWinners = pickedWinners ?? preselectedWinners ?? NO_WINNERS;
+  }, [perCorrectAnswer, tallyByTeam, autoAward, gameTally, activeTeams]);
+  // Read-only mode has nothing to pick, so a stale pick can never override the tally.
+  const selectedWinners = (perCorrectAnswer ? preselectedWinners : pickedWinners ?? preselectedWinners) ?? NO_WINNERS;
   const winnerKeys = selectedTeams(selectedWinners, activeTeams);
-  const anyWinnerSelected = winnerKeys.length > 0;
+  // Confirm is gated on a selection only where the host makes one: with an empty tally
+  // nobody is selected, and the host must still be able to advance.
+  const anyWinnerSelected = perCorrectAnswer || winnerKeys.length > 0;
 
   // What each team would receive, from the same `ptsFor` the award books with — so
   // the preview and the booked points cannot diverge.
@@ -498,37 +526,44 @@ export default function BaseGameWrapper({
       }
       return line;
     }
-    const totals = tallyTotals(gameTally);
-    if (activeTeams.every(t => totals[t] === 0)) return null;
+    if (activeTeams.every(t => tallyByTeam[t] === 0)) return null;
     for (const team of activeTeams) {
-      const n = totals[team];
+      const n = tallyByTeam[team];
       line[team] = `${n} ${n === 1 ? 'richtige Antwort' : 'richtige Antworten'}`;
     }
     return line;
-  }, [autoAward, gameTally, activeTeams]);
+  }, [autoAward, tallyByTeam, activeTeams]);
 
   // An untouched auto verdict states its own reason; once the host overrides it, the
-  // screen falls back to its generic wording.
+  // screen falls back to its generic wording. In `per-correct-answer` nobody "wins" the
+  // game — every team is paid its own count — so the verdict wording is suppressed and
+  // the read-only screen states the mode instead.
   const autoWinnerKeys = autoAward ? selectedTeams(autoAward.winners, activeTeams) : [];
-  const awardHint = pickedWinners === null && autoAward
+  const awardHint = !perCorrectAnswer && pickedWinners === null && autoAward
     ? (autoWinnerKeys.length > 1
       ? drawHint(gameState.teams, autoWinnerKeys, activeTeams)
       : `${teamName(gameState.teams, autoWinnerKeys[0] ?? activeTeams[0]!)} hat mehr Fragen gewonnen`)
     : undefined;
 
   const toggleWinner = useCallback((team: TeamKey) => {
+    // Nothing to pick in `per-correct-answer` — the tally decides. Guarded here as
+    // well as in the UI so a gamemaster command cannot pin a stale selection.
+    if (perCorrectAnswer) return;
     // Toggling against what is currently SHOWN, so the first press after a
     // preselection deselects that team instead of starting from an empty pick.
     setPickedWinners(prev => {
       const base = prev ?? preselectedWinners ?? NO_WINNERS;
       return { ...base, [team]: base[team] !== true };
     });
-  }, [preselectedWinners]);
+  }, [perCorrectAnswer, preselectedWinners]);
 
   const confirmAward = useCallback(() => {
-    if (selectedTeams(selectedWinners, activeTeams).length === 0) return;
+    // An empty tally is a legitimate outcome in `per-correct-answer` (nobody scored),
+    // and the host must still be able to advance — so only the pick-a-winner modes
+    // refuse to confirm an empty selection.
+    if (!perCorrectAnswer && selectedTeams(selectedWinners, activeTeams).length === 0) return;
     handleComplete(selectedWinners);
-  }, [selectedWinners, handleComplete, activeTeams]);
+  }, [perCorrectAnswer, selectedWinners, handleComplete, activeTeams]);
 
   // Leaving the award screen drops the pick so it can't leak into the next game.
   useEffect(() => {
@@ -552,8 +587,11 @@ export default function BaseGameWrapper({
     if (phase === 'points') {
       const controls: GamemasterControl[] = [];
       // An auto-scored game states its standing as a read-only line; the winner it
-      // worked out is preselected below, where the host can still override it.
-      if (autoAward) {
+      // worked out is preselected below, where the host can still override it. Not in
+      // `per-correct-answer`: nobody "wins" there — every team is paid its own count —
+      // and the award-summary control below already states those counts, so this line
+      // would only repeat it with a wrong "gewinnt" framing.
+      if (autoAward && !perCorrectAnswer) {
         const winners = selectedTeams(autoAward.winners, activeTeams);
         const standing = activeTeams
           .map(t => `${teamName(gameState.teams, t)}: ${autoAward.wins[t] ?? 0}`)
@@ -567,25 +605,40 @@ export default function BaseGameWrapper({
           text: `${standing} → ${winnerLabel}`,
         });
       }
-      // Toggles mirroring the show's cards, then one confirm — the same shape
-      // wer-kennt-mehr's count mode uses. GM control panel → mirror the frontend
-      // order (GM faces the crowd); IDs stay team-keyed, so only display order changes.
-      controls.push({
-        type: 'button-group',
-        id: 'award-selection',
-        label: 'Welches Team hat gewonnen? (mehrere = unentschieden)',
-        buttons: teamDisplayOrder(
-          gameState.teams.orderSwapped,
-          true,
-          gameState.settings.teamMirrorEnabled,
-          teamCount,
-        ).map(teamKey => ({
-          id: `award-toggle-${teamKey}`,
-          label: teamName(gameState.teams, teamKey),
-          variant: 'primary' as const,
-          active: selectedWinners[teamKey] === true,
-        })),
-      });
+      // GM control panel → mirror the frontend order (GM faces the crowd); IDs stay
+      // team-keyed, so only display order changes.
+      const displayOrder = teamDisplayOrder(
+        gameState.teams.orderSwapped,
+        true,
+        gameState.settings.teamMirrorEnabled,
+        teamCount,
+      );
+      if (perCorrectAnswer) {
+        // Read-only: there is nothing to toggle, so the group becomes the same
+        // statement the show's cards make. The GM corrects it in the tracker above,
+        // which the show follows live — then confirms.
+        controls.push({
+          type: 'info',
+          id: 'award-summary',
+          text: displayOrder
+            .map(t => `${teamName(gameState.teams, t)}: ${tallyByTeam[t] ?? 0}`)
+            .join(' · '),
+        });
+      } else {
+        // Toggles mirroring the show's cards, then one confirm — the same shape
+        // wer-kennt-mehr's count mode uses.
+        controls.push({
+          type: 'button-group',
+          id: 'award-selection',
+          label: 'Welches Team hat gewonnen? (mehrere = unentschieden)',
+          buttons: displayOrder.map(teamKey => ({
+            id: `award-toggle-${teamKey}`,
+            label: teamName(gameState.teams, teamKey),
+            variant: 'primary' as const,
+            active: selectedWinners[teamKey] === true,
+          })),
+        });
+      }
       controls.push({
         type: 'button',
         id: 'award-confirm',
@@ -596,7 +649,7 @@ export default function BaseGameWrapper({
       return controls;
     }
     return [];
-  }, [phase, gameControls, navState.hideForward, navState.hideBack, gameState.teams, gameState.settings.teamMirrorEnabled, teamCount, activeTeams, autoAward, selectedWinners, anyWinnerSelected]);
+  }, [phase, gameControls, navState.hideForward, navState.hideBack, gameState.teams, gameState.settings.teamMirrorEnabled, teamCount, activeTeams, autoAward, selectedWinners, anyWinnerSelected, perCorrectAnswer, tallyByTeam]);
 
   useGamemasterControlsSync(allControls, phase, currentIndex, hideCorrectTracker, gameState.currentGame?.totalGames, deadlineActive, timerActive, timerPaused, answerRevealed, scrollAnchors, fullscreenMedia !== null, fullscreenOpen, broadcastRemainingMs ?? undefined, activeTotalSeconds ?? undefined, activeKind ?? undefined, tickMuted, autoScored, !pointSystemEnabled);
 
@@ -980,6 +1033,7 @@ export default function BaseGameWrapper({
           points={awardPointsPreview}
           counts={awardCounts}
           hint={awardHint}
+          readOnly={perCorrectAnswer}
           onToggle={toggleWinner}
           onConfirm={confirmAward}
         />

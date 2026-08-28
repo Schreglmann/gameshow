@@ -3,6 +3,7 @@ import { isTouchDevice } from '@/utils/isTouchDevice';
 import type { GameFileSummary, GameType, ContentChangedPayload } from '@/types/config';
 import { fetchGames, fetchGame, createGame, createExampleGames, deleteGame } from '@/services/backendApi';
 import { useWsChannel } from '@/services/useBackendSocket';
+import { gameSaveKey, discardSave, newerThanRead } from '@/services/saveQueue';
 import { GAME_TYPE_INFO, GAME_TYPE_TEMPLATES, gameTypeMatchesQuery } from '@/data/gameTypeInfo';
 import GameEditor from './GameEditor';
 import StatusMessage from './StatusMessage';
@@ -141,7 +142,12 @@ export default function GamesTab({ onGoToAssets, initialFile, initialInstance, i
 
   const openEditor = async (fileName: string, instance?: string) => {
     try {
-      const data = await fetchGame(fileName);
+      const startedAt = Date.now();
+      const disk = await fetchGame(fileName);
+      // Reopening a game whose last edit is still queued (or landed while this GET was in
+      // flight) must not hand the editor the pre-edit file — see specs/admin-save-queue.md.
+      const data = newerThanRead<Record<string, unknown>>(gameSaveKey(fileName), startedAt)
+        ?? (disk as Record<string, unknown>);
       setEditingData(data as Record<string, unknown>);
       setEditingFile(fileName);
       onNavigate(fileName, instance);
@@ -156,6 +162,8 @@ export default function GamesTab({ onGoToAssets, initialFile, initialInstance, i
 
   const handleDelete = async (fileName: string) => {
     if (!(await confirmDialog({ title: `Spiel "${fileName}" wirklich löschen?` }))) return;
+    // Drop any queued save for this file first — a pending write would recreate it.
+    discardSave(gameSaveKey(fileName));
     try {
       const result = await deleteGame(fileName);
       const removedCount = result?.removedRefs?.length ?? 0;

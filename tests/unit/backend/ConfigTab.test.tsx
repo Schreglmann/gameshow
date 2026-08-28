@@ -6,6 +6,7 @@ import { ThemeProvider, THEMES, ADMIN_THEMES } from '@/context/ThemeContext';
 import ConfigTab from '@/components/backend/ConfigTab';
 import { GENERIC_JOKER_RULES } from '@/data/jokers';
 import type { AppConfig } from '@/types/config';
+import { getStatus } from '@/services/saveQueue';
 
 function renderConfigTab() {
   return render(<MemoryRouter><ThemeProvider><ConfigTab /></ThemeProvider></MemoryRouter>);
@@ -18,6 +19,7 @@ const mockFetchGames = vi.fn();
 vi.mock('@/services/backendApi', () => ({
   fetchConfig: (...args: unknown[]) => mockFetchConfig(...args),
   saveConfig: (...args: unknown[]) => mockSaveConfig(...args),
+  saveConfigBeacon: vi.fn(),
   fetchGames: (...args: unknown[]) => mockFetchGames(...args),
 }));
 
@@ -201,7 +203,10 @@ describe('ConfigTab', () => {
     expect(mockSaveConfig).not.toHaveBeenCalled();
   });
 
-  it('shows success toast after saving', async () => {
+  // The "Gespeichert" toast is owned by the shell's SaveStatusIndicator, not by this pane —
+  // it has to survive the pane unmounting. Here we only assert the write itself; the toast is
+  // covered in SaveStatusIndicator.test.tsx. See specs/admin-save-queue.md.
+  it('reaches idle once the debounced save lands', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderConfigTab();
     await waitFor(() => {
@@ -211,12 +216,15 @@ describe('ConfigTab', () => {
     await user.click(screen.getAllByRole('checkbox')[0]);
     act(() => { vi.advanceTimersByTime(800); });
 
-    await waitFor(() => {
-      expect(screen.getByText(/Config gespeichert/)).toBeInTheDocument();
-    });
+    await waitFor(() => expect(mockSaveConfig).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(getStatus().state).toBe('idle'));
+    expect(screen.queryByText(/gespeichert/i)).not.toBeInTheDocument();
   });
 
-  it('shows error toast when save fails', async () => {
+  // A failed save is no longer reported by a toast in this pane — the pane can be gone
+  // before the failure is known. The queue keeps the payload and retries it, and the
+  // admin shell's save-status pill reports the failure. See specs/admin-save-queue.md.
+  it('keeps retrying a failed save instead of dropping it', async () => {
     mockSaveConfig.mockRejectedValueOnce(new Error('Save error'));
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderConfigTab();
@@ -226,10 +234,13 @@ describe('ConfigTab', () => {
 
     await user.click(screen.getAllByRole('checkbox')[0]);
     act(() => { vi.advanceTimersByTime(800); });
+    await waitFor(() => expect(mockSaveConfig).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(getStatus().state).toBe('retrying'));
 
-    await waitFor(() => {
-      expect(screen.getByText(/Save error/)).toBeInTheDocument();
-    });
+    // First backoff step: 1s.
+    await act(async () => { vi.advanceTimersByTime(1000); });
+    await waitFor(() => expect(mockSaveConfig).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(getStatus().state).toBe('idle'));
   });
 
   it('Gameshow theme selector renders all 12 themes', async () => {

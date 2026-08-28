@@ -947,6 +947,14 @@
     transform: translateY(-2px);
 }
 
+/* The `per-correct-answer` point mode: the card states the outcome instead of
+   offering a choice, so every press affordance is dropped. It is a <div> there,
+   so :hover/:focus-visible can't fire — this only removes the pointer cursor.
+   See specs/point-system.md. */
+.award-team-card.is-readonly {
+    cursor: default;
+}
+
 .award-team-card:focus-visible {
     outline: 2px solid rgba(var(--card-text-rgb, var(--text-rgb)), 0.7);
     outline-offset: 3px;

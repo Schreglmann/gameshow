@@ -1,14 +1,51 @@
 # Spec: Point System
 
 ## Goal
-Each game awards a fixed point value to the winning team(s); points accumulate across all games and determine the winner shown on the summary screen.
+Each game awards points to the winning team(s); points accumulate across all games and determine the winner shown on the summary screen.
 
 The show runs with 0–4 teams (`GameshowConfig.teamCount`, default 2) — see
 [team-count.md](team-count.md). `pointSystemEnabled` is exactly `teamCount > 0`, so everything below
 that describes "the point system off" is the 0-teams case.
 
+## Point modes
+
+*How* a game result becomes points is a per-gameshow choice: `GameshowConfig.pointMode`, set in the
+admin Gameshows tab next to `teamCount` and served on `GET /api/settings` as `pointMode`. Omitted
+means `positional`, so every pre-existing gameshow keeps the historic behaviour.
+
+| Mode | German label | A game is worth |
+|------|--------------|-----------------|
+| `positional` (default) | Nach Spielreihenfolge | `currentIndex + 1` — game 0 = 1pt, game 1 = 2pt, … |
+| `flat` | Jedes Spiel zählt 1 Punkt | exactly `1`, in every position |
+| `per-correct-answer` | 1 Punkt pro richtiger Antwort | one point per correct answer that team gave in this game |
+
+The mode is resolved in **one place** — `BaseGameWrapper`, from `currentIndex` and
+`GlobalSettings.pointMode` via `gamePointValue()` ([src/utils/pointMode.ts](../src/utils/pointMode.ts)).
+Game components do not pass a point value; they cannot opt out of the mode.
+
+### `per-correct-answer`
+
+- The count comes from the gamemaster's per-question correct-answer tally
+  (`tallyTotals`, [src/utils/correctAnswers.ts](../src/utils/correctAnswers.ts)) — the same numbers the
+  award cards already state as `"3 richtige Antworten"`. Nothing new is recorded.
+- Points are booked **once, at game end**, not per `+` press: corrections, `2×` re-judges and the
+  score-history undo all keep working exactly as in the other modes.
+- The award screen is **read-only** (see the criteria below): the host confirms the counts rather than
+  picking a winner.
+- guessing-game's `scoringMode: 'auto'` fills the same tally itself, so it needs no special case —
+  each team receives its number of won questions.
+
+**Limitation — games without a tally.** The four inline-scored types (`bet-quiz`, `quizjagd`,
+`final-quiz`, `wer-kennt-mehr`) set `hideCorrectTracker` and therefore have no tally to read. They keep
+the scoring their type defines in **every** mode: `bet-quiz` / `final-quiz` their ±Einsatz, `quizjagd`
+its 3/5/7, `wer-kennt-mehr` its count modes — and `wer-kennt-mehr`'s standard mode keeps the
+award-screen value, which still follows `positional`/`flat` but falls back to positional under
+`per-correct-answer`. `validate-config.ts` warns when a `per-correct-answer` gameshow contains such a
+game, and the Gameshow editor names them inline.
+
 ## Acceptance criteria
-- [x] Each game is worth `currentIndex + 1` points (game 0 = 1pt, game 1 = 2pt, …)
+- [x] A game's point value follows the active gameshow's `pointMode` (table above), resolved once in
+      `BaseGameWrapper` — no game component passes a point value of its own
 - [x] After a game completes, the host sees the `AwardPoints` screen: one card per ACTIVE team, each a
       toggle, and a single "Punkte vergeben & weiter" button below them. Selecting a team and
       confirming are two separate presses — nothing is booked by a mis-tap on a card
@@ -30,6 +67,24 @@ that describes "the point system off" is the 0-teams case.
       (`award-toggle-<teamKey>`, one per active team, `active` mirroring the show) plus an
       `award-confirm` button, disabled while nothing is selected. Either surface can select and either
       can confirm
+
+The five criteria above describe `positional` and `flat`, where the screen asks **who won**. Under
+`per-correct-answer` the outcome is already fully determined by the tally, so the same screen renders
+read-only:
+
+- [x] In `per-correct-answer` the `AwardPoints` screen is **read-only** (`readOnly`): the cards are not
+      toggles — they carry no `aria-pressed`, no press affordance, and a tap does nothing. There is
+      nothing to pick, only to confirm
+- [x] Every card states its team's points **immediately** (`+4 Punkte` / `0 Punkte`), not gated on a
+      selection, alongside the `4 richtige Antworten` line it is computed from. The hint reads
+      `Jede richtige Antwort zählt 1 Punkt`
+- [x] The confirm button is **never disabled** in this mode — with an empty tally nobody is selected,
+      and the host must still be able to advance. Confirming an empty tally books nothing
+- [x] Confirming books each active team's `tallyTotals` count as its points (Aufholjoker ×2 included).
+      A team on 0 is skipped entirely, so no zero-delta entry reaches `scoreHistory`
+- [x] The gamemaster mirrors the read-only screen: the `award-selection` toggle group is replaced by an
+      `award-summary` info control stating the same per-team counts, and `award-confirm` stays enabled.
+      `award-toggle-<teamKey>` commands are ignored in this mode
 - [x] Points are added to the team's running total via `AWARD_POINTS` action
 - [x] Points can never go below 0 (enforced in reducer)
 - [x] Points are persisted to `localStorage` under the team's key (`team1Points` … `team4Points`)
@@ -57,6 +112,12 @@ that describes "the point system off" is the 0-teams case.
   The reducer stamps the log entry's `gameIndex` / `questionNumber` from `AppState.currentGame` /
   `AppState.currentQuestion`, so the action payload stays this small
 - `RESET_POINTS` action: sets both to 0, clears localStorage entries
+- `GlobalSettings.pointMode: PointMode` — required client-side, normalized from the optional
+  `SettingsResponse.pointMode` by `normalizePointMode()`. A setting, not runtime state: no action, no
+  localStorage, no WS channel
+- Config: `GameshowConfig.pointMode?: 'positional' | 'flat' | 'per-correct-answer'` per gameshow
+  (absent = `positional`); `validate-config.ts` rejects any other value and warns when a
+  `per-correct-answer` gameshow contains a game without a correct-answer tally
 - Config: `pointSystemEnabled: boolean` in `config.json` (global master switch, forces 0 teams) and
   `GameshowConfig.teamCount?: 0|1|2|3|4` per gameshow — see [team-count.md](team-count.md)
 - localStorage keys: `team1Points` … `team4Points`

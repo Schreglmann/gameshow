@@ -1,7 +1,17 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import type { GameType, RulesPreset, ContentChangedPayload } from '@/types/config';
 import { THEMES } from '@/context/ThemeContext';
-import { saveGame, renameGame, unlockPrecheck, fetchConfig, deleteGameInstance, convertGameToMulti, fetchGame, fetchGames, ApiError } from '@/services/backendApi';
+import { saveGame, saveGameBeacon, renameGame, unlockPrecheck, fetchConfig, deleteGameInstance, convertGameToMulti, fetchGame, fetchGames, ApiError } from '@/services/backendApi';
+import {
+  gameSaveKey,
+  enqueueSave,
+  flushSave,
+  discardSave,
+  hasPending,
+  isRecentSelfWrite,
+  markSaved,
+  onSaved,
+} from '@/services/saveQueue';
 import PlayerStatsModal from './PlayerStatsModal';
 import { useWsChannel } from '@/services/useBackendSocket';
 import { GAME_TYPE_INFO, GAME_TYPE_TEMPLATES, gameTypesShareQuestionShape, teamCountSupportLabel } from '@/data/gameTypeInfo';
@@ -53,7 +63,6 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
   // For the player-profile modal opened from a clicked player name.
   const [games, setGames] = useState<GameFileSummary[]>([]);
   const [statsPlayer, setStatsPlayer] = useState<string | null>(null);
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Spellcheck ("Lektorat") — per-game check; see specs/spellcheck.md ──
   const spellcheck = useSpellcheckSettings();
@@ -79,33 +88,25 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
   }, []);
   const prevData = useRef(data);
   const prevFileName = useRef(fileName);
-  // Serialization state for the auto-save: `saveInFlight` guards against starting a second
-  // PUT while the first is still running, and `pendingSave` stashes the latest payload so
-  // it's flushed after the in-flight request returns. Without this, a fast edit after a
-  // save started (e.g. a drag-reorder that finished 800 ms after a previous one) could
-  // produce overlapping PUTs whose server-side renames arrive out of order.
-  const saveInFlight = useRef(false);
-  const pendingSave = useRef<{ fileName: string; data: Record<string, unknown> } | null>(null);
+  // Persistence lives in the module-scope save queue (specs/admin-save-queue.md): it owns
+  // the debounce, serializes writes per file so two PUTs never overlap, and retries a failed
+  // save with backoff. Crucially it survives this component's unmount — closing the editor
+  // or switching admin tabs within the debounce window used to discard the edit.
+  const saveKey = gameSaveKey(fileName);
 
   // ── Cross-tab live sync (admin multi-instance) — see specs/live-config-reload.md ──
   // `savedSnapshotRef` is the JSON of the last state known to be persisted on disk; it
-  // drives the dirty check. `recentSelfWrites` holds the JSON of writes WE issued so our
-  // own `content-changed` echoes never trigger a reload banner. `reconcileReq` is a
-  // monotonic guard so a slow re-fetch can't clobber a newer one. `skipDeletedClose`
-  // suppresses the 404→close path during our own rename (old file briefly gone).
+  // drives the dirty check. The set of writes WE issued (so our own `content-changed`
+  // echoes never trigger a reload banner) lives in the save queue rather than here,
+  // because a save can land after this editor unmounted and its echo must still be
+  // recognisable as ours. `reconcileReq` is a monotonic guard so a slow re-fetch can't
+  // clobber a newer one. `skipDeletedClose` suppresses the 404→close path during our own
+  // rename (old file briefly gone).
   const savedSnapshotRef = useRef<string>(JSON.stringify(initialData));
-  const recentSelfWrites = useRef<Set<string>>(new Set());
   const reconcileReq = useRef(0);
   const skipDeletedClose = useRef(false);
    
   const [conflict, setConflict] = useState<{ fresh: Record<string, any> } | null>(null);
-
-  const markSelfSaved = (payload: unknown) => {
-    const s = JSON.stringify(payload);
-    savedSnapshotRef.current = s;
-    recentSelfWrites.current.add(s);
-    setTimeout(() => recentSelfWrites.current.delete(s), 5000);
-  };
 
   // Adopt a remote version. Set prevData/savedSnapshot BEFORE setData so the auto-save
   // effect early-returns (data === prevData.current) — otherwise adopting a remote change
@@ -130,8 +131,7 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
   // React to a content-changed broadcast (any games/*.json write). Re-fetch the open file
   // and reconcile: ignore our own echoes, adopt silently when we have no unsaved edits,
   // show a non-blocking banner when we do.
-  useWsChannel<ContentChangedPayload>('content-changed', (payload) => {
-    if (!payload?.games) return;
+  const runReconcile = () => {
     const myReq = ++reconcileReq.current;
     fetchGame(fileName)
       .then(freshRaw => {
@@ -139,16 +139,22 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
          
         const fresh = freshRaw as Record<string, any>;
         const freshStr = JSON.stringify(fresh);
-        if (recentSelfWrites.current.has(freshStr)) return;  // our own write echoing back
         if (freshStr === JSON.stringify(data)) return;        // already in sync
+        // A payload still queued or in flight is by definition unsaved, so it counts as
+        // dirty even when it matches our baseline — adopting disk over it would flash the
+        // pre-save state and then bounce straight back when our write lands.
+        const isDirty = hasPending(saveKey) || JSON.stringify(data) !== savedSnapshotRef.current;
+        // Clean → take disk, even when this is our own echo. Testing the self-write set
+        // first would strand an editor that read a stale copy (its GET served before a
+        // queued PUT landed) on that stale copy forever.
+        if (!isDirty) { adoptRemote(fresh); return; }
+        if (isRecentSelfWrite(saveKey, freshStr)) return;      // our own write echoing back
         // Disk matches the baseline we loaded — there is NO remote change to reconcile; any
         // difference is purely our own unsaved edits. Without this guard a late content-changed
         // echo (e.g. the "Beispiele erstellen" write-burst on a fresh install) landing while we
         // have unsaved edits would falsely raise the "in einem anderen Tab geändert" banner.
         if (freshStr === savedSnapshotRef.current) return;
-        const isDirty = JSON.stringify(data) !== savedSnapshotRef.current;
-        if (isDirty) setConflict({ fresh });
-        else adoptRemote(fresh);
+        setConflict({ fresh });
       })
       .catch(err => {
         if (myReq !== reconcileReq.current) return;
@@ -158,6 +164,10 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
           onClose();
         }
       });
+  };
+  useWsChannel<ContentChangedPayload>('content-changed', (payload) => {
+    if (!payload?.games) return;
+    runReconcile();
   });
 
   const isSingle = !data.instances;
@@ -196,66 +206,28 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
     setMessage({ type, text });
     setTimeout(() => setMessage(null), 3000);
   };
+  const showMsgRef = useRef(showMsg);
+  showMsgRef.current = showMsg;
 
-  // Newest payload, for the unmount/pagehide flush below.
-  const dirtyRef = useRef<{ fileName: string; data: Record<string, unknown> } | null>(null);
-
+  // No cleanup on purpose: the queue owns the debounce timer, so closing the editor or
+  // switching admin tabs within 800 ms of the last keystroke can no longer cancel the
+  // write. It used to — and the operator saw "Gespeichert!" from the *previous* flush,
+  // with no reason to suspect anything was lost.
   useEffect(() => {
     if (data === prevData.current && fileName === prevFileName.current) return;
     prevData.current = data;
     prevFileName.current = fileName;
-    dirtyRef.current = { fileName, data };
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => {
-      void flushSave(fileName, data);
-      dirtyRef.current = null;
-    }, 800);
-    return () => { if (saveTimer.current) clearTimeout(saveTimer.current); };
+    enqueueSave(gameSaveKey(fileName), data, p => saveGame(fileName, p), {
+      beacon: p => saveGameBeacon(fileName, p),
+    });
   }, [data, fileName]);
 
-  // Flush on unmount and on pagehide. The debounce effect's cleanup cancels the
-  // pending timer, so closing the editor (or the tab) within 800 ms of the last
-  // keystroke silently discarded that edit — the operator saw "Gespeichert!"
-  // from the previous flush and had no reason to suspect anything was lost.
-  useEffect(() => {
-    const flushNow = () => {
-      const pending = dirtyRef.current;
-      if (!pending) return;
-      dirtyRef.current = null;
-      void flushSave(pending.fileName, pending.data);
-    };
-    window.addEventListener('pagehide', flushNow);
-    return () => {
-      window.removeEventListener('pagehide', flushNow);
-      flushNow();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const flushSave = async (fn: string, payload: Record<string, unknown>) => {
-    // If another save is already in flight, remember the newest payload and let the
-    // in-flight save's finally block pick it up. This keeps the last value as the
-    // winner and prevents two PUTs from overlapping on the server.
-    if (saveInFlight.current) {
-      pendingSave.current = { fileName: fn, data: payload };
-      return;
-    }
-    saveInFlight.current = true;
-    try {
-      await saveGame(fn, payload);
-      markSelfSaved(payload);
-      showMsg('success', '✅ Gespeichert!');
-    } catch (e) {
-      showMsg('error', `❌ ${(e as Error).message}`);
-    } finally {
-      saveInFlight.current = false;
-      const next = pendingSave.current;
-      if (next) {
-        pendingSave.current = null;
-        void flushSave(next.fileName, next.data);
-      }
-    }
-  };
+  // Track what the queue actually persisted — including saves that complete after this
+  // editor unmounted and remounted — and run any reconciliation we deferred meanwhile.
+  useEffect(() => onSaved((key, json) => {
+    if (key !== saveKey) return;
+    savedSnapshotRef.current = json;
+  }), [saveKey]);
 
    
   const updateInstance = (key: string, instance: Record<string, any>) => {
@@ -290,10 +262,12 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
         ...converted,
         instances: { ...converted.instances, v2: { questions: [] } },
       };
-      // The server already wrote the v1 conversion; mark it self-written so the cross-tab
-      // reconciliation banner doesn't fire, and let the normal auto-save persist the empty v2.
+      // The server already wrote the v1 conversion; register it with the queue as persisted
+      // + self-written so the cross-tab reconciliation banner doesn't fire, and let the normal
+      // auto-save persist the empty v2.
       prevData.current = next;
-      markSelfSaved(next);
+      markSaved(saveKey, next);
+      savedSnapshotRef.current = JSON.stringify(next);
       setData(next);
       switchInstance('v2');
       if (rewrittenRefs.length) {
@@ -311,11 +285,9 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
     if (!(await confirmDialog({ title: `Instanz "${key}" wirklich löschen?` }))) return;
     // Flush any pending auto-save first so unsaved edits to the OTHER instances aren't lost
     // when the server rewrites the file (mirrors handleTitleBlur's flush).
-    if (saveTimer.current) {
-      clearTimeout(saveTimer.current);
-      saveTimer.current = null;
-      try { await saveGame(fileName, data); markSelfSaved(data); } catch { /* server delete reads the on-disk version */ }
-    }
+    // A rejection only means "not landed yet" — the queue keeps retrying, and the server
+    // delete reads whatever version is on disk.
+    try { await flushSave(saveKey); } catch { /* server delete reads the on-disk version */ }
     // Server-side delete removes the instance from the file AND cascades the gameOrder cleanup
     // (config.json), so a deleted instance never leaves a dangling reference. See
     // specs/config-gameorder-cascade.md.
@@ -328,10 +300,11 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
     }
     const { [key]: _, ...rest } = data.instances;
     const nextData = { ...data, instances: rest };
-    // Mark the post-delete state as self-written + persisted: the server already wrote it,
+    // Register the post-delete state as self-written + persisted: the server already wrote it,
     // so skip the redundant auto-save (prevData) and suppress our own content-changed echo.
     prevData.current = nextData;
-    markSelfSaved(nextData);
+    markSaved(saveKey, nextData);
+    savedSnapshotRef.current = JSON.stringify(nextData);
     setData(nextData);
     const nextKey = Object.keys(rest).filter(k => k !== 'template' && !isArchive(k))[0] ?? '';
     switchInstance(nextKey);
@@ -349,11 +322,14 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
     const derived = slugifyGameName(title);
     if (!derived || derived === fileName) return;
 
-    // Flush any pending auto-save first
-    if (saveTimer.current) {
-      clearTimeout(saveTimer.current);
-      saveTimer.current = null;
-      try { await saveGame(fileName, data); markSelfSaved(data); } catch { /* rename will fail if save fails */ }
+    // Flush any pending auto-save first, and ABORT the rename if it doesn't land: an entry
+    // still queued under the old key would keep retrying after the rename and recreate the
+    // file we just moved away from.
+    try {
+      await flushSave(saveKey);
+    } catch (e) {
+      showMsg('error', `Umbenennung abgebrochen — Speichern fehlgeschlagen: ${(e as Error).message}`);
+      return;
     }
 
     // During our own rename the old file briefly 404s — don't let reconciliation read that
@@ -364,6 +340,9 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
     setRenaming(true);
     try {
       await renameGame(fileName, derived);
+      // The old file is gone; drop its queue entry before the fileName prop change
+      // re-enqueues the current data under the new key.
+      discardSave(saveKey);
       onRename(derived);
     } catch (e) {
       showMsg('error', `Umbenennung fehlgeschlagen: ${(e as Error).message}`);
@@ -460,13 +439,15 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
       },
     };
     setData(newData);
-    // Save immediately — don't rely on the 800ms debounce for structural moves
-    if (saveTimer.current) clearTimeout(saveTimer.current);
+    // Save immediately — don't rely on the debounce for structural moves. Still goes through
+    // the queue, so it is serialized against any save already in flight for this file.
     prevData.current = newData;
+    enqueueSave(saveKey, newData, p => saveGame(fileName, p), {
+      debounceMs: 0,
+      beacon: p => saveGameBeacon(fileName, p),
+    });
     try {
-      await saveGame(fileName, newData);
-      markSelfSaved(newData);
-      showMsg('success', '✅ Gespeichert!');
+      await flushSave(saveKey);
     } catch (e) {
       showMsg('error', `❌ ${(e as Error).message}`);
     }

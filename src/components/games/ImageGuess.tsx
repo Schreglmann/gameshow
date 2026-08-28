@@ -119,7 +119,6 @@ export default function ImageGuess(props: GameComponentProps) {
       rules={config.rules || ['Ein Bild wird schrittweise enthüllt — erratet, was darauf zu sehen ist!']}
       totalQuestions={totalQuestions}
       pointSystemEnabled={props.pointSystemEnabled}
-      pointValue={props.currentIndex + 1}
       currentIndex={props.currentIndex}
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}

@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { isTouchDevice } from '@/utils/isTouchDevice';
-import type { GameshowConfig, GameFileSummary, GameType } from '@/types/config';
+import type { GameshowConfig, GameFileSummary, GameType, PointMode } from '@/types/config';
 import { fetchGames } from '@/services/backendApi';
-import { gameTypeMatchesQuery, gameSupportsTeamCount, teamCountSupportLabel } from '@/data/gameTypeInfo';
+import { gameTypeMatchesQuery, gameSupportsTeamCount, gameUsesCorrectAnswerTally, teamCountSupportLabel } from '@/data/gameTypeInfo';
 import { DEFAULT_TEAM_COUNT, normalizeTeamCount } from '@/utils/teams';
+import { DEFAULT_POINT_MODE, normalizePointMode } from '@/utils/pointMode';
 import { useDragReorder } from './useDragReorder';
 import { JOKER_CATALOG } from '@/data/jokers';
 import JokerIcon from '@/components/common/JokerIcon';
@@ -537,6 +538,28 @@ export default function GameshowEditor({ id, gameshow, allGameshows, activeGames
     }
     return refs;
   }, [gameshow.gameOrder, availableGames, teamCount]);
+
+  // In `per-correct-answer`, games without a correct-answer tally keep their own
+  // scoring instead. They still play and still score, so this is a hint, not a
+  // conflict — EXCEPT when `unscorableRefs` already claims the ref: a game that
+  // doesn't score at all at this team count has nothing to say about "keeping its
+  // own scoring", and showing both badges reads as a contradiction ("doesn't
+  // score" next to "scores its own way"). `unscorableRefs` wins. See
+  // specs/point-system.md.
+  const pointMode = normalizePointMode(gameshow.pointMode);
+  const ownScoringRefs = useMemo(() => {
+    const refs = new Set<string>();
+    if (teamCount === 0 || pointMode !== 'per-correct-answer') return refs;
+    for (const ref of gameshow.gameOrder) {
+      if (unscorableRefs.has(ref)) continue;
+      const slash = ref.indexOf('/');
+      const name = slash >= 0 ? ref.slice(0, slash) : ref;
+      const data = availableGames.find(g => g.fileName === name);
+      if (data && !gameUsesCorrectAnswerTally(data.type)) refs.add(ref);
+    }
+    return refs;
+  }, [gameshow.gameOrder, availableGames, teamCount, pointMode, unscorableRefs]);
+
   const addedRefs = useMemo(() => new Set(gameshow.gameOrder), [gameshow.gameOrder]);
   const pickerGames = useMemo(() => availableGames.filter(g => {
     if (g.disabled) return false; // whole game disabled — never offered (specs/game-disable.md)
@@ -649,7 +672,7 @@ export default function GameshowEditor({ id, gameshow, allGameshows, activeGames
         &nbsp;·&nbsp; {totalQuestions} Frage{totalQuestions !== 1 ? 'n' : ''}
       </div>
 
-      {/* Team count + players */}
+      {/* Team count, point mode, and the roster group — one row, wraps as needed */}
       <div className="gs-players-row">
         <label className="gs-players-label" htmlFor={`teams-${id}`}>Teams</label>
         <select
@@ -670,21 +693,44 @@ export default function GameshowEditor({ id, gameshow, allGameshows, activeGames
           <option value={3}>3 Teams</option>
           <option value={4}>4 Teams</option>
         </select>
-        <label className="gs-players-label">Spieler</label>
-        <PlayersCombobox
-          selected={currentPlayers}
-          knownPlayers={knownPlayers}
-          onChange={players => onChange({ ...gameshow, players })}
-          onPlayerClick={setStatsPlayer}
-        />
-        <button
-          className={`be-icon-btn ${showPlanning ? 'active' : ''}`}
-          onClick={() => setShowPlanning(v => !v)}
-          title="Spielplanung"
-          style={{ flexShrink: 0 }}
+        <label className="gs-players-label" htmlFor={`point-mode-${id}`}>Punkte</label>
+        <select
+          id={`point-mode-${id}`}
+          className="be-select gs-point-mode"
+          value={pointMode}
+          onChange={e => {
+            const next = normalizePointMode(e.target.value);
+            // The default is stored as absent, so untouched gameshows keep a clean
+            // config.json — exactly like teamCount and scoringMode.
+            onChange({ ...gameshow, pointMode: next === DEFAULT_POINT_MODE ? undefined : next as PointMode });
+          }}
+          title="Wie diese Gameshow Punkte vergibt."
         >
-          {showPlanning ? '▲ Planung' : '▼ Planung'}
-        </button>
+          {/* Short labels — the full mode names live in the tooltips. */}
+          <option value="positional" title="Spiel 1 ist 1 Punkt wert, Spiel 2 zwei Punkte, usw.">Nach Reihenfolge</option>
+          <option value="flat" title="Jedes Spiel ist genau 1 Punkt wert, unabhängig von seiner Position.">Jedes Spiel 1 Punkt</option>
+          <option value="per-correct-answer" title="Jedes Team bekommt einen Punkt pro richtiger Antwort — gezählt über die Richtig-Zähler des Gamemasters.">Pro richtige Antwort</option>
+        </select>
+        {/* Grouped so the roster wraps to its own line as a WHOLE when the row runs
+            out of room, instead of the combobox getting squeezed until its input
+            drops below the tags. See specs/point-system.md. */}
+        <div className="gs-roster-group">
+          <label className="gs-players-label">Spieler</label>
+          <PlayersCombobox
+            selected={currentPlayers}
+            knownPlayers={knownPlayers}
+            onChange={players => onChange({ ...gameshow, players })}
+            onPlayerClick={setStatsPlayer}
+          />
+          <button
+            className={`be-icon-btn ${showPlanning ? 'active' : ''}`}
+            onClick={() => setShowPlanning(v => !v)}
+            title="Spielplanung"
+            style={{ flexShrink: 0 }}
+          >
+            {showPlanning ? '▲ Planung' : '▼ Planung'}
+          </button>
+        </div>
       </div>
 
       {/* Planning overview */}
@@ -711,6 +757,16 @@ export default function GameshowEditor({ id, gameshow, allGameshows, activeGames
         </div>
       )}
 
+      {ownScoringRefs.size > 0 && (
+        <div className="be-conflict-banner" role="status" style={{ marginBottom: 10 }}>
+          <span className="be-conflict-banner-icon" aria-hidden="true">⚠</span>
+          <span className="be-conflict-banner-text">
+            {ownScoringRefs.size === 1 ? '1 Spiel zählt' : `${ownScoringRefs.size} Spiele zählen`} keine richtigen
+            Antworten mit und {ownScoringRefs.size === 1 ? 'vergibt' : 'vergeben'} weiterhin Punkte nach eigener Logik.
+          </span>
+        </div>
+      )}
+
       {gameshow.gameOrder.length === 0 ? (
         <div className="be-empty" style={{ padding: '12px 0' }}>Keine Spiele — füge unten welche hinzu</div>
       ) : (
@@ -731,6 +787,7 @@ export default function GameshowEditor({ id, gameshow, allGameshows, activeGames
           // it will play without scoring. It still runs — this is a heads-up, not
           // an error. See specs/team-count.md.
           const isUnscorable = unscorableRefs.has(ref);
+          const isOwnScoring = ownScoringRefs.has(ref);
 
           return (
             <div
@@ -790,6 +847,21 @@ export default function GameshowEditor({ id, gameshow, allGameshows, activeGames
                     border: '1px solid rgba(var(--warning-rgb), 0.45)',
                   }}
                 >Ohne Wertung</span>
+              )}
+              {isOwnScoring && (
+                <span
+                  title={`"${gameData?.title ?? gameName}" führt keine Richtig-Zähler und vergibt seine Punkte selbst — der Modus "1 Punkt pro richtiger Antwort" greift hier nicht.`}
+                  style={{
+                    flexShrink: 0,
+                    fontSize: 'var(--admin-sz-11, 11px)',
+                    padding: '2px 7px',
+                    borderRadius: 6,
+                    whiteSpace: 'nowrap',
+                    background: 'rgba(var(--warning-rgb), 0.14)',
+                    color: 'var(--warning)',
+                    border: '1px solid rgba(var(--warning-rgb), 0.45)',
+                  }}
+                >Eigene Wertung</span>
               )}
               {isRefDisabled && (
                 <span
