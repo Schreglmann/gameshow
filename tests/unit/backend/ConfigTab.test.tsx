@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { ThemeProvider, THEMES, ADMIN_THEMES } from '@/context/ThemeContext';
 import ConfigTab from '@/components/backend/ConfigTab';
 import { GENERIC_JOKER_RULES } from '@/data/jokers';
+import { POINT_MODE_RULE_DEFAULTS } from '@/utils/pointMode';
 import type { AppConfig } from '@/types/config';
 import { getStatus } from '@/services/saveQueue';
 
@@ -117,6 +118,51 @@ describe('ConfigTab', () => {
     await waitFor(() => {
       expect(screen.getByDisplayValue('Rule 1')).toBeInTheDocument();
       expect(screen.getByDisplayValue('Rule 2')).toBeInTheDocument();
+    });
+  });
+
+  it('renders "Punkte-Regel-Texte" card', async () => {
+    renderConfigTab();
+    await waitFor(() => {
+      expect(screen.getByText('Punkte-Regel-Texte')).toBeInTheDocument();
+    });
+  });
+
+  it('prefills every point-mode field with its built-in default when config has none', async () => {
+    renderConfigTab();
+    await waitFor(() => {
+      expect(screen.getByDisplayValue(POINT_MODE_RULE_DEFAULTS.positional)).toBeInTheDocument();
+      expect(screen.getByDisplayValue(POINT_MODE_RULE_DEFAULTS.flat)).toBeInTheDocument();
+      expect(screen.getByDisplayValue(POINT_MODE_RULE_DEFAULTS['per-correct-answer'])).toBeInTheDocument();
+    });
+  });
+
+  it('shows an existing pointModeRules override from config', async () => {
+    mockFetchConfig.mockResolvedValue({ ...sampleConfig, pointModeRules: { flat: 'Eigener Punkte-Text' } });
+    renderConfigTab();
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Eigener Punkte-Text')).toBeInTheDocument();
+    });
+  });
+
+  it('editing a Punkte-Regel-Text autosaves config.pointModeRules', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderConfigTab();
+    await waitFor(() => {
+      expect(screen.getByDisplayValue(POINT_MODE_RULE_DEFAULTS.flat)).toBeInTheDocument();
+    });
+
+    const input = screen.getByDisplayValue(POINT_MODE_RULE_DEFAULTS.flat);
+    await user.clear(input);
+    await user.type(input, 'Geänderter Punkte-Text');
+    act(() => { vi.advanceTimersByTime(800); });
+
+    await waitFor(() => {
+      expect(mockSaveConfig).toHaveBeenCalledWith(
+        expect.objectContaining({
+          pointModeRules: expect.objectContaining({ flat: 'Geänderter Punkte-Text' }),
+        })
+      );
     });
   });
 

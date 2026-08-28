@@ -46,17 +46,20 @@ export function pointModeLabel(mode: PointMode): string {
   }
 }
 
+/** Built-in wording for `pointModeRule()`, used whenever the operator hasn't overridden a mode. */
+export const POINT_MODE_RULE_DEFAULTS: Record<PointMode, string> = {
+  positional: 'Das erste Spiel ist 1 Punkt wert, das zweite 2 Punkte, etc.',
+  flat: 'Jedes Spiel ist 1 Punkt wert.',
+  'per-correct-answer': 'Jede richtige Antwort ist 1 Punkt wert.',
+};
+
 /**
- * The global-rules line describing the mode, shown on the rules screen when the
- * operator has not authored their own `globalRules`.
+ * The global-rules line describing the mode, always appended to `globalRules` by
+ * `GET /api/settings` (see specs/point-system.md). `overrides` is the operator-editable
+ * `AppConfig.pointModeRules`, edited per mode in the admin ConfigTab; a missing or
+ * blank entry falls back to `POINT_MODE_RULE_DEFAULTS`.
  */
-export function pointModeRule(mode: PointMode): string {
-  switch (mode) {
-    case 'flat':
-      return 'Jedes Spiel ist 1 Punkt wert.';
-    case 'per-correct-answer':
-      return 'Jede richtige Antwort ist 1 Punkt wert.';
-    default:
-      return 'Das erste Spiel ist 1 Punkt wert, das zweite 2 Punkte, etc.';
-  }
+export function pointModeRule(mode: PointMode, overrides?: Partial<Record<PointMode, string>>): string {
+  const custom = overrides?.[mode]?.trim();
+  return custom ? custom : POINT_MODE_RULE_DEFAULTS[mode];
 }

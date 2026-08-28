@@ -15,7 +15,7 @@ Rules were authored game-by-game in isolation. The same idea ended up phrased 3�
 3. Append the archetype lines **verbatim** — do not reword them.
 4. If the game has a special mechanic (bet-quiz, final-quiz, etc.), use the Archetype X patterns below and match the tone/verbs/punctuation of the other archetypes.
 
-The `globalRules` in `config.json` already covers the show-level framing (multiple games, positional scoring, overall winner, round-winner default). Per-game rules must **not** restate those.
+The `globalRules` in `config.json` already covers the show-level framing (multiple games, scoring per the active gameshow's point mode, overall winner, round-winner default). Per-game rules must **not** restate those.
 
 ## Universal conventions
 
@@ -234,14 +234,22 @@ An empty `rules: []` is allowed but discouraged. Prefer the canonical archetype 
 
 ## Relationship to `globalRules`
 
-`globalRules` in [`config.json`](../config.json) carries the show-level framing:
+`globalRules` in [`config.json`](../config.json) carries the show-level framing the operator
+authors:
 
 - There are multiple games.
 - Each round has a winner (default: most correct answers — games override if different).
-- Positional scoring: first round is 1 point, second 2, etc.
 - Team with most total points wins the show.
 
-Per-game `rules` **must not repeat** any of those four statements.
+A fourth, scoring statement (e.g. "first round is 1 point, second 2, etc.") is **never** part of the
+stored array — `GET /api/settings` always appends it, derived from the *active* gameshow's
+`pointMode` (`pointModeRule()`, see [point-system.md](point-system.md)), and omits it entirely when
+the point system is off. Do not author your own scoring line in `globalRules`; it would sit alongside
+the generated one rather than replacing it, and would go stale the moment a gameshow uses a
+`pointMode` other than the one it was written for.
+
+Per-game `rules` **must not repeat** any of the three authored statements above, or the generated
+scoring statement.
 
 ## Acceptance criteria
 

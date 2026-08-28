@@ -9,7 +9,6 @@
 
 import { readFile, writeFile, rename } from 'fs/promises';
 import type { AppConfig } from '../src/types/config.js';
-import { DEFAULT_POINT_MODE, pointModeRule } from '../src/utils/pointMode.js';
 
 /**
  * git-crypt encrypts files with a magic header of `\0GITCRYPT\0` followed by
@@ -24,6 +23,18 @@ export function isGitCryptBlob(buffer: Buffer): boolean {
 }
 
 /**
+ * The show-level framing lines every gameshow shares, excluding the scoring
+ * sentence — that depends on the active gameshow's `pointMode` and is appended
+ * dynamically by `GET /api/settings` (`pointModeRule()`,
+ * src/utils/pointMode.ts), never stored. See specs/point-system.md.
+ */
+export const DEFAULT_GLOBAL_RULES: string[] = [
+  'Es gibt mehrere Spiele.',
+  'Bei jedem Spiel wird am Ende entschieden welches Team das Spiel gewonnen hat.',
+  'Das Team mit den meisten Punkten gewinnt am Ende.',
+];
+
+/**
  * Build the minimal default config used when config.json is missing, encrypted,
  * or unparseable. It defines a single empty "Beispiele" gameshow (active) plus
  * the show-level globalRules and shared rulesPresets. The gameOrder is filled by
@@ -35,14 +46,7 @@ export function buildDefaultConfig(): AppConfig {
     pointSystemEnabled: true,
     teamRandomizationEnabled: true,
     jokersInLastGame: false,
-    globalRules: [
-      'Es gibt mehrere Spiele.',
-      'Bei jedem Spiel wird am Ende entschieden welches Team das Spiel gewonnen hat.',
-      // A clean install has no gameshow yet, so it scores positionally. Taken from
-      // the helper so this line cannot drift from the one /api/settings serves.
-      pointModeRule(DEFAULT_POINT_MODE),
-      'Das Team mit den meisten Punkten gewinnt am Ende.',
-    ],
+    globalRules: DEFAULT_GLOBAL_RULES,
     rulesPresets: [
       {
         id: 'simultaneous-written',

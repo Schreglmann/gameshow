@@ -23,7 +23,13 @@ All gameshow content — which games run, in what order, with what questions —
   - `teamRandomizationEnabled: boolean`
   - `jokersInLastGame: boolean` (top-level `AppConfig` flag, default `false`; when `true`, jokers stay available in the last game)
   - `jokerUsageScope: 'per-gameshow' | 'per-game'` (top-level `AppConfig` flag, default `'per-gameshow'`; `'per-game'` refreshes all jokers except the Aufholjoker at the start of each game — see [jokers.md](jokers.md))
-  - `globalRules: string[]`
+  - `globalRules: string[]` — as stored in `config.json`, holds only the pointMode-agnostic framing
+    lines; `GET /api/settings` always appends one more line, the active gameshow's scoring sentence
+    (`pointModeRule(pointMode, config.pointModeRules)`, omitted when `pointSystemEnabled` is false) —
+    never itself stored, so it can't drift from a gameshow's actual `pointMode`. The wording per mode
+    is operator-editable via the top-level `AppConfig.pointModeRules?: Partial<Record<PointMode,
+    string>>` (admin ConfigTab "Punkte-Regel-Texte"), falling back to `POINT_MODE_RULE_DEFAULTS` when
+    blank. See [point-system.md](point-system.md)
   - `enabledJokers: string[]` (joker IDs from the active gameshow)
 - `GET /api/game/:index` returns `GameDataResponse`:
   - `gameId: string`

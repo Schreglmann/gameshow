@@ -5,6 +5,7 @@ import ConflictBanner from './ConflictBanner';
 import { useEditableConfig } from './useEditableConfig';
 import { GENERIC_JOKER_RULES } from '@/data/jokers';
 import { DEFAULT_TEAM_COUNT, normalizeTeamCount } from '@/utils/teams';
+import { ALL_POINT_MODES, pointModeLabel, POINT_MODE_RULE_DEFAULTS } from '@/utils/pointMode';
 
 export default function ConfigTab() {
   const { theme, setTheme, adminTheme, setAdminTheme } = useTheme();
@@ -158,9 +159,41 @@ export default function ConfigTab() {
         </div>
       </div>
 
+      {/* Punkte-Regel-Texte — operator-editable wording for the globalRules scoring
+          sentence, one per PointMode. GET /api/settings appends the entry matching
+          the ACTIVE gameshow's pointMode; a blank field falls back to the built-in
+          default (POINT_MODE_RULE_DEFAULTS). See specs/point-system.md. */}
+      <div className="backend-card">
+        <h3>Punkte-Regel-Texte</h3>
+        <p style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)))', marginTop: 0, marginBottom: 12 }}>
+          Wird im Regelwerk automatisch an die globalen Regeln angehängt — je nachdem, welches
+          Punktesystem die aktive Gameshow verwendet.
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {ALL_POINT_MODES.map(mode => (
+            <div key={mode}>
+              <label className="be-label" htmlFor={`point-mode-rule-${mode}`}>{pointModeLabel(mode)}</label>
+              <input
+                id={`point-mode-rule-${mode}`}
+                className="be-input"
+                value={config.pointModeRules?.[mode] ?? POINT_MODE_RULE_DEFAULTS[mode]}
+                onChange={e => setConfig({
+                  ...config,
+                  pointModeRules: { ...config.pointModeRules, [mode]: e.target.value },
+                })}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Global rules */}
       <div className="backend-card">
         <h3>Globale Regeln</h3>
+        <p style={{ fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)))', marginTop: 0, marginBottom: 12 }}>
+          Die Punkte-Regel (Text oben anpassbar, abhängig vom Punktesystem der aktiven Gameshow) wird
+          automatisch ergänzt und muss hier nicht eingetragen werden.
+        </p>
         <RulesEditor
           rules={config.globalRules ?? []}
           onChange={rules => setConfig({ ...config, globalRules: rules })}

@@ -6,6 +6,7 @@ import {
   normalizePointMode,
   pointModeLabel,
   pointModeRule,
+  POINT_MODE_RULE_DEFAULTS,
 } from '@/utils/pointMode';
 
 /**
@@ -54,5 +55,24 @@ describe('German labels', () => {
     expect(pointModeRule('flat')).toBe('Jedes Spiel ist 1 Punkt wert.');
     expect(pointModeRule('per-correct-answer')).toBe('Jede richtige Antwort ist 1 Punkt wert.');
     expect(pointModeRule('positional')).toContain('erste Spiel ist 1 Punkt wert');
+  });
+});
+
+describe('pointModeRule overrides (AppConfig.pointModeRules, operator-editable)', () => {
+  it('uses the operator override when present for that mode', () => {
+    expect(pointModeRule('flat', { flat: 'Eigener Text' })).toBe('Eigener Text');
+  });
+
+  it('leaves other modes on the built-in default', () => {
+    expect(pointModeRule('positional', { flat: 'Eigener Text' })).toBe(POINT_MODE_RULE_DEFAULTS.positional);
+  });
+
+  it('falls back to the default when the override is blank or whitespace-only', () => {
+    expect(pointModeRule('flat', { flat: '' })).toBe(POINT_MODE_RULE_DEFAULTS.flat);
+    expect(pointModeRule('flat', { flat: '   ' })).toBe(POINT_MODE_RULE_DEFAULTS.flat);
+  });
+
+  it('falls back to the default when no overrides are given at all', () => {
+    for (const mode of ALL_POINT_MODES) expect(pointModeRule(mode)).toBe(POINT_MODE_RULE_DEFAULTS[mode]);
   });
 });

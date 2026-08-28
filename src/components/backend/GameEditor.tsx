@@ -713,10 +713,11 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
                 <option key={t} value={t}>{GAME_TYPE_INFO[t].label}</option>
               ))}
             </select>
-            {/* Which team counts this type can be SCORED at. A gameshow may still
-                use it at any other count — the round just plays without scoring.
-                See specs/team-count.md. */}
-            {data.type && (
+            {/* Only warn when this type/scoringMode restricts scoring below the full
+                1-4 range — full support needs no callout. A gameshow may still use a
+                restricted type at any other count; the round just plays without
+                scoring. See specs/team-count.md. */}
+            {data.type && teamCountSupportLabel(data.type, (data as { scoringMode?: string }).scoringMode) !== '1–4 Teams' && (
               <p className="be-field-hint" style={{ color: undefined }}>
                 Wertung möglich mit: {teamCountSupportLabel(data.type, (data as { scoringMode?: string }).scoringMode)}
               </p>

@@ -3352,6 +3352,15 @@ components:
           type: array
           items: { type: string }
           description: Generic joker explanation for the rules screen (operator-editable in the admin ConfigTab); empty/omitted → frontend uses a built-in default.
+        pointModeRules:
+          type: object
+          additionalProperties: { type: string }
+          description: >-
+            Operator-editable wording override for the globalRules scoring sentence, keyed by
+            PointMode (`positional`/`flat`/`per-correct-answer`). A missing or blank entry falls
+            back to the built-in default text. Edited in the admin ConfigTab ("Punkte-Regel-Texte");
+            resolved by `GET /api/settings` into the active gameshow's appended `globalRules` line.
+            See [specs/point-system.md](../point-system.md).
         jokerUsageScope:
           type: string
           enum: [per-gameshow, per-game]

@@ -562,6 +562,15 @@ export interface AppConfig {
    * ([src/data/jokers.ts](./data/jokers.ts)). See specs/jokers.md.
    */
   jokerRules?: string[];
+  /**
+   * Operator-editable override for the `globalRules` scoring sentence, keyed by
+   * `PointMode`. A missing or blank entry falls back to the built-in default text
+   * (`POINT_MODE_RULE_DEFAULTS`, [src/utils/pointMode.ts](../utils/pointMode.ts)).
+   * Edited in the admin ConfigTab next to `globalRules`/`jokerRules`; resolved into
+   * `globalRules` by `GET /api/settings` from the active gameshow's `pointMode`.
+   * See specs/point-system.md.
+   */
+  pointModeRules?: Partial<Record<PointMode, string>>;
   rulesPresets?: RulesPreset[];
   activeGameshow: string;
   gameshows: Record<string, GameshowConfig>;

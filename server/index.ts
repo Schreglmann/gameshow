@@ -49,7 +49,7 @@ import {
 } from './random-frame-prerender.js';
 import { setupWebSocket, broadcast, broadcastThrottled } from './ws.js';
 import { startContentWatch } from './content-watch.js';
-import { isGitCryptBlob, loadConfigWithFallback, ensureConfigFile } from './clean-install.js';
+import { isGitCryptBlob, loadConfigWithFallback, ensureConfigFile, DEFAULT_GLOBAL_RULES } from './clean-install.js';
 import { pruneGameOrder, parseGameRef, isRefToGame, isRefToInstance, requalifyBareRefs } from './game-order.js';
 import { convertToMultiInstance } from './game-file.js';
 import type { RemovedGameRef } from './game-order.js';
@@ -3831,14 +3831,16 @@ app.get('/api/settings', async (_req, res) => {
       // them. Forced off at 0 and 1 teams rather than left to each client.
       teamRandomizationEnabled: hasTeamSplit(teamCount) && config.teamRandomizationEnabled !== false,
       teamMirrorEnabled: config.teamMirrorEnabled === true,
-      globalRules: config.globalRules || [
-        'Es gibt mehrere Spiele.',
-        'Bei jedem Spiel wird am Ende entschieden welches Team das Spiel gewonnen hat.',
-        // The scoring line has to follow the gameshow's point mode — the default
-        // rules would otherwise announce positional points to a flat-scored show.
-        pointModeRule(pointMode),
-        'Das Team mit den meisten Punkten gewinnt am Ende.',
-      ],
+      // The scoring line is never stored — it always follows the active gameshow's
+      // pointMode, appended after the operator's (or default) framing lines, so it
+      // can't drift from a gameshow whose pointMode differs from when the text was
+      // authored. Omitted entirely with the point system off. See specs/point-system.md.
+      globalRules: (() => {
+        const baseRules = config.globalRules && config.globalRules.length > 0
+          ? config.globalRules
+          : DEFAULT_GLOBAL_RULES;
+        return pointSystemEnabled ? [...baseRules, pointModeRule(pointMode, config.pointModeRules)] : baseRules;
+      })(),
       isCleanInstall: cleanInstallActive,
       // Jokers are a per-team mechanic — with the point system off the show has no
       // teams, so jokers are auto-disabled regardless of the gameshow's configured
