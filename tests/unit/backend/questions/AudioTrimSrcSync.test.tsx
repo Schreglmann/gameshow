@@ -23,8 +23,8 @@ vi.mock('@/components/backend/AudioTrimTimeline', () => ({
 }));
 
 vi.mock('@/components/backend/MiniAudioPlayer', () => ({
-  default: ({ src, scope }: { src: string; scope?: string }) => (
-    <div data-testid="mini" data-src={src} data-scope={scope ?? ''} />
+  default: ({ src, scope, start }: { src: string; scope?: string; start?: number }) => (
+    <div data-testid="mini" data-src={src} data-scope={scope ?? ''} data-start={start ?? ''} />
   ),
 }));
 
@@ -139,6 +139,23 @@ describe('mini player / trim timeline share one audio element', () => {
       expect(mini?.dataset.src).toBe(ENCODED);
       expect(trim?.dataset.src).toBe(ENCODED);
       expect(trim?.dataset.scope).toBe(mini?.dataset.scope);
+    });
+  }
+});
+
+/**
+ * Every case above sets a trim start of 5s. The mini player has to receive it too,
+ * or pressing play in the asset field previews the untrimmed song from 0:00.
+ */
+describe('mini player gets the field trim', () => {
+  for (const c of cases) {
+    it(`${c.name}: mini player receives the trim start`, () => {
+      const { container } = render(c.render());
+      expandAll(container);
+
+      const mini = screen.getAllByTestId('mini').find(el => el.dataset.src?.includes('Dancing'));
+
+      expect(mini?.dataset.start).toBe('5');
     });
   }
 });

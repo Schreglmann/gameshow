@@ -102,6 +102,9 @@ export default function GuessingGameForm({ questions, onChange, otherInstances, 
                     value={q.questionAudio}
                     category="audio"
                     scope={`q-${i}-question`}
+                    audioStart={q.questionAudioStart}
+                    audioEnd={q.questionAudioEnd}
+                    audioLoop={q.questionAudioLoop}
                     onChange={v => {
                       update(i, { questionAudio: v, questionAudioStart: undefined, questionAudioEnd: undefined, questionAudioLoop: undefined });
                       if (v === undefined) setTrimExpanded(prev => { const n = new Set(prev); n.delete(i); return n; });

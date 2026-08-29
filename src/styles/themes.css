@@ -689,6 +689,12 @@
     radial-gradient(ellipse 120% 55% at 50% 100%, rgba(201, 162, 39, 0.10) 0%, transparent 55%),
     linear-gradient(to bottom, #0c0820 0%, #1c0b2e 45%, #2a0e3a 75%, #1a0820 100%);
   background-attachment: fixed;
+  /* `background-color` = this gradient's FINAL stop. Colour is not subject to
+     `background-attachment`, so it fills the whole box no matter what — it is what
+     keeps the area past a mis-painted fixed background from being bare canvas.
+     See the `@supports (-webkit-touch-callout: none)` block at the END of this
+     file, and specs/themes.md. */
+  background-color: #1a0820;
 }
 
 /* Harry Potter — ::before = night sky over the grounds: a pale moon (disc + soft halo,
@@ -1502,6 +1508,12 @@
     /* Sky base — vertical gradient instead of the global 135deg sweep */
     linear-gradient(to bottom, #04001a 0%, #0c032a 50%, #1a0538 100%) center / 100% 100% no-repeat fixed;
   background-attachment: fixed;
+  /* `background-color` = this gradient's FINAL stop. Colour is not subject to
+     `background-attachment`, so it fills the whole box no matter what — it is what
+     keeps the area past a mis-painted fixed background from being bare canvas.
+     See the `@supports (-webkit-touch-callout: none)` block at the END of this
+     file, and specs/themes.md. */
+  background-color: #1a0538;
 }
 
 /* Retro — responsive simplification */
@@ -2036,6 +2048,12 @@
   background:
     linear-gradient(to bottom, #4a85d8 0%, #6aa0e8 50%, #a5d0f8 100%) center / 100% 100% no-repeat fixed;
   background-attachment: fixed;
+  /* `background-color` = this gradient's FINAL stop. Colour is not subject to
+     `background-attachment`, so it fills the whole box no matter what — it is what
+     keeps the area past a mis-painted fixed background from being bare canvas.
+     See the `@supports (-webkit-touch-callout: none)` block at the END of this
+     file, and specs/themes.md. */
+  background-color: #a5d0f8;
 }
 
 /* Minecraft — responsive simplification */
@@ -2266,6 +2284,12 @@
   background:
     linear-gradient(to bottom, #f4ecd8 0%, #e8dcc0 50%, #d4c39e 100%) center / 100% 100% no-repeat fixed;
   background-attachment: fixed;
+  /* `background-color` = this gradient's FINAL stop. Colour is not subject to
+     `background-attachment`, so it fills the whole box no matter what — it is what
+     keeps the area past a mis-painted fixed background from being bare canvas.
+     See the `@supports (-webkit-touch-callout: none)` block at the END of this
+     file, and specs/themes.md. */
+  background-color: #d4c39e;
 }
 
 /* Classical Music — responsive simplification */
@@ -2642,6 +2666,12 @@
     /* Vertical near-black gradient with violet hint */
     linear-gradient(to bottom, #0a0a14 0%, #14091c 50%, #1a0a1f 100%);
   background-attachment: fixed;
+  /* `background-color` = this gradient's FINAL stop. Colour is not subject to
+     `background-attachment`, so it fills the whole box no matter what — it is what
+     keeps the area past a mis-painted fixed background from being bare canvas.
+     See the `@supports (-webkit-touch-callout: none)` block at the END of this
+     file, and specs/themes.md. */
+  background-color: #1a0a1f;
 }
 
 /* Modern Music — animation: every EQ bar pulses on its own rhythm
@@ -2893,6 +2923,12 @@
     /* Vertical near-black/crimson gradient */
     linear-gradient(to bottom, #0d0608 0%, #1a0a0d 55%, #0a0506 100%);
   background-attachment: fixed;
+  /* `background-color` = this gradient's FINAL stop. Colour is not subject to
+     `background-attachment`, so it fills the whole box no matter what — it is what
+     keeps the area past a mis-painted fixed background from being bare canvas.
+     See the `@supports (-webkit-touch-callout: none)` block at the END of this
+     file, and specs/themes.md. */
+  background-color: #0a0506;
 }
 
 /* Filme — warm searchlight beams rising from the bottom corners (::before).
@@ -3088,6 +3124,12 @@
 [data-theme="deepsea"] body {
   background: linear-gradient(to bottom, #04303f 0%, #021a26 55%, #010f17 100%);
   background-attachment: fixed;
+  /* `background-color` = this gradient's FINAL stop. Colour is not subject to
+     `background-attachment`, so it fills the whole box no matter what — it is what
+     keeps the area past a mis-painted fixed background from being bare canvas.
+     See the `@supports (-webkit-touch-callout: none)` block at the END of this
+     file, and specs/themes.md. */
+  background-color: #010f17;
   background-size: cover;
 }
 
@@ -3158,6 +3200,12 @@
 [data-theme="atlas"] body {
   background: radial-gradient(ellipse 120% 100% at 50% 8%, #163a82 0%, #0f1f44 48%, #081026 100%);
   background-attachment: fixed;
+  /* `background-color` = this gradient's FINAL stop. Colour is not subject to
+     `background-attachment`, so it fills the whole box no matter what — it is what
+     keeps the area past a mis-painted fixed background from being bare canvas.
+     See the `@supports (-webkit-touch-callout: none)` block at the END of this
+     file, and specs/themes.md. */
+  background-color: #081026;
 }
 
 /* Atlas — ::before = faint paper grain (tiled fractalNoise); no linework, no
@@ -3252,6 +3300,12 @@
 [data-theme="atlas-light"] body {
   background: radial-gradient(ellipse 120% 100% at 50% 8%, #f8f2e2 0%, #efe6cf 48%, #e0d2ac 100%);
   background-attachment: fixed;
+  /* `background-color` = this gradient's FINAL stop. Colour is not subject to
+     `background-attachment`, so it fills the whole box no matter what — it is what
+     keeps the area past a mis-painted fixed background from being bare canvas.
+     See the `@supports (-webkit-touch-callout: none)` block at the END of this
+     file, and specs/themes.md. */
+  background-color: #e0d2ac;
 }
 
 /* Atlas Light — ::before = the SAME grain tile as Atlas. The SVG rect renders
@@ -3367,5 +3421,113 @@ html.theme-reload-pulse body::after {
   45%  { filter: brightness(0.06); }
   55%  { filter: brightness(0.06); }
   100% { filter: brightness(1); }
+}
+
+/* ── iOS / iPadOS: `background-attachment: fixed` must degrade to `scroll` ──
+
+   iOS WebKit does not implement a fixed-attachment background as a
+   viewport-anchored layer. It paints ONE tile anchored at the document origin,
+   sized to the viewport, that does not follow the scroll — so on any page taller
+   than `100vh` the background simply stops at document y = 100vh, and from there
+   down only `background-color` shows. Measured on an iPad: with the page scrolled
+   275px, the cut appeared 757px down a ~1030px viewport — i.e. exactly at the
+   document's 100vh line, not at the viewport's bottom edge.
+
+   That also rules out matching the cut with a colour. The seam falls wherever the
+   gradient happens to be at document y = 100vh, which is mid-gradient, not at its
+   final stop — the `background-color` twins above still can't be seamless there.
+   (They stay: they are what keeps the region below from being bare canvas, and
+   they are the fallback if this query ever stops matching.)
+
+   `@supports (-webkit-touch-callout: none)` is the standard iOS/iPadOS probe —
+   the property exists only in iOS WebKit, so desktop Safari, Chrome and Firefox
+   all skip this block and keep the intended parallax. Chrome and Firefox ON iOS
+   are WebKit too, and correctly match. Here the background falls back to
+   `scroll`: it is then sized and positioned against the root element's box — the
+   whole document — so it always covers, at the cost of a parallax iOS was never
+   actually delivering.
+
+   `[data-theme] body` matches the per-theme `[data-theme="…"] body` rules'
+   specificity exactly, so this block wins on source order — it MUST stay last in
+   this file. See specs/themes.md. */
+@supports (-webkit-touch-callout: none) {
+  [data-theme] body {
+    background-attachment: scroll;
+  }
+
+  /* Same reasoning for the two atmosphere layers. `html::before` / `html::after`
+     are `position: fixed`, i.e. viewport-anchored, and iOS mis-rasterises them on
+     a page taller than the viewport exactly as it does the fixed background —
+     leaving stale rectangles behind as the page scrolls. Re-anchor them to the
+     DOCUMENT instead: `html` becomes the containing block (it is `static` by
+     default, so an absolute child would otherwise resolve against the
+     viewport-sized initial containing block — the very thing being avoided), and
+     the layers stretch over its box, which is the full document.
+
+     Selected as `[data-theme]::before` rather than `html::before` so this also
+     out-specifies the per-theme `[data-theme="…"]::before` blocks, several of
+     which set `background: … fixed` inside a shorthand. */
+  html {
+    position: relative;
+  }
+
+  html[data-theme]::before,
+  html[data-theme]::after {
+    position: absolute;
+    inset: 0;
+    background-attachment: scroll;
+  }
+
+  /* ── The fake fixed background ──
+     Everything above stops the SEAM, but it leaves the background anchored to the
+     document, so it rescales whenever a panel expands and the page visibly
+     shifts. What is actually wanted is the original effect — a background that
+     stays put while the page scrolls — which is exactly what iOS refuses to do
+     with `position: fixed` or `background-attachment: fixed`.
+
+     `position: sticky` does it instead. iOS composites sticky correctly (it is
+     what every sticky header on the platform relies on), so a viewport-tall
+     sticky layer pinned at `top: 0` stays glued to the viewport for the whole
+     scroll. `height` and a matching negative `margin-bottom` cancel out, so it
+     occupies no space and the document keeps its natural height and its normal
+     scrolling.
+
+     `background: inherit` copies BODY's whole computed background onto it —
+     every theme's gradient and every decorative layer, with no per-theme
+     duplication — and the layer is exactly one viewport tall, so the percentage
+     and `vh` sizes inside those layers resolve exactly as they did against the
+     viewport. `background-attachment` is forced back to `scroll` because
+     `inherit` would otherwise carry the broken `fixed` in with it.
+
+     `z-index: -1` paints it above the canvas but beneath every in-flow box, so
+     it is a backdrop and nothing else has to change. `flex: 0 0 auto` because
+     base.css makes `body` a flex column and the layer must not be shrunk.
+
+     Deliberately LOW specificity: Harry Potter defines its own
+     `[data-theme="harry-potter"] body::before` lanterns, which win, so that
+     theme keeps its current behaviour rather than losing an atmosphere layer. */
+  body::before {
+    content: '';
+    display: block;
+    position: sticky;
+    top: 0;
+    z-index: -1;
+    flex: 0 0 auto;
+    height: 100vh;
+    margin-bottom: -100vh;
+    background: inherit;
+    background-attachment: scroll;
+    pointer-events: none;
+  }
+
+  /* The vignette is the one layer left that is sized as a proportion of a
+     document-tall box, so it alone would still rescale as the page grows. On the
+     Atlas themes it is a soft edge-darkening over a near-flat navy — dropping it
+     on iOS costs almost nothing and removes the last moving part. Other themes
+     keep theirs; see specs/themes.md. */
+  html[data-theme="atlas"]::after,
+  html[data-theme="atlas-light"]::after {
+    background: none;
+  }
 }
 /* hmr */

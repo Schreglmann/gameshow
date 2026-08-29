@@ -19,6 +19,7 @@ It is the smallest of the three PWAs — two HTTP endpoints and a handful of Web
 |--------|------|---------|
 | `GET` | `/api/settings` | Read enabled jokers, team randomization flag, global rules. |
 | `GET` | `/api/game/:index` | Look up game metadata (mainly `title`, `totalQuestions`) when rendering answer cards. |
+| `GET` | `/api/run-of-show` | **Optional.** `{ games: [{ index, gameId, title, type, missing? }] }` — the active gameshow's running order. Fetch it if you render a run-of-show overview or offer jump-to-game; the WebSocket channels only ever tell you about the CURRENT game. See [specs/gamemaster-run-of-show.md](../specs/gamemaster-run-of-show.md). |
 
 That's it for HTTP. Everything else flows over WebSocket.
 
@@ -71,6 +72,13 @@ interface GamemasterCommand {
 ```
 
 The show uses `timestamp` to de-duplicate replays. Always set it to `Date.now()` on send — never reuse a stale timestamp.
+
+Most `controlId`s come straight from the controls message. Four do not — they are
+navigation commands you can send unprompted, from any screen, to jump the show out of its
+linear order: `goto:home`, `goto:rules`, `goto:game-<index>` (index as served by
+`GET /api/run-of-show`) and `goto:summary`. Confirm before sending one: the show leaves the
+running game and restarts the target from its title screen. See
+[specs/gamemaster-run-of-show.md](../specs/gamemaster-run-of-show.md).
 
 ## Example: minimal flow
 

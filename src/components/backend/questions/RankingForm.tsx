@@ -304,6 +304,9 @@ export default function RankingForm({ questions, onChange, otherInstances, onMov
                     value={q.answerAudio || undefined}
                     category="audio"
                     scope={`q-${i}-answer`}
+                    audioStart={q.answerAudioStart}
+                    audioEnd={q.answerAudioEnd}
+                    audioLoop={q.answerAudioLoop}
                     onChange={v => {
                       update(i, { answerAudio: v || undefined, answerAudioStart: undefined, answerAudioEnd: undefined, answerAudioLoop: undefined });
                       if (!v) setTrimExpanded(prev => { const n = new Set(prev); n.delete(i); return n; });

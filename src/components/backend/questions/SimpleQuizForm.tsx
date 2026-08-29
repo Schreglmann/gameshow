@@ -350,6 +350,9 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
                     value={q.questionAudio}
                     category="audio"
                     scope={`q-${i}-question`}
+                    audioStart={q.questionAudioStart}
+                    audioEnd={q.questionAudioEnd}
+                    audioLoop={q.questionAudioLoop}
                     onChange={v => {
                       update(i, { questionAudio: v, questionAudioStart: undefined, questionAudioEnd: undefined });
                       if (v === undefined) setTrimExpanded(prev => { const n = new Set(prev); n.delete(`${i}-question`); return n; });
@@ -411,6 +414,9 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
                     value={q.answerAudio}
                     category="audio"
                     scope={`q-${i}-answer`}
+                    audioStart={q.answerAudioStart}
+                    audioEnd={q.answerAudioEnd}
+                    audioLoop={q.answerAudioLoop}
                     onChange={v => {
                       update(i, { answerAudio: v, answerAudioStart: undefined, answerAudioEnd: undefined });
                       if (v === undefined) setTrimExpanded(prev => { const n = new Set(prev); n.delete(`${i}-answer`); return n; });

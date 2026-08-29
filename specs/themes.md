@@ -275,6 +275,86 @@ The `.quiz-answer` reveal box (and the inherited `.answer-list li.correct` + fou
 
 Inheritance then stops at each nested `[data-theme]` island, so each panel renders its own theme's values.
 
+### `background-attachment: fixed` is broken on iOS — degrade it to `scroll`
+
+Nine themes paint the `body` background with `background-attachment: fixed`, so the page
+texture stays put while content scrolls. **iOS WebKit does not implement that as a
+viewport-anchored layer.** It paints one tile anchored at the document origin, sized to the
+viewport, which does not follow the scroll — so on any page taller than `100vh` the
+background stops dead at document y = 100vh.
+
+Measured on an iPad (gamemaster, run-of-show expanded, page ~1.7x the viewport): with the
+page scrolled 275px the cut appeared 757px down a ~1030px viewport — the document's 100vh
+line, **not** the viewport's bottom edge. Desktop Chromium hides the bug completely,
+because there the fixed image really does follow the viewport; the only way to see anything
+locally is a `fullPage` screenshot, where the region past the first viewport comes out
+blank.
+
+**Rule 1 — the fallback (`themes.css`, last block in the file).** Under
+`@supports (-webkit-touch-callout: none)` — the standard iOS/iPadOS probe, since that
+property exists only in iOS WebKit — `[data-theme] body` sets
+`background-attachment: scroll`. The background is then sized and positioned against the
+root element's box, i.e. the whole document, so it always covers. The cost is a parallax
+that iOS was never actually delivering. Desktop Safari, Chrome and Firefox skip the block
+and keep the intended fixed behaviour; Chrome and Firefox *on iOS* are WebKit and correctly
+match. The selector deliberately matches the per-theme `[data-theme="…"] body` rules'
+specificity exactly, so it wins on source order — **it must stay last in the file.**
+
+**Rule 1b — the atmosphere layers.** The same block re-anchors `html::before` /
+`html::after` from the viewport to the document: `html { position: relative }` plus
+`[data-theme]::before, [data-theme]::after { position: absolute; inset: 0;
+background-attachment: scroll }`. They are `position: fixed` by default, and iOS
+mis-rasterises them on a tall page exactly as it does the fixed background, leaving stale
+rectangles behind as the page scrolls. `html` must be made a containing block explicitly —
+it is `static` by default, so an absolute child would resolve against the viewport-sized
+initial containing block, which is the very thing being avoided. The selector is
+`[data-theme]::…`, not `html::…`, so it also out-specifies the per-theme
+`[data-theme="…"]::before` blocks, several of which set `background: … fixed` inside a
+shorthand. Net effect on iOS: **no viewport-anchored background painting anywhere**, so
+nothing can seam. Grain, vignette and scene layers stretch over the document instead — on a
+viewport-height page that is identical, and on a tall page it is the correct trade.
+
+**Rule 1c — the fake fixed background (a sticky backdrop).** Rules 1a/1b stop the *seam*,
+but they leave the background anchored to the document, so it rescales whenever a panel
+expands and the page visibly shifts. What is wanted is the original effect — a background
+that stays put while the page scrolls — which is exactly what iOS refuses to do with
+`background-attachment: fixed` or `position: fixed`.
+
+`position: sticky` does it. iOS composites sticky correctly (every sticky header on the
+platform depends on it), so a viewport-tall sticky layer pinned at `top: 0` stays glued to
+the viewport for the whole scroll. The iOS block adds a `body::before` backdrop:
+
+- `height: 100vh` with a matching negative `margin-bottom` — it cancels out, so the layer
+  occupies no space and the document keeps its natural height and normal scrolling.
+- `background: inherit` copies **body's whole computed background** onto it: every theme's
+  gradient and decorative layers, with no per-theme duplication. The layer is exactly one
+  viewport tall, so the `%` and `vh` sizes inside those layers resolve exactly as they did
+  against the viewport. `background-attachment` is forced back to `scroll`, since `inherit`
+  would otherwise carry the broken `fixed` in with it.
+- `z-index: -1` paints it above the canvas but beneath every in-flow box, so it is purely a
+  backdrop. `flex: 0 0 auto` because base.css makes `body` a flex column.
+- Specificity is deliberately **low**: Harry Potter defines its own
+  `[data-theme="harry-potter"] body::before` lanterns, which win, so that theme keeps its
+  existing behaviour rather than losing an atmosphere layer.
+
+The Atlas vignette (`::after`) is switched off on iOS: it is the one remaining layer sized as
+a proportion of a document-tall box, so it alone would still rescale as the page grows. On
+Atlas it is a soft edge-darkening over near-flat navy, so dropping it costs almost nothing.
+The paper grain (`::before`) tiles, so it is stable — it now scrolls with the page rather
+than staying put, which at 15% opacity noise is imperceptible.
+
+**Known limitations.** Other themes' `::after` layers (scenes, light rays) can still rescale
+on iOS on a page taller than the viewport; they are not used in the gamemaster zone, where
+tall pages actually occur.
+
+**Rule 2 — the twin `background-color`.****Rule 2 — the twin `background-color`.** Every themed `body` rule that sets
+`background-attachment: fixed` also sets a `background-color`, set to the final stop of its
+bottom-most gradient layer. `background-color` is not subject to `background-attachment`,
+so it fills the whole box. This alone cannot fix the seam — the cut lands wherever the
+gradient happens to be at document y = 100vh, which is mid-gradient — but it is what keeps
+the region below from being bare canvas, and it is the fallback if the `@supports` query
+ever stops matching.
+
 ### Surface variables (`--card-*`, `--input-*`)
 
 Retro replaces the standard glass surfaces (translucent white over the bg gradient) with opaque near-black frames. These are the vars:

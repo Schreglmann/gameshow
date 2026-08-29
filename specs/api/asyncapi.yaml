@@ -246,6 +246,11 @@ channels:
       re-broadcasts to every other client. Not cached — commands are ephemeral.
       Show PWA acts on received commands. Zone: shared.
 
+      Non-linear navigation: `goto:home`, `goto:rules`, `goto:game-<index>` and
+      `goto:summary` jump the show to any point in the running order. Handled once
+      at app level (`AppContent`), not per screen, because no mounted screen owns
+      both a router and a command listener. See specs/gamemaster-run-of-show.md.
+
   gamemaster-team-state-v2:
     address: gamemaster-team-state-v2
     messages:

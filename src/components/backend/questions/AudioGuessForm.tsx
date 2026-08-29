@@ -180,6 +180,8 @@ export default function AudioGuessForm({ questions, onChange, otherInstances, on
                   label="Audio-Datei"
                   value={q.audio || undefined}
                   category="audio"
+                  audioStart={q.audioStart}
+                  audioEnd={q.audioEnd}
                   onChange={v => update(i, {
                     audio: v ?? '',
                     audioStart: undefined,

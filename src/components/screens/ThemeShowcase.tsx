@@ -443,6 +443,14 @@ function FrontendShowcase() {
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
             <button
               type="button"
+              className="gm-ablauf-toggle"
+              aria-pressed={false}
+              title="Ablauf der Show anzeigen — aktuelles Spiel, nächstes Spiel, und direkt zu einem Punkt springen."
+            >
+              Ablauf
+            </button>
+            <button
+              type="button"
               className="gm-lock-toggle"
               aria-pressed={false}
               title="Klicks und Tasten in der Gamemaster-Ansicht sperren, damit nichts versehentlich weitergeschaltet wird. Weiter/Zurück bleiben aktiv."
@@ -602,6 +610,94 @@ function FrontendShowcase() {
           <button type="button" className="gm-btn gm-btn--primary gm-desync-btn">
             Jetzt synchronisieren
           </button>
+        </div>
+      </Section>
+
+      {/* Static markup with the real classes, per the convention in this file.
+          The panel is rendered in its GUTTER form (static block, no drawer
+          chrome) with one row of each state. See specs/gamemaster-run-of-show.md. */}
+      <Section title="Gamemaster Ablauf (Run-of-Show)">
+        <nav
+          className="gm-runofshow"
+          aria-label="Ablauf der Show"
+          style={{ position: 'static', width: 'min(320px, 100%)', transform: 'none', transition: 'none', borderRight: 'none' }}
+        >
+          <div className="gm-runofshow-header">
+            <span className="gm-runofshow-heading">Ablauf</span>
+            {/* Expand control — shown here with an explicit display, since it is
+                normally scoped to the real `.gm-sidebar`. */}
+            <button type="button" className="gm-runofshow-expand" style={{ display: 'inline-flex' }} aria-label="Alle Spiele zeigen">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <polyline points="4 10 12 18 20 10" />
+                <polyline points="4 4 12 12 20 4" />
+              </svg>
+            </button>
+          </div>
+          <div className="gm-runofshow-listbox">
+          <ul className="gm-runofshow-list">
+            <li className="gm-runofshow-item--window">
+              <button type="button" className="gm-runofshow-row gm-runofshow-row--past">
+                <span className="gm-runofshow-marker">1</span>
+                <span className="gm-runofshow-text">
+                  <span className="gm-runofshow-label">Allgemeinwissen</span>
+                  <span className="gm-runofshow-sublabel">Klassisches Quiz</span>
+                </span>
+              </button>
+            </li>
+            <li className="gm-runofshow-item--window">
+              <button type="button" className="gm-runofshow-row gm-runofshow-row--current" disabled aria-current="true">
+                <span className="gm-runofshow-marker">2</span>
+                <span className="gm-runofshow-text">
+                  <span className="gm-runofshow-label">Quizjagd</span>
+                  <span className="gm-runofshow-sublabel">Quizjagd</span>
+                </span>
+              </button>
+            </li>
+            <li className="gm-runofshow-item--window">
+              <button type="button" className="gm-runofshow-row">
+                <span className="gm-runofshow-marker">3</span>
+                <span className="gm-runofshow-text">
+                  <span className="gm-runofshow-label">Klassische Musik</span>
+                  <span className="gm-runofshow-sublabel">Musikraten</span>
+                </span>
+              </button>
+            </li>
+            <li className="gm-runofshow-item--window">
+              <button type="button" className="gm-runofshow-row gm-runofshow-row--missing" disabled>
+                <span className="gm-runofshow-marker">4</span>
+                <span className="gm-runofshow-text">
+                  <span className="gm-runofshow-label">geloescht/v1</span>
+                  <span className="gm-runofshow-sublabel">Referenz nicht gefunden</span>
+                </span>
+                <span className="gm-runofshow-badge gm-runofshow-badge--missing">Fehlt</span>
+              </button>
+            </li>
+            <li className="gm-runofshow-item--window">
+              <button type="button" className="gm-runofshow-row">
+                <span className="gm-runofshow-marker">·</span>
+                <span className="gm-runofshow-text">
+                  <span className="gm-runofshow-label">Zusammenfassung</span>
+                </span>
+              </button>
+            </li>
+          </ul>
+          </div>
+        </nav>
+      </Section>
+
+      {/* Flattened out of its overlay, like the admin Confirm Dialog section. */}
+      <Section title="Gamemaster Sprung-Bestätigung">
+        <div className="gm-confirm-box" role="alertdialog" aria-label="Sprung bestätigen" style={{ margin: 0, animation: 'none' }}>
+          <h3 className="gm-confirm-title">Zu «Finale» springen?</h3>
+          <div className="gm-confirm-description">
+            Das laufende Spiel wird verlassen und «Finale» startet von vorne.
+            <br />
+            Bereits vergebene Punkte bleiben erhalten.
+          </div>
+          <div className="gm-confirm-actions">
+            <button type="button" className="gm-btn">Abbrechen</button>
+            <button type="button" className="gm-btn gm-btn--primary">Springen</button>
+          </div>
         </div>
       </Section>
 

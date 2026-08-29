@@ -46,6 +46,17 @@ html.gamemaster-embedded::after {
   user-select: none;
 }
 
+/* Wrapper around the toolbar + the run-of-show panel.
+   INLINE regime (<1280px): `display: contents` dissolves the wrapper, so the
+   toolbar keeps its existing layout byte-for-byte and the panel positions itself
+   against the viewport as a drawer. The GUTTER block near the end of this file
+   (min-width: 1280px) turns it into the 272px left strip — it must stay AFTER
+   this rule to win, since both have the same specificity.
+   See specs/gamemaster-run-of-show.md. */
+.gm-sidebar {
+  display: contents;
+}
+
 .gamemaster-content img {
   -webkit-user-drag: none;
   user-select: none;
@@ -1693,6 +1704,7 @@ html.gamemaster-embedded::after {
   gap: clamp(6px, 0.8vw, 10px);
 }
 
+.gm-ablauf-toggle,
 .gm-lock-toggle,
 .gm-images-toggle,
 .gm-answers-toggle,
@@ -1719,6 +1731,7 @@ html.gamemaster-embedded::after {
 }
 
 @media (hover: hover) {
+  .gm-ablauf-toggle:hover,
   .gm-lock-toggle:hover,
   .gm-images-toggle:hover,
   .gm-answers-toggle:hover,
@@ -1745,6 +1758,7 @@ html.gamemaster-embedded::after {
   }
 }
 
+.gm-ablauf-toggle:active,
 .gm-lock-toggle:active,
 .gm-images-toggle:active,
 .gm-answers-toggle:active,
@@ -1752,6 +1766,7 @@ html.gamemaster-embedded::after {
   transform: scale(0.96);
 }
 
+.gm-ablauf-toggle:focus-visible,
 .gm-lock-toggle:focus-visible,
 .gm-images-toggle:focus-visible,
 .gm-answers-toggle:focus-visible,
@@ -1760,6 +1775,7 @@ html.gamemaster-embedded::after {
   outline-offset: 2px;
 }
 
+.gm-ablauf-toggle--active,
 .gm-lock-toggle--locked,
 .gm-images-toggle--showing,
 .gm-answers-toggle--hidden,
@@ -1770,6 +1786,7 @@ html.gamemaster-embedded::after {
 }
 
 @media (hover: hover) {
+  .gm-ablauf-toggle--active:hover,
   .gm-lock-toggle--locked:hover,
   .gm-images-toggle--showing:hover,
   .gm-answers-toggle--hidden:hover,
@@ -2256,16 +2273,68 @@ body.gamemaster-embedded .gm-toolbar {
    smallest width where the 272px strip plus the centered 900px card both fit
    with comfortable gaps — below it the INLINE layout above takes over. */
 @media (min-width: 1280px) {
-  .gm-toolbar {
-    position: absolute;
-    top: clamp(16px, 3vw, 40px);
-    left: clamp(8px, 1.5vw, 20px);
+  /* The strip is owned by `.gm-sidebar` (toolbar + run-of-show panel stacked),
+     not the toolbar alone, and it sits IN FLOW as a real grid column — it is not
+     absolutely positioned.
+
+     It used to be `position: absolute` with a height cap, which meant it could
+     not contribute to the page height. With the run-of-show expanded the menu is
+     routinely taller than the answer card, so the cap either clipped it or —
+     once the cap grew with the screen — turned it into a nested scroller whose
+     own box reached below the fold, swallowing the wheel and freezing the page.
+     As a grid item the strip simply makes its row, and therefore the page, as
+     tall as it is: the whole menu is reachable by scrolling the page, and there
+     is no inner scroll container to trap the pointer.
+
+     Selected via the parent so this out-specifies the base
+     `.gm-sidebar { display: contents }` on specificity rather than on source
+     order — gamemaster.css is imported from several entry points, so relying on
+     "later in the file wins" is not safe here. */
+  .gamemaster-screen {
+    display: grid;
+    /* The gutter column ends exactly at the strip's right edge, so the content
+       column can carry the centering on its own (see `.gamemaster-content`).
+       The strip is inset from the viewport by a SMALLER amount than the screen's
+       own padding, so the column is shortened by that difference and the strip
+       gives it back as a negative margin. */
+    grid-template-columns:
+      calc(272px + clamp(8px, 1.5vw, 20px) - clamp(16px, 3vw, 40px))
+      minmax(0, 1fr);
+    column-gap: 0;
+    /* `start` on both axes: the base rule's flex `align-items: center` would
+       centre the columns VERTICALLY once it means the grid block axis. */
+    align-items: start;
+    justify-items: center;
+  }
+
+  /* Everything that is not the strip belongs in the content column, stacked in
+     source order (the answer card, then the install prompt). */
+  .gamemaster-screen > * {
+    grid-column: 2;
+  }
+
+  .gamemaster-screen > .gm-sidebar {
+    grid-column: 1;
+    grid-row: 1;
+    justify-self: start;
+    margin-left: calc(clamp(8px, 1.5vw, 20px) - clamp(16px, 3vw, 40px));
+    display: flex;
     flex-direction: column;
     align-items: stretch;
+    gap: clamp(16px, 2vw, 24px);
     width: 272px;
+    /* A static element ignores z-index, and the strip has to keep painting above
+       the theme atmosphere layers on `html::before` / `html::after`. */
+    position: relative;
+    z-index: 5;
+  }
+
+  .gm-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
     max-width: none;
     padding-bottom: 0;
-    z-index: 5;
   }
 
   /* In the narrow vertical strip the six countdown pills lay out 2×3 (no
@@ -2284,8 +2353,19 @@ body.gamemaster-embedded .gm-toolbar {
     flex-direction: column;
   }
 
+  /* The card is centred inside the content column, which starts at the strip's
+     right edge — the same geometry the old `margin-left` produced when the
+     screen was a centering flex column, now expressed by the grid itself. */
   .gamemaster-content {
-    margin-left: calc(clamp(8px, 1.5vw, 20px) + 272px);
+    margin-left: 0;
+    justify-self: center;
+  }
+
+  /* In the gutter the list is a small window inside a page that scrolls, so a
+     wheel that reaches its end must hand off to the page. `contain` is kept in
+     the drawer, where the page behind it must stay put. */
+  .gm-sidebar .gm-runofshow-list {
+    overscroll-behavior: auto;
   }
 }
 
@@ -2329,4 +2409,441 @@ body.gamemaster-embedded .gm-toolbar {
 .gm-desync-btn {
   flex: 0 0 auto;
   white-space: nowrap;
+}
+
+/* ── Run-of-show ("Ablauf") ──
+   The whole running order with the show's current position, and a confirmed
+   jump to any entry. See specs/gamemaster-run-of-show.md.
+
+   Two regimes, meeting at the same 1280px boundary as the toolbar (the GM zone
+   deliberately has only one): below it a fixed off-canvas drawer opened by the
+   toolbar's "Ablauf" button; at and above it a static block in the left gutter,
+   inside `.gm-sidebar`. */
+
+.gm-runofshow {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: min(320px, 88vw);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: clamp(12px, 2.5vw, 20px);
+  background: var(--card-bg, rgba(var(--glass-rgb), calc(var(--glass-opacity) + 0.08)));
+  border-right: 1px solid rgba(var(--glass-rgb), var(--glass-border-opacity));
+  box-shadow: var(--card-shadow);
+  /* Above the inactive-show overlay (9999) is not needed here — the GM zone has
+     no such overlay — but stay above the answer card and its panels. */
+  z-index: 40;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  transform: translateX(-100%);
+  transition: transform 0.22s ease;
+}
+
+/* DRAWER regime: the drawer is a deliberate full-height browse surface, so the
+   list gets the whole panel; it still scrolls, centred on the current entry. */
+.gm-runofshow .gm-runofshow-list {
+  max-height: none;
+}
+
+.gm-runofshow--open {
+  transform: none;
+}
+
+.gm-runofshow-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 39;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gm-runofshow {
+    transition: none;
+  }
+}
+
+.gm-runofshow-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Label takes the row; the controls sit top-right. */
+.gm-runofshow-header .gm-runofshow-heading {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Expand / collapse the list to the full running order. Only meaningful in the
+   GUTTER regime, where the list is capped at ~3 rows — the drawer already shows
+   everything, so it is hidden there (mirror of the close button, which is
+   hidden in the gutter). */
+.gm-runofshow-expand {
+  display: none;
+}
+
+.gm-sidebar .gm-runofshow-expand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  margin: -8px 0;
+  /* Reset the show's global <button> chrome — menu control, not content. */
+  padding: 0;
+  border: none;
+  background: none;
+  box-shadow: none;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 500;
+  color: rgba(var(--text-rgb), 0.7);
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 6px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (hover: hover) {
+  .gm-sidebar .gm-runofshow-expand:hover {
+    background: rgba(var(--glass-rgb), 0.18);
+    color: rgba(var(--text-rgb), 0.95);
+    transform: none;
+    filter: none;
+    box-shadow: none;
+  }
+}
+
+/* Exactly the shared toolbar group-label recipe (COUNTDOWN / SCROLLEN / MUSIK)
+   — see .gm-deadline-durations-label, .gm-scroll-label, .gm-music-label. */
+.gm-runofshow-heading {
+  padding: 0 clamp(4px, 0.6vw, 6px);
+  font-size: clamp(0.6rem, 0.85vw, 0.72rem);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)));
+  white-space: nowrap;
+}
+
+.gm-runofshow-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Full 44px touch target — this is the drawer's primary dismiss control. */
+  min-width: 44px;
+  min-height: 44px;
+  margin: -8px -8px -8px 0;
+  /* Reset the show's global <button> chrome (accent gradient, glow, uppercase,
+     wide padding) — this is menu chrome, not a content button. */
+  padding: 0;
+  border: none;
+  background: none;
+  box-shadow: none;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 500;
+  color: rgba(var(--text-rgb), 0.7);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 6px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (hover: hover) {
+  .gm-runofshow-close:hover {
+    background: rgba(var(--glass-rgb), 0.18);
+    color: rgba(var(--text-rgb), 0.95);
+    transform: none;
+    filter: none;
+    box-shadow: none;
+  }
+}
+
+/* Frame around the scroller. In the drawer it is a transparent pass-through
+   that lets the list fill the remaining height; in the gutter it carries the
+   border + glass fill. `min-height: 0` so it can actually shrink inside the
+   flex column instead of being pushed past the drawer's bottom edge. */
+.gm-runofshow-listbox {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.gm-runofshow-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  gap: 4px;
+  /* Own scroll box, kept centred on the current entry by the component, so the
+     panel shows previous / current / next rather than the whole show. The rest
+     is one scroll away. `overscroll-behavior: contain` stops a flick at the end
+     of the list from scrolling the page/drawer behind it. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* base.css styles every `li` for the show's rules/answer lists: generous
+   vertical padding, a 1.2em font size and a bottom divider rule. All three are
+   wrong for a dense navigation list — the dividers in particular read as
+   separators between chips that are already visually separate. Reset them. */
+.gm-runofshow-list li {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-bottom: none;
+  font-size: inherit;
+}
+
+/* A menu row, styled as a sibling of the toolbar toggles (.gm-lock-toggle et
+   al.), NOT as a show button. The global `button` rule paints an accent
+   gradient, a glow, uppercase text and wide padding — that is what made this
+   list read as main content — so every one of those is reset here, the same way
+   the toggles do it. */
+.gm-runofshow-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  padding: clamp(6px, 0.8vw, 9px) clamp(8px, 1vw, 11px);
+  /* Comfortable touch target — the gamemaster runs on a tablet/phone. */
+  min-height: 44px;
+  /* Suppress the double-tap-zoom delay and the grey tap flash on iOS/Android. */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  background: rgba(var(--glass-rgb), var(--glass-opacity, 0.12));
+  border: 1px solid rgba(var(--glass-rgb), 0.25);
+  border-radius: var(--radius-lg);
+  color: rgba(var(--text-rgb), max(0.7, var(--text-fade-floor, 0)));
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0.02em;
+  box-shadow: none;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease, opacity 150ms ease;
+}
+
+@media (hover: hover) {
+  .gm-runofshow-row:hover:not(:disabled) {
+    background: rgba(var(--glass-rgb), 0.22);
+    border-color: rgba(var(--glass-rgb), 0.4);
+    color: rgba(var(--text-rgb), 0.95);
+    /* Cancel the global button hover (lift + glow + brightness). */
+    transform: none;
+    filter: none;
+    box-shadow: none;
+  }
+}
+
+.gm-runofshow-row:active:not(:disabled) {
+  transform: scale(0.99);
+}
+
+.gm-runofshow-row:focus-visible {
+  outline: 2px solid rgba(var(--glass-rgb), 0.6);
+  outline-offset: 2px;
+}
+
+.gm-runofshow-row:disabled {
+  cursor: default;
+  /* The global button:disabled paints its own grey gradient. */
+  background: rgba(var(--glass-rgb), var(--glass-opacity, 0.12));
+}
+
+.gm-runofshow-row--past {
+  opacity: 0.5;
+}
+
+/* "You are here" uses the toolbar's active-toggle idiom — a tinted glass fill
+   and a matching border — rather than the show's accent gradient. */
+.gm-runofshow-row--current,
+.gm-runofshow-row--current:disabled {
+  background: rgba(var(--primary-rgb), 0.2);
+  border-color: rgba(var(--primary-rgb), 0.55);
+  color: rgba(var(--text-rgb), max(0.95, var(--text-fade-floor, 0)));
+  opacity: 1;
+}
+
+.gm-runofshow-row--missing,
+.gm-runofshow-row--missing:disabled {
+  opacity: 0.55;
+  border-color: rgba(var(--warning-rgb, 234 179 8), 0.4);
+}
+
+.gm-runofshow-marker {
+  flex: 0 0 1.5em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(0.7rem, 1.2vw, 0.8rem);
+  opacity: 0.7;
+}
+
+.gm-runofshow-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+/* Matches the toolbar toggles' label size (.gm-lock-toggle et al.). */
+.gm-runofshow-label {
+  font-size: clamp(0.78rem, 1.1vw, 0.95rem);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+/* Ellipsised rather than wrapped: in the 272px strip a "Fehlt" badge would
+   otherwise push the type label onto a second line and grow the row. The title
+   above it still wraps — that one must stay readable in full. */
+.gm-runofshow-sublabel {
+  font-size: clamp(0.65rem, 1.1vw, 0.75rem);
+  opacity: 0.65;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Quiet status text, not a pill badge — a filled chip inside an already-chip-
+   shaped row reads as a second button. Same weight/spacing as the group labels. */
+.gm-runofshow-badge {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  font-size: clamp(0.55rem, 0.8vw, 0.65rem);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+
+.gm-runofshow-badge--missing {
+  background: rgba(var(--warning-rgb, 234 179 8), 0.28);
+}
+
+/* GUTTER regime (≥1280px): the panel is a static block under the toolbar; the
+   drawer chrome (fixed positioning, slide transform, backdrop, close button and
+   the toolbar's opener) all stand down. */
+@media (min-width: 1280px) {
+  /* A toolbar GROUP, not a card: label + chips, exactly like the COUNTDOWN and
+     SCROLLEN groups above it. No surrounding box — a bordered panel here is what
+     made the run-of-show read as main content rather than menu chrome. */
+  .gm-runofshow {
+    position: static;
+    width: 100%;
+    max-width: 272px;
+    transform: none;
+    transition: none;
+    padding: 0;
+    gap: clamp(4px, 0.6vw, 6px);
+    background: none;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    overflow-y: visible;
+  }
+
+  /* GUTTER regime, collapsed: the list is exactly as tall as the three window
+     rows (previous / current / next), measured by the component and published as
+     `--gm-runofshow-window-h` — rows vary in height, so a fixed pixel cap ended
+     mid-row and left a half-clipped pill at the bottom edge. The list still
+     scrolls, so the rest of the running order stays reachable without expanding.
+     The fallback covers the first paint before the measurement lands.
+     The drawer is unaffected: it has no expand control and shows everything. */
+  .gm-runofshow:not(.gm-runofshow--expanded) .gm-runofshow-list {
+    max-height: var(--gm-runofshow-window-h, 180px);
+  }
+
+  /* Bounded, bordered scroll box — the same glass panel as the MUSIK group's
+     player (a lower fill alpha than the chips inside it, so the large
+     continuous surface reads as the same darkness). Without it a scrolled row
+     just gets sliced off in mid-air at the bottom of the strip; inside a border
+     the clipping reads as a container with more content in it. */
+  .gm-sidebar .gm-runofshow-listbox {
+    padding: clamp(6px, 0.8vw, 8px);
+    background: rgba(var(--glass-rgb), 0.07);
+    border: 1px solid rgba(var(--glass-rgb), 0.25);
+    border-radius: var(--radius-lg);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+  }
+
+  /* Scoped to the real gamemaster sidebar, so ThemeShowcase can still render
+     both controls for theme review on a desktop viewport. */
+  .gm-sidebar .gm-runofshow-close,
+  .gm-sidebar .gm-ablauf-toggle {
+    display: none;
+  }
+}
+
+/* ── Gamemaster confirm dialog ──
+   GM-zone-local: the admin `ConfirmModal`'s `.modal-overlay` / `.confirm-modal-*`
+   classes live in backend.css, which the gamemaster bundle does not load.
+   See specs/gamemaster-run-of-show.md. */
+.gm-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(16px, 4vw, 32px);
+  background: rgba(0, 0, 0, 0.6);
+  /* Above the run-of-show drawer (40) — the dialog is opened from it. */
+  z-index: 50;
+}
+
+.gm-confirm-box {
+  width: min(440px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: clamp(10px, 1.6vw, 16px);
+  padding: clamp(20px, 3vw, 28px);
+  border-radius: var(--radius-lg);
+  background: var(--card-bg, rgba(var(--glass-rgb), calc(var(--glass-opacity) + 0.12)));
+  border: var(--card-border, 1px solid rgba(var(--glass-rgb), var(--glass-border-opacity)));
+  box-shadow: var(--card-shadow);
+  color: var(--card-text, var(--text-primary));
+}
+
+.gm-confirm-title {
+  margin: 0;
+  font-size: clamp(1rem, 2vw, 1.25rem);
+  overflow-wrap: anywhere;
+}
+
+.gm-confirm-description {
+  font-size: clamp(0.8rem, 1.4vw, 0.95rem);
+  line-height: 1.45;
+  color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.75, var(--text-fade-floor, 0)));
+}
+
+.gm-confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.gm-confirm-actions .gm-btn {
+  flex: 1 1 auto;
+  max-width: 100%;
+  /* Comfortable touch target, and no double-tap-zoom delay on a decision the
+     host is making mid-show. */
+  min-height: 44px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }

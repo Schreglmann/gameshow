@@ -729,6 +729,31 @@ export interface GameDataResponse {
 }
 
 /**
+ * One slot of the active gameshow's `gameOrder`, as served by
+ * `GET /api/run-of-show`. The gamemaster zone has no other way to learn the
+ * running order — it only ever mirrors the CURRENT game over WebSocket.
+ * See specs/gamemaster-run-of-show.md.
+ */
+export interface RunOfShowEntry {
+  /** Position in `gameOrder` (0-based) — what `goto:game-<index>` addresses. */
+  index: number;
+  /** The raw gameOrder ref, e.g. `"allgemeinwissen/v1"`. */
+  gameId: string;
+  title: string;
+  /** `null` when the ref could not be resolved (see `missing`). */
+  type: GameType | null;
+  /**
+   * The ref points at a game file/instance that no longer resolves. The entry is
+   * kept (not dropped) so every index still matches its `gameOrder` position.
+   */
+  missing?: boolean;
+}
+
+export interface RunOfShowResponse {
+  games: RunOfShowEntry[];
+}
+
+/**
  * Payload for the `content-changed` WebSocket channel — the server's file
  * watcher fires this when on-disk content changes so the live frontend can
  * re-fetch without a page reload. See specs/live-config-reload.md.

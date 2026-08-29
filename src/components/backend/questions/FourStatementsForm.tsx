@@ -153,6 +153,9 @@ export default function FourStatementsForm({ questions, onChange, otherInstances
                     value={q.answerAudio}
                     category="audio"
                     scope={`q-${i}-answer`}
+                    audioStart={q.answerAudioStart}
+                    audioEnd={q.answerAudioEnd}
+                    audioLoop={q.answerAudioLoop}
                     onChange={v => {
                       update(i, { answerAudio: v || undefined, answerAudioStart: undefined, answerAudioEnd: undefined });
                       if (!v) setTrimExpanded(prev => { const n = new Set(prev); n.delete(`${i}-answer`); return n; });

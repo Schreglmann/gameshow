@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useGamemasterAnswer, useGamemasterControls, useSendGamemasterCommand } from '@/hooks/useGamemasterSync';
 import { onWsOpen, sendWsControl, sendWs, useWsChannel } from '@/services/useBackendSocket';
 import GamemasterView from '@/components/common/GamemasterView';
+import RunOfShowPanel from '@/components/common/RunOfShowPanel';
 import GamemasterMusicControls from '@/components/screens/GamemasterMusicControls';
 import DeadlineTimer from '@/components/common/DeadlineTimer';
 import InstallButton from '@/components/common/InstallButton';
@@ -76,6 +77,19 @@ export default function GamemasterScreen() {
     });
   }, []);
 
+  // Run-of-show ("Ablauf"): a drawer below 1280px, always visible in the left
+  // gutter above it. See specs/gamemaster-run-of-show.md.
+  const [ablaufOpen, setAblaufOpen] = useState(false);
+  const closeAblauf = useCallback(() => setAblaufOpen(false), []);
+
+  // True while the Ablauf drawer or its confirm dialog is open. The document
+  // listeners below must not advance the show behind an overlay — a backdrop
+  // click or a Space press would otherwise reach the show. Mirrored into a ref
+  // for the same reason `locked` is: the listeners are registered once.
+  const [overlayActive, setOverlayActive] = useState(false);
+  const overlayActiveRef = useRef(overlayActive);
+  overlayActiveRef.current = overlayActive;
+
   const [hideAnswers, setHideAnswers] = useState<boolean>(readStoredHideAnswers);
 
   const toggleHideAnswers = useCallback(() => {
@@ -144,6 +158,11 @@ export default function GamemasterScreen() {
 
       // preventDefault for these keys regardless of lock state — otherwise
       // Space would scroll the page when the gamemaster has the show locked.
+      // An open Ablauf drawer / confirm dialog owns the keyboard — Space must
+      // not advance the show behind the overlay. Not preventDefault'ed here:
+      // the dialog handles Enter/Escape itself and Tab must keep working.
+      if (overlayActiveRef.current) return;
+
       if (isForwardKey(e)) {
         e.preventDefault();
         if (lockedRef.current) return;
@@ -169,6 +188,13 @@ export default function GamemasterScreen() {
 
     const onKeyUp = (e: KeyboardEvent) => {
       if (!isForwardKey(e)) return;
+      // Also guard the release, in case the overlay opened mid-hold.
+      if (overlayActiveRef.current) {
+        forwardHeld = false;
+        longPressTriggered = false;
+        if (timer) { clearTimeout(timer); timer = null; }
+        return;
+      }
       const wasHeld = forwardHeld;
       forwardHeld = false;
       if (timer) {
@@ -189,6 +215,10 @@ export default function GamemasterScreen() {
       if (lockedRef.current) return;
       const target = e.target as HTMLElement;
       if (
+        // Anything inside the Ablauf drawer / confirm dialog, backdrops
+        // included — clicking a backdrop to dismiss must not also advance the
+        // show. See specs/gamemaster-run-of-show.md.
+        target.closest('[data-gm-no-nav]') ||
         target.closest('button') ||
         target.closest('input') ||
         target.closest('textarea') ||
@@ -214,17 +244,28 @@ export default function GamemasterScreen() {
 
   return (
     <div className="gamemaster-screen">
-      <div className="gm-toolbar">
-        <div className="gm-toggle-group">
-          <LockToggleButton locked={locked} onToggle={toggleLock} />
-          <AnswerImagesToggleButton showing={showAnswerImages} onToggle={toggleShowAnswerImages} />
-          <HideAnswersToggleButton hidden={hideAnswers} onToggle={toggleHideAnswers} />
-          <HoldToggleButton />
+      {/* The sidebar is `display: contents` below 1280px, so the toolbar keeps
+          its existing inline layout unchanged; at ≥1280px this wrapper owns the
+          272px left gutter that the toolbar alone used to occupy. */}
+      <div className="gm-sidebar">
+        <div className="gm-toolbar">
+          <div className="gm-toggle-group">
+            <AblaufToggleButton open={ablaufOpen} onToggle={() => setAblaufOpen(o => !o)} />
+            <LockToggleButton locked={locked} onToggle={toggleLock} />
+            <AnswerImagesToggleButton showing={showAnswerImages} onToggle={toggleShowAnswerImages} />
+            <HideAnswersToggleButton hidden={hideAnswers} onToggle={toggleHideAnswers} />
+            <HoldToggleButton />
+          </div>
+          <FullscreenToggleButton />
+          <DeadlineButtons />
+          <ScrollButtons />
+          <GamemasterMusicControls />
         </div>
-        <FullscreenToggleButton />
-        <DeadlineButtons />
-        <ScrollButtons />
-        <GamemasterMusicControls />
+        <RunOfShowPanel
+          open={ablaufOpen}
+          onClose={closeAblauf}
+          onOverlayActiveChange={setOverlayActive}
+        />
       </div>
       <GamemasterView showAnswerImages={showAnswerImages} hideAnswers={hideAnswers} />
       {!gameActive && <InstallButton variant="gamemaster" label="Gamemaster installieren" />}
@@ -252,6 +293,23 @@ function HoldToggleButton() {
       title={active ? 'Pausen-Bildschirm auf der Show ausblenden.' : 'Pausen-Bildschirm über die Show legen (für Pausen / Klärungen).'}
     >
       {active ? 'Pause beenden' : 'Pause-Bildschirm'}
+    </button>
+  );
+}
+
+// Opens the run-of-show drawer. Hidden by CSS at ≥1280px, where the panel is
+// permanently visible in the left gutter. See specs/gamemaster-run-of-show.md.
+function AblaufToggleButton({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      className={`gm-ablauf-toggle${open ? ' gm-ablauf-toggle--active' : ''}`}
+      onClick={onToggle}
+      aria-pressed={open}
+      aria-expanded={open}
+      title="Ablauf der Show anzeigen — aktuelles Spiel, nächstes Spiel, und direkt zu einem Punkt springen."
+    >
+      Ablauf
     </button>
   );
 }

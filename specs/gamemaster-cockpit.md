@@ -9,7 +9,7 @@ at a glance. This spec is an umbrella; it is delivered in pieces, each independe
 - **Piece 2 — Panic / Pause Hold Overlay** ✅
 - **Piece 3 — Joker Confirmation & History** ✅
 - **Piece 4 — Readiness Traffic-Light** 🗂 planned
-- **Piece 5 — Run-of-Show / Cue / Presenter Notes** 🗂 planned (optional)
+- **Piece 5 — Run-of-Show / Cue / Presenter Notes** 🚧 run-of-show + jump-to-game ✅, cue/notes planned
 
 ---
 
@@ -115,5 +115,10 @@ GM status strip: active-show connected (`show-presence`), GM presence (`gm-prese
 asset-failure (`assetFailed` on `gamemaster-controls`), NAS reachable (`nasMounted` read off the
 existing `system-status` broadcast — a contract/zone note for `replace-gamemaster.md`).
 
-## Piece 5 — Run-of-Show / Cue / Presenter Notes (planned, optional)
-Run-of-show overview + jump-to-game, private next-clip cue, per-question presenter notes (`gmNote`).
+## Piece 5 — Run-of-Show / Cue / Presenter Notes (partially delivered)
+Run-of-show overview + jump-to-game **shipped** as its own spec:
+[gamemaster-run-of-show.md](gamemaster-run-of-show.md) — a left-gutter "Ablauf" panel (drawer
+below 1280px) listing the whole show with the current position, jumping via new `goto:*`
+commands behind a confirmation dialog, backed by `GET /api/run-of-show`.
+
+Still planned: private next-clip cue, per-question presenter notes (`gmNote`).

@@ -3813,6 +3813,33 @@ async function resolveIncompatibleGames(config: AppConfig, teamCount: number) {
   return listIncompatibleGames(resolved, teamCount);
 }
 
+/**
+ * The active gameshow's running order, with resolved titles — the gamemaster's
+ * "Ablauf" panel. The GM zone mirrors only the CURRENT game over WebSocket and
+ * has no other source for the list. A ref that no longer resolves is kept as a
+ * `missing` entry rather than dropped, so every `index` still matches its
+ * `gameOrder` position (the jump command addresses games by index).
+ * See specs/gamemaster-run-of-show.md.
+ */
+app.get('/api/run-of-show', async (_req, res) => {
+  try {
+    const config = await loadConfig();
+    const gameOrder = getActiveGameOrder(config);
+    const games = await Promise.all(gameOrder.map(async (gameRef, index) => {
+      const { gameName, instanceName } = parseGameRef(gameRef);
+      try {
+        const cfg = await loadGameConfig(gameName, instanceName, config.rulesPresets);
+        return { index, gameId: gameRef, title: cfg.title || gameName, type: cfg.type };
+      } catch {
+        return { index, gameId: gameRef, title: gameRef, type: null, missing: true };
+      }
+    }));
+    res.json({ games });
+  } catch {
+    res.status(500).json({ error: 'Failed to load config' });
+  }
+});
+
 app.get('/api/settings', async (_req, res) => {
   try {
     const config = await loadConfig();

@@ -48,6 +48,10 @@ export function useSharedAudio(src: string | undefined, scope?: string) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  // Kept in state, not only in the ref, so subscribers that attach their own
+  // listeners to the element (trim-boundary handling) re-render once it exists
+  // instead of waiting for some unrelated state change to expose it.
+  const [element, setElement] = useState<HTMLAudioElement | null>(null);
   const entryRef = useRef<PoolEntry | null>(null);
 
   const poolKey = useMemo(
@@ -58,6 +62,7 @@ export function useSharedAudio(src: string | undefined, scope?: string) {
   useEffect(() => {
     if (!src || !poolKey) {
       entryRef.current = null;
+      setElement(null);
       setIsPlaying(false);
       setCurrentTime(0);
       setDuration(0);
@@ -69,6 +74,7 @@ export function useSharedAudio(src: string | undefined, scope?: string) {
     entryRef.current = entry;
 
     const { audio } = entry;
+    setElement(audio);
 
     const onPlay = () => setIsPlaying(true);
     const onPause = () => setIsPlaying(false);
@@ -103,6 +109,7 @@ export function useSharedAudio(src: string | undefined, scope?: string) {
         pool.delete(poolKey);
       }
       entryRef.current = null;
+      setElement(null);
     };
   }, [src, poolKey]);
 
@@ -135,7 +142,7 @@ export function useSharedAudio(src: string | undefined, scope?: string) {
   }, []);
 
   return {
-    audio: entryRef.current?.audio ?? null,
+    audio: element,
     isPlaying,
     currentTime,
     duration,

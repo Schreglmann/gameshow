@@ -214,6 +214,25 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/SettingsResponse" }
 
+  /api/run-of-show:
+    get:
+      operationId: shared_getRunOfShow
+      tags: [shared]
+      summary: The active gameshow's running order, with resolved titles
+      description: |
+        Backs the gamemaster's "Ablauf" panel. The gamemaster PWA mirrors only the
+        CURRENT game over WebSocket and has no other source for the ordered list.
+        One entry per `gameOrder` slot, in order. A ref that no longer resolves is
+        returned as a `missing` entry rather than dropped, so every `index` still
+        matches its `gameOrder` position — the `goto:game-<index>` command
+        addresses games by index. See specs/gamemaster-run-of-show.md.
+      responses:
+        "200":
+          description: The running order
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RunOfShowResponse" }
+
   /api/theme:
     get:
       operationId: shared_getTheme
@@ -3340,6 +3359,38 @@ components:
             Whether THIS game can be scored: the show has teams AND this game's type
             (and scoring mode) supports that team count. An incompatible game still
             plays in full — it just never reaches an award. See specs/team-count.md.
+
+    RunOfShowEntry:
+      type: object
+      required: [index, gameId, title, type]
+      properties:
+        index:
+          type: integer
+          minimum: 0
+          description: Position in `gameOrder` — what `goto:game-<index>` addresses.
+        gameId:
+          type: string
+          description: The raw gameOrder ref, e.g. `allgemeinwissen/v1`.
+          example: allgemeinwissen/v1
+        title: { type: string }
+        type:
+          description: "`null` when the ref could not be resolved (see `missing`)."
+          oneOf:
+            - $ref: "#/components/schemas/GameType"
+            - { type: "null" }
+        missing:
+          type: boolean
+          description: >-
+            The ref points at a game file/instance that no longer resolves. The entry
+            is kept rather than dropped so indices stay aligned with `gameOrder`.
+
+    RunOfShowResponse:
+      type: object
+      required: [games]
+      properties:
+        games:
+          type: array
+          items: { $ref: "#/components/schemas/RunOfShowEntry" }
 
     AppConfig:
       type: object
