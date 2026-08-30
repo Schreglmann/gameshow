@@ -6,6 +6,7 @@ import { toMediaSrc } from '@/utils/assetUrl';
 import { useQuestionOrder, type QuestionOrderHandle } from '@/hooks/useQuestionOrder';
 import { useLiveQuestionIndex } from '@/hooks/useLiveQuestionIndex';
 import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
+import { scrollToCardBottom } from '@/utils/scrollToCardAnchor';
 import BaseGameWrapper from './BaseGameWrapper';
 import { useFullscreen, useRegisterFullscreenMedia } from '@/context/FullscreenContext';
 
@@ -303,13 +304,9 @@ function ColorGuessInner({
   // scroll-to-bottom below can bring the answer + image into view instead.
   useQuizAutoScroll(qKey, 'top', 'instant', !showAnswer);
 
-  const scrollToBottom = useCallback(() => {
-    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-  }, []);
-
   useEffect(() => {
-    if (showAnswer) setTimeout(scrollToBottom, 100);
-  }, [showAnswer, scrollToBottom]);
+    if (showAnswer) setTimeout(scrollToCardBottom, 100);
+  }, [showAnswer]);
 
   if (!q) return null;
 
@@ -337,7 +334,7 @@ function ColorGuessInner({
             alt={q.answer}
             className="quiz-image"
             onClick={() => openLightbox({ type: 'image', src: q.image })}
-            onLoad={scrollToBottom}
+            onLoad={scrollToCardBottom}
           />
         </div>
       )}

@@ -6,6 +6,7 @@ import { useQuestionOrder, type QuestionOrderHandle } from '@/hooks/useQuestionO
 import { useLiveQuestionIndex } from '@/hooks/useLiveQuestionIndex';
 import { mulberry32 } from '@/utils/questions';
 import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
+import { scrollToCardBottom } from '@/utils/scrollToCardAnchor';
 import { useFullscreen, useRegisterFullscreenMedia } from '@/context/FullscreenContext';
 import { toMediaSrc } from '@/utils/assetUrl';
 import BaseGameWrapper from './BaseGameWrapper';
@@ -203,9 +204,7 @@ function ImageGuessInner({ questions, order, resumeAtEnd, gameTitle, onGameCompl
   // view when the card is taller than the viewport.
   useEffect(() => {
     if (!showAnswer) return;
-    const id = setTimeout(() => {
-      window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-    }, 100);
+    const id = setTimeout(scrollToCardBottom, 100);
     return () => clearTimeout(id);
   }, [showAnswer]);
 

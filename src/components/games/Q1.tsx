@@ -6,6 +6,7 @@ import { useQuestionOrder, type QuestionOrderHandle } from '@/hooks/useQuestionO
 import { useLiveQuestionIndex } from '@/hooks/useLiveQuestionIndex';
 import { mulberry32 } from '@/utils/questions';
 import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
+import { scrollToCardBottom } from '@/utils/scrollToCardAnchor';
 import BaseGameWrapper from './BaseGameWrapper';
 
 interface ShuffledStatement {
@@ -168,11 +169,7 @@ function StatementsInner({ questions, order, resumeAtEnd, gameTitle, onGameCompl
 
   // Scroll to bottom when answer is revealed
   useEffect(() => {
-    if (showAnswer) {
-      const scrollHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
-      document.documentElement.scrollTo({ top: scrollHeight, behavior: 'smooth' });
-      document.body.scrollTo({ top: scrollHeight, behavior: 'smooth' });
-    }
+    if (showAnswer) scrollToCardBottom();
   }, [showAnswer]);
 
   if (!q) return null;

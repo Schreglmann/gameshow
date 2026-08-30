@@ -12,6 +12,7 @@ import { safePlay as safePlayShared } from '@/utils/safePlay';
 import { encodeAssetPath, toMediaSrc } from '@/utils/assetUrl';
 import { useGmConnected } from '@/hooks/useGmConnected';
 import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
+import { scrollToCardBottom } from '@/utils/scrollToCardAnchor';
 import RetryImage from '@/components/common/RetryImage';
 import AssetReloadButton from '@/components/common/AssetReloadButton';
 import BaseGameWrapper from './BaseGameWrapper';
@@ -424,7 +425,7 @@ function VideoInner({ questions, order, resumeAtEnd, gameTitle, videoRef, onGame
   // Scroll to bottom when answer is revealed so the answer text is visible
   useEffect(() => {
     if (showAnswer) {
-      setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }), 100);
+      setTimeout(scrollToCardBottom, 100);
     }
   }, [showAnswer]);
 

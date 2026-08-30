@@ -5,6 +5,7 @@ import type { GamemasterAnswerData } from '@/types/game';
 import { useQuestionOrder, type QuestionOrderHandle } from '@/hooks/useQuestionOrder';
 import { useLiveQuestionIndex } from '@/hooks/useLiveQuestionIndex';
 import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
+import { scrollToCardBottom } from '@/utils/scrollToCardAnchor';
 import { useFullscreen } from '@/context/FullscreenContext';
 import RetryImage from '@/components/common/RetryImage';
 import CompassRose from '@/components/common/CompassRose';
@@ -185,10 +186,7 @@ function CityCompassInner({
   useQuizAutoScroll(qKey, 'top', 'instant', !showAnswer);
 
   useEffect(() => {
-    if (!showAnswer) return;
-    const scrollHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
-    document.documentElement.scrollTo({ top: scrollHeight, behavior: 'smooth' });
-    document.body.scrollTo({ top: scrollHeight, behavior: 'smooth' });
+    if (showAnswer) scrollToCardBottom();
   }, [showAnswer]);
 
   if (!q) return null;

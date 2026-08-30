@@ -25,6 +25,18 @@ export function absoluteOffsetTop(el: HTMLElement): number {
   return top;
 }
 
+// Scroll so the `.quiz-container` card's own bottom just clears the viewport
+// bottom — used when a reveal (answer, new clue, image load) makes the card
+// taller than the screen. Unlike scrolling to the page's own scrollHeight,
+// this stops as soon as the card's actual content is in view, so no unused
+// space below the card eats into what's visible.
+export function scrollToCardBottom(): void {
+  const card = document.querySelector('.quiz-container') as HTMLElement | null;
+  if (!card) return;
+  const target = Math.round(absoluteOffsetTop(card) + card.offsetHeight - window.innerHeight + HEADER_MARGIN * 2);
+  window.scrollTo({ top: Math.max(0, target), behavior: 'smooth' as ScrollBehavior });
+}
+
 // Which jump-points exist on the show right now — but only while the card
 // actually overflows its viewport (scrolling a card that fits is pointless, and
 // the GM toolbar hides the button row when this returns []). `top`/`bottom`
