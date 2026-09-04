@@ -515,10 +515,23 @@ export interface GameshowConfig {
  */
 export type PointMode = 'positional' | 'flat' | 'per-correct-answer';
 
+/**
+ * Which wording of a preset a show gets. Presets are app-wide but their archetype
+ * lines are team-count-sensitive: at 3-4 teams "beide Teams" is wrong, and at 0-1
+ * teams the lines about the other team have no referent at all and are dropped
+ * rather than reworded. See specs/rules-presets.md.
+ */
+export type RulesTeamBand = 'solo' | 'pair' | 'multi';
+
 export interface RulesPreset {
   id: string;
   name: string;
+  /** Band `pair` (2 teams), and the fallback for any band left unauthored. */
   rules: string[];
+  /** Band `solo` — 0-1 teams. */
+  rulesSolo?: string[];
+  /** Band `multi` — 3-4 teams. */
+  rulesMulti?: string[];
 }
 
 /**

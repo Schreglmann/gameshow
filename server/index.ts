@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 import multer from 'multer';
 import type { AppConfig, GameConfig, MultiInstanceGameFile, GameFileSummary, AssetCategory, RulesPreset } from '../src/types/config.js';
 import { resolveRulesPreset } from '../src/utils/rulesPreset.js';
+import { DEFAULT_TEAM_COUNT } from '../src/utils/teams.js';
 import { normalizePointMode, pointModeRule } from '../src/utils/pointMode.js';
 import { effectiveTeamCount, gameIsScorable, listIncompatibleGames, hasTeamSplit } from './team-count.js';
 import { isAudioFile, normalizeAudioFile } from './normalize.js';
@@ -3701,6 +3702,7 @@ async function loadGameConfig(
   gameName: string,
   instanceName: string | null,
   presets?: RulesPreset[],
+  teamCount: number = DEFAULT_TEAM_COUNT,
 ): Promise<GameConfig> {
   const filePath = path.join(GAMES_DIR, `${gameName}.json`);
   const data = await readFile(filePath, 'utf8');
@@ -3743,7 +3745,7 @@ async function loadGameConfig(
   }
 
   if (resolved.rulesPreset && presets) {
-    const merged = resolveRulesPreset(resolved, presets);
+    const merged = resolveRulesPreset(resolved, presets, teamCount);
     if (merged) {
       resolved = { ...resolved, rules: merged };
     } else {
@@ -3804,7 +3806,7 @@ async function resolveIncompatibleGames(config: AppConfig, teamCount: number) {
   const resolved = await Promise.all(gameOrder.map(async gameRef => {
     const { gameName, instanceName } = parseGameRef(gameRef);
     try {
-      const cfg = await loadGameConfig(gameName, instanceName, config.rulesPresets);
+      const cfg = await loadGameConfig(gameName, instanceName, config.rulesPresets, teamCount);
       return { type: cfg.type, title: cfg.title || gameName, scoringMode: (cfg as { scoringMode?: string }).scoringMode };
     } catch {
       return null; // a broken reference is a different problem
@@ -3828,7 +3830,7 @@ app.get('/api/run-of-show', async (_req, res) => {
     const games = await Promise.all(gameOrder.map(async (gameRef, index) => {
       const { gameName, instanceName } = parseGameRef(gameRef);
       try {
-        const cfg = await loadGameConfig(gameName, instanceName, config.rulesPresets);
+        const cfg = await loadGameConfig(gameName, instanceName, config.rulesPresets, effectiveTeamCount(config));
         return { index, gameId: gameRef, title: cfg.title || gameName, type: cfg.type };
       } catch {
         return { index, gameId: gameRef, title: gameRef, type: null, missing: true };
@@ -3981,9 +3983,13 @@ app.get('/api/game/:index', async (req, res) => {
     const gameRef = gameOrder[index]!;
     const { gameName, instanceName } = parseGameRef(gameRef);
 
+    // Drives both the scoring gate below and, inside loadGameConfig, which team-count
+    // band a linked rulesPreset resolves to. See specs/rules-presets.md.
+    const teamCount = effectiveTeamCount(config);
+
     let gameConfig: GameConfig;
     try {
-      gameConfig = await loadGameConfig(gameName, instanceName, config.rulesPresets);
+      gameConfig = await loadGameConfig(gameName, instanceName, config.rulesPresets, teamCount);
     } catch (err) {
       return res.status(404).json({ error: `Game configuration not found: ${(err as Error).message}` });
     }
@@ -4011,7 +4017,7 @@ app.get('/api/game/:index', async (req, res) => {
       totalGames: gameOrder.length,
       pointSystemEnabled: gameIsScorable(
         { type: gameConfig.type, scoringMode: (gameConfig as { scoringMode?: string }).scoringMode },
-        effectiveTeamCount(config),
+        teamCount,
       ),
     };
 

@@ -243,4 +243,51 @@ describe('RulesEditor', () => {
     });
 
   });
+
+  // See specs/rules-presets.md — the editor previews the band the active gameshow gets.
+  describe('team-count bands', () => {
+    const banded = [{
+      id: 'race',
+      name: 'Race',
+      rules: ['Zwei-Team-Regel.'],
+      rulesSolo: ['Solo-Regel.'],
+      rulesMulti: ['Mehr-Team-Regel.'],
+    }];
+
+    const renderLinked = (teamCount?: number) => render(
+      <RulesEditor
+        rules={['Task line']}
+        onChange={vi.fn()}
+        taskLine
+        presets={banded}
+        activePresetId="race"
+        onPresetChange={vi.fn()}
+        {...(teamCount === undefined ? {} : { teamCount })}
+      />,
+    );
+
+    it('shows the two-team band by default and names no band', () => {
+      renderLinked();
+      expect(screen.getByText('Zwei-Team-Regel.')).toBeInTheDocument();
+      expect(screen.queryByText(/Vorlagentext für/)).not.toBeInTheDocument();
+    });
+
+    it('shows the multi band at four teams and names it', () => {
+      renderLinked(4);
+      expect(screen.getByText('Mehr-Team-Regel.')).toBeInTheDocument();
+      expect(screen.queryByText('Zwei-Team-Regel.')).not.toBeInTheDocument();
+      expect(screen.getByText('Vorlagentext für 3–4 Teams')).toBeInTheDocument();
+    });
+
+    it('shows the solo band at one team and names it', () => {
+      renderLinked(1);
+      expect(screen.getByText('Solo-Regel.')).toBeInTheDocument();
+      expect(screen.getByText('Vorlagentext für 0–1 Teams')).toBeInTheDocument();
+    });
+
+    it('puts the band text in the preset button title', () => {
+      renderLinked(4);
+      expect(screen.getByRole('button', { name: 'Race' })).toHaveAttribute('title', 'Mehr-Team-Regel.');
+    });
+  });
 });

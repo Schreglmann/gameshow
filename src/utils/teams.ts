@@ -1,4 +1,5 @@
 import type { TeamState } from '../types/game.js';
+import type { AppConfig } from '../types/config.js';
 
 /**
  * Team identity — the single source of truth for "which teams exist".
@@ -29,6 +30,22 @@ export const DEFAULT_TEAM_COUNT = 2;
 export function normalizeTeamCount(value: unknown): number {
   if (typeof value !== 'number' || !Number.isInteger(value)) return DEFAULT_TEAM_COUNT;
   return Math.min(MAX_TEAMS, Math.max(0, value));
+}
+
+/**
+ * How many teams the active gameshow runs with (0-4).
+ *
+ * The global `pointSystemEnabled: false` is the master "no teams" switch and
+ * forces 0; otherwise the active gameshow's own `teamCount` applies, defaulting
+ * to the historic 2 when absent. Lives here rather than in server/team-count.ts
+ * because the admin needs the same number to preview a rules preset's team-count
+ * band. See specs/team-count.md and specs/rules-presets.md.
+ */
+export function effectiveTeamCount(config: AppConfig): number {
+  if (config.pointSystemEnabled === false) return 0;
+  const activeShow = config.gameshows?.[config.activeGameshow];
+  const raw = activeShow?.teamCount;
+  return raw === undefined ? DEFAULT_TEAM_COUNT : normalizeTeamCount(raw);
 }
 
 /** The keys of the `count` active teams, in identity order. */

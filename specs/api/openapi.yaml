@@ -3425,7 +3425,8 @@ components:
           description: |
             Named rule presets referenced from `BaseGameConfig.rulesPreset`. The
             admin rules editor renders one button per preset; the server resolves
-            references inline before serving game data. See
+            references inline before serving game data, picking the wording band
+            that matches the active gameshow's effective team count. See
             [specs/rules-presets.md](../rules-presets.md).
         activeGameshow: { type: string }
         gameshows:
@@ -3445,7 +3446,23 @@ components:
         rules:
           type: array
           items: { type: string }
-          description: Archetype lines that follow the game-specific task line on resolution.
+          description: |
+            Archetype lines that follow the game-specific task line on resolution.
+            This is the `pair` band (2 teams) and the fallback for any band the
+            author left unauthored.
+        rulesSolo:
+          type: array
+          items: { type: string }
+          description: |
+            `solo` band — 0-1 teams. There is no opponent, so the archetype lines
+            about the other team are dropped rather than reworded. Falls back to
+            `rules` when absent.
+        rulesMulti:
+          type: array
+          items: { type: string }
+          description: |
+            `multi` band — 3-4 teams ("Alle Teams", "die anderen Teams"). Falls
+            back to `rules` when absent.
 
     GameshowConfig:
       type: object

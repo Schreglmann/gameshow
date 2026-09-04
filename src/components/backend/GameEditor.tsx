@@ -29,6 +29,7 @@ import { useDragReorder } from './useDragReorder';
 import { slugifyGameName } from './slugifyGameName';
 import { useConfirm } from './ConfirmContext';
 import { instanceUsage, type InstanceUsage } from '@/utils/playerStats';
+import { DEFAULT_TEAM_COUNT, effectiveTeamCount } from '@/utils/teams';
 import type { GameshowConfig, GameFileSummary } from '@/types/config';
 
 interface Props {
@@ -57,6 +58,9 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
   });
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [rulesPresets, setRulesPresets] = useState<RulesPreset[]>([]);
+  // The active gameshow's effective team count — decides which wording band a linked
+  // preset shows in the editor, matching what the show will render. See specs/rules-presets.md.
+  const [presetTeamCount, setPresetTeamCount] = useState<number>(DEFAULT_TEAM_COUNT);
   // Gameshow membership → which players have played each instance (derived, read-only).
   const [gameshows, setGameshows] = useState<Record<string, GameshowConfig>>({});
   const [activeGameshow, setActiveGameshow] = useState<string>('');
@@ -79,6 +83,7 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
         setRulesPresets(cfg.rulesPresets ?? []);
         setGameshows(cfg.gameshows ?? {});
         setActiveGameshow(cfg.activeGameshow ?? '');
+        setPresetTeamCount(effectiveTeamCount(cfg));
       })
       .catch(() => { /* optional — fail silently */ });
     fetchGames()
@@ -764,6 +769,7 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
           presets={rulesPresets}
           activePresetId={typeof data.rulesPreset === 'string' ? data.rulesPreset : undefined}
           onPresetChange={id => setData({ ...data, rulesPreset: id })}
+          teamCount={presetTeamCount}
           extraCenter={data.type !== 'quizjagd' ? (
             <>
               <label className="be-toggle">

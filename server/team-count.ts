@@ -1,6 +1,10 @@
-import type { AppConfig, GameType } from '../src/types/config.js';
+import type { GameType } from '../src/types/config.js';
 import { gameSupportsTeamCount } from '../src/data/gameTypeInfo.js';
-import { normalizeTeamCount, DEFAULT_TEAM_COUNT } from '../src/utils/teams.js';
+import { effectiveTeamCount } from '../src/utils/teams.js';
+
+// The count itself is resolved in src/utils/teams.ts — the admin needs the same
+// number to preview a rules preset's team-count band, so it cannot live here.
+export { effectiveTeamCount };
 
 /**
  * Team-count resolution for the two routes that serve it.
@@ -15,22 +19,6 @@ export interface ScorableGame {
   type: GameType;
   title?: string;
   scoringMode?: string;
-}
-
-/**
- * How many teams the active gameshow runs with (0-4).
- *
- * The global `pointSystemEnabled: false` is the master "no teams" switch and
- * forces 0; otherwise the active gameshow's own `teamCount` applies, defaulting
- * to the historic 2 when absent. Everything else — the served
- * `pointSystemEnabled` on both routes, the joker cascade, the incompatible-game
- * list — derives from this one number.
- */
-export function effectiveTeamCount(config: AppConfig): number {
-  if (config.pointSystemEnabled === false) return 0;
-  const activeShow = config.gameshows?.[config.activeGameshow];
-  const raw = activeShow?.teamCount;
-  return raw === undefined ? DEFAULT_TEAM_COUNT : normalizeTeamCount(raw);
 }
 
 /**

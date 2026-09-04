@@ -1790,6 +1790,17 @@
   text-overflow: ellipsis;
 }
 
+/* Names the team-count band the locked rows below belong to. Only rendered when
+   the active gameshow is not on the 2-team default, so the author can tell that
+   the wording on screen is the 0-1 or 3-4 team variant. */
+.be-rules-band-note {
+  margin: 0 0 4px 26px;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)));
+}
+
 .be-rule-locked .be-drag-disabled {
   opacity: 0.25;
   cursor: default;

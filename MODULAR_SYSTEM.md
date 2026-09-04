@@ -65,7 +65,7 @@ games/
 - `teamRandomizationEnabled` — How the teams are formed on the `HomeScreen` (default: `true`). `true` = enter a name pool that is shuffled + split automatically; `false` = **manual assignment** — add/remove players per team by hand on the show and the gamemaster (see [specs/team-management.md](specs/team-management.md))
 - `jokersInLastGame` — Allow jokers to stay available in the last game (default: `false`; when off, the joker UI is hidden in the last game)
 - `globalRules` — Array of strings for the global rules screen
-- `rulesPresets` — Optional list of `{ id, name, rules[] }` entries. Games may reference one via `rulesPreset`; the server resolves it onto the per-game task line at runtime. See [specs/rules-presets.md](specs/rules-presets.md).
+- `rulesPresets` — Optional list of `{ id, name, rules[], rulesSolo?[], rulesMulti?[] }` entries. Games may reference one via `rulesPreset`; the server resolves it onto the per-game task line at runtime, picking the wording band for the active gameshow's team count (`rulesSolo` at 0–1 teams, `rules` at 2, `rulesMulti` at 3–4). See [specs/rules-presets.md](specs/rules-presets.md).
 - `activeGameshow` — Key of the gameshow to run (must match a key in `gameshows`)
 
 **`gameshows`** — Record of all defined gameshows (current and past):

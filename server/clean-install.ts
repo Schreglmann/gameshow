@@ -47,12 +47,22 @@ export function buildDefaultConfig(): AppConfig {
     teamRandomizationEnabled: true,
     jokersInLastGame: false,
     globalRules: DEFAULT_GLOBAL_RULES,
+    // Each preset carries all three team-count bands: `rules` is 2 teams,
+    // `rulesSolo` 0-1 (no opponent, so the fallback lines are dropped rather
+    // than reworded) and `rulesMulti` 3-4. See specs/rules-presets.md.
     rulesPresets: [
       {
         id: 'simultaneous-written',
         name: 'Gleichzeitig schriftlich',
         rules: [
           'Jede Frage wird beiden Teams gleichzeitig gestellt.',
+          'Die Teams schreiben ihre Antwort auf.',
+        ],
+        rulesSolo: [
+          'Die Antwort wird aufgeschrieben.',
+        ],
+        rulesMulti: [
+          'Jede Frage wird allen Teams gleichzeitig gestellt.',
           'Die Teams schreiben ihre Antwort auf.',
         ],
       },
@@ -64,6 +74,14 @@ export function buildDefaultConfig(): AppConfig {
           'Die erste Antwort eines Teams zählt.',
           'Antwortet ein Team falsch, darf das andere Team antworten.',
         ],
+        rulesSolo: [
+          'Die erste genannte Antwort zählt.',
+        ],
+        rulesMulti: [
+          'Alle Teams raten gleichzeitig.',
+          'Die erste Antwort eines Teams zählt.',
+          'Antwortet ein Team falsch, dürfen die anderen Teams antworten.',
+        ],
       },
       {
         id: 'alternating',
@@ -72,12 +90,27 @@ export function buildDefaultConfig(): AppConfig {
           'Die Teams raten abwechselnd.',
           'Antwortet ein Team falsch oder nicht, darf das andere Team antworten.',
         ],
+        rulesSolo: [
+          'Pro Frage darf einmal geraten werden.',
+        ],
+        rulesMulti: [
+          'Die Teams raten abwechselnd.',
+          'Antwortet ein Team falsch oder nicht, darf das nächste Team antworten.',
+        ],
       },
       {
         id: 'simultaneous-first-correct',
         name: 'Gleichzeitig (erste richtige gewinnt)',
         rules: [
           'Beide Teams raten gleichzeitig.',
+          'Die erste richtige Antwort gewinnt.',
+          'Die Teams dürfen beliebig oft raten.',
+        ],
+        rulesSolo: [
+          'Es darf beliebig oft geraten werden.',
+        ],
+        rulesMulti: [
+          'Alle Teams raten gleichzeitig.',
           'Die erste richtige Antwort gewinnt.',
           'Die Teams dürfen beliebig oft raten.',
         ],

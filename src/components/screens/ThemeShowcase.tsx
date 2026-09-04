@@ -1437,10 +1437,31 @@ function JobRowShowcase() {
 }
 
 const DEMO_PRESETS: RulesPreset[] = [
-  { id: 'demo-a', name: 'Gleichzeitig schriftlich', rules: ['Jede Frage wird beiden Teams gleichzeitig gestellt.', 'Die Teams schreiben ihre Antwort auf.'] },
-  { id: 'demo-b', name: 'Abwechselnd', rules: ['Die Teams raten abwechselnd.', 'Antwortet ein Team falsch oder nicht, darf das andere Team antworten.'] },
-  { id: 'demo-c', name: 'Gleichzeitig (erste richtige gewinnt)', rules: ['Beide Teams raten gleichzeitig.', 'Die erste richtige Antwort gewinnt.', 'Die Teams dürfen beliebig oft raten.'] },
+  {
+    id: 'demo-a',
+    name: 'Gleichzeitig schriftlich',
+    rules: ['Jede Frage wird beiden Teams gleichzeitig gestellt.', 'Die Teams schreiben ihre Antwort auf.'],
+    rulesSolo: ['Die Antwort wird aufgeschrieben.'],
+    rulesMulti: ['Jede Frage wird allen Teams gleichzeitig gestellt.', 'Die Teams schreiben ihre Antwort auf.'],
+  },
+  {
+    id: 'demo-b',
+    name: 'Abwechselnd',
+    rules: ['Die Teams raten abwechselnd.', 'Antwortet ein Team falsch oder nicht, darf das andere Team antworten.'],
+    rulesSolo: ['Pro Frage darf einmal geraten werden.'],
+    rulesMulti: ['Die Teams raten abwechselnd.', 'Antwortet ein Team falsch oder nicht, darf das nächste Team antworten.'],
+  },
+  {
+    id: 'demo-c',
+    name: 'Gleichzeitig (erste richtige gewinnt)',
+    rules: ['Beide Teams raten gleichzeitig.', 'Die erste richtige Antwort gewinnt.', 'Die Teams dürfen beliebig oft raten.'],
+    rulesSolo: ['Es darf beliebig oft geraten werden.'],
+    rulesMulti: ['Alle Teams raten gleichzeitig.', 'Die erste richtige Antwort gewinnt.', 'Die Teams dürfen beliebig oft raten.'],
+  },
 ];
+
+/** Team counts the showcase steps through, so every preset band is visible. */
+const DEMO_TEAM_COUNTS = [1, 2, 4];
 
 function LiveRulesEditorDemo() {
   const [rules, setRules] = useState<string[]>([
@@ -1452,7 +1473,23 @@ function LiveRulesEditorDemo() {
   const [activePresetId, setActivePresetId] = useState<string | undefined>(undefined);
   const [randomize, setRandomize] = useState(false);
   const [limit, setLimit] = useState<string>('');
+  // Preset rules are team-count-sensitive (specs/rules-presets.md); switching the count
+  // here shows the locked rows and the band note in all three bands.
+  const [teamCount, setTeamCount] = useState(2);
   return (
+    <>
+    <div className="be-preset-buttons" style={{ marginBottom: 8 }}>
+      {DEMO_TEAM_COUNTS.map(n => (
+        <button
+          key={n}
+          type="button"
+          className={`be-icon-btn${teamCount === n ? ' is-active' : ''}`}
+          onClick={() => setTeamCount(n)}
+        >
+          {n} {n === 1 ? 'Team' : 'Teams'}
+        </button>
+      ))}
+    </div>
     <RulesEditor
       rules={rules}
       onChange={setRules}
@@ -1460,6 +1497,7 @@ function LiveRulesEditorDemo() {
       presets={DEMO_PRESETS}
       activePresetId={activePresetId}
       onPresetChange={setActivePresetId}
+      teamCount={teamCount}
       extraCenter={
         <label className="be-toggle">
           <input type="checkbox" checked={randomize} onChange={e => setRandomize(e.target.checked)} />
@@ -1482,6 +1520,7 @@ function LiveRulesEditorDemo() {
         </label>
       }
     />
+    </>
   );
 }
 

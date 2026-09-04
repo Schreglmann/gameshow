@@ -226,6 +226,34 @@ This means:
 - The preset only contributes Archetype A / B / B' / C lines (or future Archetype X variants suitable for sharing).
 - Renaming a preset's `id` is a breaking change. Renaming `name` is safe.
 
+### Team-count bands
+
+The archetype text above is **two-team** text. A preset therefore stores up to three wording bands,
+and the server serves the one matching the active gameshow's effective team count:
+
+| Band | Teams | Field | Wording |
+|---|---|---|---|
+| `solo` | 0-1 | `rulesSolo` | No opponent — the lines about the other team are **dropped**, not reworded. |
+| `pair` | 2 | `rules` | "Beide Teams", "das andere Team" — the archetype text above, verbatim. |
+| `multi` | 3-4 | `rulesMulti` | "Alle Teams"; the fallback partner is "die anderen Teams" (simultaneous) or "das nächste Team" (abwechselnd, where turn order says who is next). |
+
+The `multi` phrasing of each archetype:
+
+**Archetype A** — `Jede Frage wird allen Teams gleichzeitig gestellt.` / `Die Teams schreiben ihre Antwort auf.`
+
+**Archetype B** — `Alle Teams raten gleichzeitig.` / `Die erste Antwort eines Teams zählt.` / `Antwortet ein Team falsch, dürfen die anderen Teams antworten.`
+
+**Archetype B'** — `Alle Teams raten gleichzeitig.` / `Die erste richtige Antwort gewinnt.` / `Die Teams dürfen beliebig oft raten.`
+
+**Archetype C** — `Die Teams raten abwechselnd.` / `Antwortet ein Team falsch oder nicht, darf das nächste Team antworten.`
+
+The `solo` band collapses each archetype to the one thing still true with a single guessing party:
+`Die Antwort wird aufgeschrieben.` (A), `Die erste genannte Antwort zählt.` (B),
+`Es darf beliebig oft geraten werden.` (B'), `Pro Frage darf einmal geraten werden.` (C).
+
+This applies to **presets only**. A game whose `rules` array holds inline archetype text keeps its
+two-team wording at every count — link it to a preset to make it count-aware.
+
 See [rules-presets.md](rules-presets.md) for the full data model and editor behaviour.
 
 ## Empty `rules` arrays

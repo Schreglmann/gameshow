@@ -161,6 +161,17 @@ function validateConfig(): void {
         } else if (preset.rules.some(r => typeof r !== 'string')) {
           errors.push(`rulesPresets[${idx}]: every entry in "rules" must be a string`);
         }
+        // Team-count bands. Optional — an absent band falls back to `rules` at
+        // runtime, so only a malformed one is an error. See specs/rules-presets.md.
+        for (const band of ['rulesSolo', 'rulesMulti'] as const) {
+          const value = (preset as Record<string, unknown>)[band];
+          if (value === undefined) continue;
+          if (!Array.isArray(value)) {
+            errors.push(`rulesPresets[${idx}]: "${band}" must be an array of strings`);
+          } else if (value.some(r => typeof r !== 'string')) {
+            errors.push(`rulesPresets[${idx}]: every entry in "${band}" must be a string`);
+          }
+        }
       });
     }
   }
