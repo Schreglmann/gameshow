@@ -9,7 +9,7 @@
 // and only through a dynamic import; the show renders from the coordinates stored in
 // the game JSON.
 //
-// One template literal rather than 2846 object literals: a quarter of the source
+// One template literal rather than 3138 object literals: a quarter of the source
 // size, one diff line per city, and tsc only ever sees a string.
 
 import type { City, CityTier } from '@/utils/cityCompass';
@@ -174,12 +174,304 @@ Neuhofen an der Krems|AT|48.1387|14.2276|6269|L
 Pressbaum|AT|48.1833|16.0833|6237|L
 Lichtenegg|AT|48.15|14|6163|L
 Pöllau|AT|47.3|15.8333|6014|L
+Mürzzuschlag|AT|47.6066|15.6723|5975|L
+Breitenfurt bei Wien|AT|48.1333|16.15|5853|L
+Perg|AT|48.25|14.6333|5812|L
+Oberndorf bei Salzburg|AT|47.95|12.9333|5794|L
+Lochau|AT|47.5333|9.75|5747|L
+Horn|AT|48.6627|15.6566|5494|L
+Pinkafeld|AT|47.3667|16.1167|5438|L
+Himberg|AT|48.0833|16.4333|5331|L
+Kirchberg in Tirol|AT|47.4454|12.316|5245|L
+Ebreichsdorf|AT|47.9558|16.4071|5236|L
+Kindberg|AT|47.5|15.45|5197|L
+Kalsdorf bei Graz|AT|46.9653|15.4803|5171|L
+Axams|AT|47.2311|11.2789|5130|L
+Leopoldsdorf|AT|48.1156|16.3913|5078|L
+Sollenau|AT|47.8983|16.2483|5038|L
+Hart bei Graz|AT|47.0431|15.5153|4972|L
+Gablitz|AT|48.2286|16.1544|4968|L
+Nüziders|AT|47.1667|9.8|4962|L
+Henndorf am Wallersee|AT|47.9|13.1833|4947|L
+Schärding|AT|48.4529|13.4372|4919|L
+Leobersdorf|AT|47.928|16.2165|4915|L
+Feldbach|AT|46.9531|15.8883|4829|L
+Eggendorf|AT|47.8581|16.3218|4794|L
+Laa an der Thaya|AT|48.7167|16.3833|4777|L
+Langenlois|AT|48.4667|15.6667|4777|L
+Gloggnitz|AT|47.6749|15.9389|4730|L
+Sankt Johann im Pongau|AT|47.35|13.2|4690|L
+Parndorf|AT|47.9996|16.8605|4689|L
+Gmünd|AT|48.7683|14.9808|4674|L
+Leonding|AT|48.2796|14.2533|4657|L
+Völkermarkt|AT|46.6622|14.6344|4653|L
+Oberwaltersdorf|AT|47.9757|16.3219|4618|L
+Koblach|AT|47.3331|9.6|4577|L
+Neudörfl|AT|47.7966|16.2977|4564|L
+Grieskirchen|AT|48.2333|13.8333|4515|L
+Pottendorf|AT|47.9|16.3833|4508|L
+Zeltweg|AT|47.1833|14.75|4463|L
+Neumarkt am Wallersee|AT|47.95|13.2333|4456|L
+Köflach|AT|47.0667|15.0833|4375|L
+Nenzing|AT|47.1844|9.7054|4357|L
+Kössen|AT|47.6699|12.4055|4346|L
+Ferlach|AT|46.5269|14.3019|4342|L
+Ybbs an der Donau|AT|48.1667|15.0833|4310|L
+Thalheim bei Wels|AT|48.15|14.0333|4294|L
+Felixdorf|AT|47.8816|16.2421|4292|L
+Fieberbrunn|AT|47.4763|12.5435|4287|L
+Waidhofen an der Thaya|AT|48.8167|15.2833|4280|L
+Schwanenstadt|AT|48.0554|13.7751|4264|L
+Spielberg bei Knittelfeld|AT|47.2167|14.7833|4228|L
+Altenmarkt im Pongau|AT|47.3833|13.4167|4218|L
+Scheibbs|AT|48.0047|15.1682|4196|L
+Altheim|AT|48.2515|13.2341|4195|L
+Hartberg|AT|47.2833|15.9667|4170|L
+Wieselburg|AT|48.1333|15.1333|4143|L
+Oberalm|AT|47.7|13.1|4117|L
+Bisamberg|AT|48.3333|16.35|4110|L
+Walding|AT|48.3521|14.1576|4095|L
+Puch bei Hallein|AT|47.7154|13.093|4065|L
+Götzens|AT|47.2361|11.3115|4062|L
+Eisenerz|AT|47.5333|14.8833|4048|L
+Mäder|AT|47.35|9.6167|4031|L
+Bad Gastein|AT|47.1155|13.1347|3980|L
+Thaur|AT|47.2948|11.4753|3979|L
+Obertrum am See|AT|47.9372|13.0772|3966|L
+Schwarzach|AT|47.449|9.7621|3949|L
+Sankt Stefan im Rosental|AT|46.9039|15.71|3929|L
+Zwettl Stadt|AT|48.6073|15.1671|3900|L
+Gumpoldskirchen|AT|48.0454|16.2771|3899|L
+Schwertberg|AT|48.2734|14.5847|3895|L
+Fußach|AT|47.4793|9.6628|3871|L
+Gols|AT|47.8969|16.9111|3835|L
+Schruns|AT|47.0803|9.9192|3818|L
+Waidhofen an der Ybbs|AT|47.96|14.7736|3811|L
+Vöcklabruck|AT|48.0028|13.6565|3789|L
 Melk|AT|48.2274|15.3319|3788|L
+Sankt Veit im Pongau|AT|47.3333|13.15|3788|L
+Gunskirchen|AT|48.1333|13.95|3778|L
+Kundl|AT|47.4667|11.9833|3771|L
+Straßwalchen|AT|47.9795|13.2553|3765|L
+Volders|AT|47.2833|11.5667|3754|L
+Grödig|AT|47.7383|13.0373|3751|L
+Mondsee|AT|47.8565|13.3491|3734|L
+Gratwein|AT|47.1167|15.3167|3729|L
 Mayrhofen|AT|47.1667|11.8667|3720|L
+Haidershofen|AT|48.0758|14.4613|3670|L
+Westendorf|AT|47.4321|12.2141|3652|L
+Trumau|AT|47.9935|16.3427|3640|L
+Söll|AT|47.5038|12.1922|3631|L
+Seekirchen am Wallersee|AT|47.9|13.1333|3579|L
+Inzing|AT|47.2737|11.1975|3566|L
+Hof bei Salzburg|AT|47.8193|13.2149|3562|L
+Murau|AT|47.1106|14.1694|3534|L
+Althofen|AT|46.873|14.4745|3531|L
+Pöchlarn|AT|48.2|15.2|3515|L
+Schwarzach im Pongau|AT|47.3205|13.1517|3515|L
+Tamsweg|AT|47.1281|13.811|3509|L
+Theresienfeld|AT|47.85|16.2333|3485|L
+Hinterbrühl|AT|48.0861|16.2481|3466|L
+Gramatneusiedl|AT|48.0304|16.4894|3461|L
+Pfaffstätten|AT|48.0174|16.2635|3458|L
+Traisen|AT|48.0333|15.6|3453|L
+Schladming|AT|47.3929|13.687|3452|L
 Seefeld in Tirol|AT|47.3302|11.1879|3440|L
-Kaprun|AT|47.2708|12.7583|3100|L
+Neufeld an der Leitha|AT|47.8656|16.3786|3418|L
+Ludesch|AT|47.2|9.7831|3371|L
+Ternberg|AT|47.9452|14.3587|3367|L
+Mauerbach|AT|48.2451|16.1679|3339|L
+Mannersdorf am Leithagebirge|AT|47.9667|16.6|3328|L
+Münster|AT|47.4216|11.8336|3317|L
+Göfis|AT|47.2336|9.6346|3312|L
+Kapfenberg|AT|47.4446|15.2933|3296|L
+Weyer|AT|47.8572|14.6641|3296|L
+Lambach|AT|48.0928|13.8745|3279|L
+Kaltenleutgeben|AT|48.1165|16.1996|3276|L
+Bürs|AT|47.1497|9.8|3275|L
+Mattsee|AT|47.9667|13.1|3263|L
+Schrems|AT|48.7833|15.0667|3248|L
+Ober-Grafendorf|AT|48.1504|15.5453|3228|L
+Ottensheim|AT|48.3325|14.1743|3228|L
+Kaprun|AT|47.2724|12.7599|3177|L
+Lieboch|AT|46.9742|15.3375|3175|L
+Kittsee|AT|48.0925|17.0639|3162|L
+Zams|AT|47.1584|10.5897|3148|L
+Seeboden|AT|46.8191|13.5143|3123|L
+Fernitz|AT|46.9739|15.5011|3119|L
+Langenwang|AT|47.5667|15.6167|3119|L
+Klaus|AT|47.3091|9.6468|3118|L
+Katzelsdorf|AT|47.7805|16.2699|3112|L
+Frohnleiten|AT|47.2667|15.3167|3106|L
+Eggenburg|AT|48.6389|15.819|3096|L
+Ebergassing|AT|48.0457|16.5171|3090|L
+Loosdorf|AT|48.2|15.4|3064|L
+Krieglach|AT|47.5473|15.5625|3062|L
+Timelkam|AT|48.0039|13.6076|3061|L
+Rechnitz|AT|47.3047|16.441|3054|L
+Ebbs|AT|47.6333|12.2167|3050|L
+Oberperfuss|AT|47.2445|11.2476|3043|L
+Fulpmes|AT|47.152|11.3492|3038|L
+Ennsdorf|AT|48.2118|14.5029|3031|L
+Gröbming|AT|47.4427|13.9012|3013|L
+Hornstein|AT|47.8805|16.4445|3012|L
+Münchendorf|AT|48.0333|16.3833|2992|L
+Biedermannsdorf|AT|48.0839|16.3454|2988|L
+Sankt Georgen im Attergau|AT|47.9359|13.4831|2986|L
+Lenzing|AT|47.9733|13.6085|2981|L
+Elixhausen|AT|47.8667|13.0667|2963|L
+Bad Hofgastein|AT|47.1727|13.0987|2951|L
+Herzogenburg|AT|48.2814|15.6943|2951|L
+Pöttsching|AT|47.8045|16.3711|2950|L
+Fohnsdorf|AT|47.2|14.6833|2947|L
+Hausmannstätten|AT|46.9911|15.5114|2934|L
+Frauenkirchen|AT|47.8368|16.9258|2862|L
+Andorf|AT|48.3713|13.5741|2851|L
+Pregarten|AT|48.3549|14.5322|2846|L
+Feldkirchen in Kärnten|AT|46.7237|14.0958|2831|L
+Ellmau|AT|47.5138|12.2994|2828|L
+Laxenburg|AT|48.0683|16.3561|2828|L
+Kematen in Tirol|AT|47.25|11.2667|2822|L
+Leobendorf|AT|48.3833|16.3167|2802|L
+Kirchdorf in Tirol|AT|47.5563|12.4451|2795|L
+Zistersdorf|AT|48.5425|16.7614|2792|L
+Deutschkreutz|AT|47.6|16.6333|2791|L
+Seewalchen|AT|47.9525|13.5838|2780|L
+Bad Häring|AT|47.5107|12.1191|2777|L
+Bergheim|AT|47.8333|13.0333|2777|L
+Haag|AT|48.1136|14.5675|2777|L
+Traismauer|AT|48.35|15.7333|2750|L
+Niederndorf|AT|47.65|12.2167|2736|L
+Lichtenwörth|AT|47.8276|16.2987|2727|L
+Bruckneudorf|AT|48.0167|16.7833|2721|L
+Güssing|AT|47.0594|16.3243|2719|L
+Steinach am Brenner|AT|47.0833|11.4667|2716|L
+Blindenmarkt|AT|48.1275|14.9865|2712|L
+Rohrbach bei Mattersburg|AT|47.7052|16.4301|2707|L
+Satteins|AT|47.2167|9.6667|2703|L
+Wiesen|AT|47.7378|16.338|2691|L
+Mitterndorf an der Fischa|AT|47.9974|16.4736|2685|L
+Aldrans|AT|47.25|11.45|2684|L
+Puchberg am Schneeberg|AT|47.7871|15.9135|2683|L
+Stegersbach|AT|47.1667|16.1667|2658|L
+Wildon|AT|46.8833|15.5167|2652|L
+Bad Erlach|AT|47.7272|16.2144|2651|L
+Brixen im Thale|AT|47.45|12.25|2639|L
+Euratsfeld|AT|48.0818|14.9315|2639|L
+Sankt Margarethen im Burgenland|AT|47.8034|16.6088|2636|L
+Vandans|AT|47.0957|9.8652|2636|L
+Kematen an der Ybbs|AT|48.0254|14.7647|2625|L
+Poysdorf|AT|48.6667|16.6333|2620|L
+Böheimkirchen|AT|48.1978|15.7618|2617|L
+Fügen|AT|47.347|11.8494|2617|L
+Steinbrunn|AT|47.8333|16.4167|2614|L
+Purgstall|AT|48.0584|15.1348|2605|L
+Pfunds|AT|46.9667|10.55|2602|L
+Ehrwald|AT|47.4|10.9167|2593|L
+Heidenreichstein|AT|48.8667|15.1167|2593|L
+Elsbethen|AT|47.7646|13.081|2587|L
+Hirtenberg|AT|47.931|16.1791|2586|L
+Andelsbuch|AT|47.4117|9.8933|2565|L
+Ebenfurth|AT|47.8774|16.3673|2564|L
 Alpbach|AT|47.3988|11.9437|2561|L
+Buch in Tirol|AT|47.3745|11.754|2548|L
+Eugendorf|AT|47.8676|13.1261|2544|L
+Gössendorf|AT|46.9983|15.4856|2539|L
+Silz|AT|47.2667|10.9333|2536|L
+Sulz|AT|47.2872|9.6518|2527|L
+Niklasdorf|AT|47.3833|15.15|2515|L
+Schwoich|AT|47.546|12.1405|2515|L
+Pottenstein|AT|47.9582|16.0948|2495|L
+Radfeld|AT|47.4481|11.9142|2495|L
+Retz|AT|48.7571|15.9549|2493|L
+Matrei in Osttirol|AT|47|12.5333|2482|L
+Sankt Lorenzen im Mürztal|AT|47.4833|15.3667|2457|L
+Kaindorf an der Sulm|AT|46.7925|15.5388|2432|L
+Haiming|AT|47.25|10.8833|2428|L
+Weiden am See|AT|47.9253|16.869|2426|L
+Thalgau|AT|47.8414|13.2532|2424|L
+Egg|AT|47.4315|9.8976|2422|L
+Radstadt|AT|47.3833|13.45|2410|L
+Trieben|AT|47.4857|14.4874|2408|L
+Königstetten|AT|48.302|16.1449|2406|L
+Schlins|AT|47.2|9.7|2404|L
+Oetz|AT|47.2|10.9|2402|L
+Leopoldsdorf im Marchfelde|AT|48.2226|16.6886|2391|L
+Gralla|AT|46.814|15.5551|2390|L
+Bludesch|AT|47.2|9.7331|2386|L
+Illmitz|AT|47.7615|16.8002|2385|L
+Leutasch|AT|47.3689|11.144|2380|L
+Lassee|AT|48.2248|16.8223|2379|L
+Schattendorf|AT|47.7097|16.5098|2379|L
+Wolfern|AT|48.0828|14.372|2374|L
+Werndorf|AT|46.9242|15.4908|2365|L
+Jennersdorf|AT|46.9385|16.1416|2358|L
+Pernitz|AT|47.8976|15.9602|2356|L
+Bartholomäberg|AT|47.0833|9.9|2341|L
+Gießhübl|AT|48.0978|16.2348|2335|L
+Rietz|AT|47.2859|11.0307|2313|L
+Deutschfeistritz|AT|47.1985|15.3362|2297|L
+Markt Piesting|AT|47.8736|16.1251|2294|L
+Andau|AT|47.7744|17.0329|2285|L
+Garsten|AT|48.0224|14.4075|2284|L
+Wagna|AT|46.7668|15.5591|2277|L
+Biberbach|AT|48.0301|14.708|2270|L
+Mörbisch am See|AT|47.75|16.6667|2261|L
+Thal|AT|47.0764|15.3605|2261|L
+Sistrans|AT|47.2333|11.45|2255|L
+Zurndorf|AT|47.9831|17.0032|2247|L
+Meiningen|AT|47.2989|9.5786|2245|L
+Mönchhof|AT|47.8802|16.9413|2236|L
+Spillern|AT|48.3833|16.25|2222|L
+Thüringen|AT|47.2|9.7667|2222|L
+Bad Sauerbrunn|AT|47.7744|16.3284|2219|L
+Weistrach|AT|48.05|14.5833|2216|L
+Pirka|AT|47|15.3833|2213|L
+Rottenmann|AT|47.5167|14.35|2209|L
 Sölden|AT|46.9667|11|2205|L
+Marchegg|AT|48.2622|16.9105|2199|L
+Unterpremstätten|AT|46.9647|15.4042|2196|L
+Tschagguns|AT|47.0833|9.9|2195|L
+Oberndorf in Tirol|AT|47.5|12.3833|2194|L
+Raaba|AT|47.0333|15.5|2194|L
+Achenkirch|AT|47.5266|11.7056|2185|L
+Frankenmarkt|AT|47.9833|13.4167|2185|L
+Reith im Alpbachtal|AT|47.4169|11.8779|2181|L
+Schwadorf|AT|48.0694|16.5796|2180|L
+Hörsching|AT|48.2263|14.1779|2155|L
+Ostermiething|AT|48.0464|12.8294|2154|L
+Fritzens|AT|47.3053|11.5895|2148|L
+Breitenbach am Inn|AT|47.4783|11.9737|2143|L
+Admont|AT|47.5754|14.4608|2136|L
+Podersdorf am See|AT|47.8541|16.8371|2135|L
+Gföhl|AT|48.5167|15.4833|2125|L
+Frankenburg|AT|48.0684|13.4907|2122|L
+Nassereith|AT|47.3167|10.8333|2119|L
+Vöcklamarkt|AT|48.0025|13.4838|2112|L
+Lechaschau|AT|47.488|10.7065|2108|L
+Kappl|AT|47.0667|10.3833|2102|L
+Bramberg am Wildkogel|AT|47.2698|12.3385|2096|L
+Rohrendorf bei Krems|AT|48.4194|15.6577|2091|L
+Absdorf|AT|48.4002|15.9787|2087|L
+Orth an der Donau|AT|48.1452|16.7009|2086|L
+Gaming|AT|47.929|15.0882|2082|L
+Arnoldstein|AT|46.5461|13.71|2080|L
+Weiler|AT|47.2997|9.65|2075|L
+Marz|AT|47.7167|16.4167|2073|L
+Trausdorf an der Wulka|AT|47.8135|16.5576|2064|L
+Piesendorf|AT|47.2908|12.7184|2062|L
+Sankt Michael im Lungau|AT|47.1|13.6333|2059|L
+Wenns|AT|47.1667|10.7333|2044|L
+Sieghartskirchen|AT|48.2553|16.0122|2042|L
+Mühldorf bei Feldbach|AT|46.9386|15.9075|2026|L
+Mank|AT|48.1102|15.3392|2021|L
+Natters|AT|47.2341|11.3734|2020|L
+Oberpullendorf|AT|47.5035|16.5045|2019|L
+Waidring|AT|47.5833|12.5667|2019|L
+Enzersdorf an der Fischa|AT|48.085|16.6083|2018|L
+Golling an der Salzach|AT|47.6|13.1667|2014|L
+Wolfsbach|AT|48.0667|14.6667|2011|L
+Bezau|AT|47.3848|9.9014|2003|L
 Bad Ischl|AT|47.7111|13.6189|1914|L
 St Anton am Arlberg|AT|47.1275|10.2637|1763|L
 Lech|AT|47.208|10.1418|1568|L

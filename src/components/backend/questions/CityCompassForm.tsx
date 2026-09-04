@@ -41,7 +41,7 @@ const isEmptyQuestion = (q: CityCompassQuestion) =>
   !q.center?.name?.trim() && (q.neighbors?.length ?? 0) === 0 && !q.question?.trim() && !q.info?.trim();
 
 /**
- * The 2846-city table is ~107 KB and only the compass editor needs it, so it is
+ * The 3138-city table is ~115 KB and only the compass editor needs it, so it is
  * pulled in on demand rather than bundled into the admin entry point. The promise is
  * module-level, so opening a second question does not fetch it again.
  */

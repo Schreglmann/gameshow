@@ -60,6 +60,19 @@ const MIN_DE_POP = 25_000;
  * (7619) and Zermatt (6629).
  */
 const MIN_DACH_SMALL_POP = 6_000;
+/**
+ * Austria alone goes lower still. Its GeoNames figures are the Ortschaft rather than
+ * the Gemeinde, and the gap grows as the town gets smaller — Hallein is listed at
+ * 7208 against a real 21,000, Seekirchen am Wallersee at 3579 against 11,300 — so
+ * MIN_DACH_SMALL_POP cut off the whole band of towns the game most wants: the ones
+ * that pin a region down at once. 2000 here is roughly 2500–6000 real inhabitants.
+ *
+ * Only for the seat of an administrative division (ALLOWED_ADMIN_SEATS), which in
+ * Austria is what tells a Gemeinde from a hamlet. Below 6000 the plain PPL entries
+ * are mostly the latter — `Taxach`, `Neualm`, `Burgfried`, `Glasenbach` all sit in
+ * that band, and none of them is a place anyone would name.
+ */
+const MIN_AT_TOWN_POP = 2_000;
 
 /**
  * Only real places. PPLX is a city district — it would put `Favoriten` next to
@@ -67,6 +80,9 @@ const MIN_DACH_SMALL_POP = 6_000;
  * for the sake of The Hague, PPLQ/PPLH/PPLW are abandoned, historical or destroyed.
  */
 const ALLOWED_FEATURE_CODES = new Set(['PPL', 'PPLA', 'PPLA2', 'PPLA3', 'PPLA4', 'PPLA5', 'PPLC', 'PPLG']);
+
+/** The subset of the above that marks a municipality rather than a named hamlet. */
+const ALLOWED_ADMIN_SEATS = new Set(['PPLA', 'PPLA2', 'PPLA3', 'PPLA4', 'PPLA5', 'PPLC']);
 
 const EUROPE = new Set([
   'AL', 'AD', 'AT', 'BY', 'BE', 'BA', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR', 'DE',
@@ -185,6 +201,7 @@ const GERMAN_NAMES: Record<string, string> = {
 
   // Austria
   'Klagenfurt am Wörthersee|AT': 'Klagenfurt',
+  'Strasswalchen|AT': 'Straßwalchen',
 
   // Italy
   'Milan|IT': 'Mailand',
@@ -279,6 +296,9 @@ function tierFor(city: RawCity): Tier | null {
   if (NEIGHBOR_COUNTRIES.has(city.country) && city.population >= MIN_NEIGHBOR_POP) return 'major';
   if (city.country === 'DE' && city.population >= MIN_DE_POP) return 'local';
   if (DACH_SMALL.has(city.country) && city.population >= MIN_DACH_SMALL_POP) return 'local';
+  if (city.country === 'AT' && city.population >= MIN_AT_TOWN_POP && ALLOWED_ADMIN_SEATS.has(city.featureCode)) {
+    return 'local';
+  }
   if (FORCE_LOCAL.has(key)) return 'local';
   return null;
 }

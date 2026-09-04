@@ -905,7 +905,7 @@ A city is `{ name, lat, lon, country? }`. Coordinates are **stored**, not looked
 
 ### Automatic Neighbor Selection
 
-The admin editor has an **Auto** button that fills the neighbor list from a curated dataset of about 2800 cities (`src/data/cities.generated.ts`). It runs in the browser, so it also works at an offline event.
+The admin editor has an **Auto** button that fills the neighbor list from a curated dataset of about 3100 cities (`src/data/cities.generated.ts`). It runs in the browser, so it also works at an offline event.
 
 - Candidates lie **60–2000 km** from the center. Nearer than that is a suburb of the answer; further is outside the game's range
 - Prominence gates distance: capitals and cities above 300,000 inhabitants are eligible at any distance, cities above 150,000 up to 1200 km, and small towns only up to 350 km

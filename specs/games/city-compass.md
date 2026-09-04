@@ -87,9 +87,11 @@ The repository has no coordinate data, so the dataset is generated and committed
 | `capital` | `featureCode === 'PPLC'` above 2000 inhabitants, plus a forced list for the ones below it (Vatikanstadt) |
 | `metro` | population ≥ 300,000, worldwide |
 | `major` | Europe ≥ 150,000; neighboring countries (IT, CZ, SK, HU, SI, HR, PL, FR, NL, BE, DK, LU) ≥ 60,000; plus a forced list for cities GeoNames counts only by their historic core (Venedig at 51,298, Meran, Karlsbad, Innsbruck) |
-| `local` | DE ≥ 25,000; AT, CH, LI ≥ 6,000 — the floor that still includes Zell am See (7619) and Zermatt (6629) — plus a forced list of well-known small towns below it |
+| `local` | DE ≥ 25,000; AT, CH, LI ≥ 6,000 — the floor that still includes Zell am See (7619) and Zermatt (6629); AT additionally down to 2,000 when the entry is an administrative seat — plus a forced list of well-known small towns below it |
 
-2846 cities survive. City districts (`PPLX`) are excluded, or `Favoriten` would sit next to `Wien` and `Wandsbek` next to `Hamburg`.
+Austria gets the extra step down because its GeoNames figures are the Ortschaft rather than the Gemeinde, and the gap widens as the town gets smaller: Hallein is listed at 7208 against a real 21,000, Seekirchen am Wallersee at 3579 against 11,300. A flat 6,000 therefore cut away exactly the band the game wants most — the small towns that pin a region down at once. The extra step is restricted to administrative seats (`PPLA`…`PPLA5`, `PPLC`), which in Austria is what separates a Gemeinde from a hamlet; below 6,000 the plain `PPL` entries are mostly the latter (`Taxach`, `Neualm`, `Burgfried`, `Glasenbach`).
+
+3138 cities survive. City districts (`PPLX`) are excluded, or `Favoriten` would sit next to `Wien` and `Wandsbek` next to `Hamburg`.
 
 GeoNames names a city either in English or in its own language, with no rule saying which (`Munich`, but `Antwerpen`; `Prague`, but `Sevilla`), so a hand-written `GERMAN_NAMES` map renames the ones that differ from German. Every key of every override table is checked against the source data and the run fails on one that matches nothing: GeoNames renames cities — it now calls Odesa `Odessa` — and a stale key would leave the English name on stage with no other symptom.
 
