@@ -1184,20 +1184,28 @@ function FrontendShowcase() {
         </div>
       </Section>
 
-      <Section title="Zu langer Team-Name (Überschrift wird gekürzt)">
+      {/* Four cards in the setup screen's own `#teams[data-team-count=4]`
+          grid: the headings are clamped to one ellipsised line, and the member
+          names use the wider 3-4 team scale (specs/team-management.md). */}
+      <Section title="Vier Teams: gekürzte Überschrift + Roster">
         <div id="teams" data-team-count={4} style={{ marginTop: 0 }}>
-          <div className="team">
-            <h2 className="team-name-editable" title="Zum Umbenennen klicken">Die absolut unbesiegbaren Adler vom Nordhang</h2>
-          </div>
-          <div className="team">
-            <h2 className="team-name-editable" title="Zum Umbenennen klicken">aaaaaaaaaaaaaaaaaaaaaaaaaaaa</h2>
-          </div>
-          <div className="team">
-            <h2 className="team-name-editable" title="Zum Umbenennen klicken">Isi allein zu Haus</h2>
-          </div>
-          <div className="team">
-            <h2 className="team-name-editable" title="Zum Umbenennen klicken">Team 4</h2>
-          </div>
+          {[
+            { name: 'Die absolut unbesiegbaren Adler vom Nordhang', members: ['Maxi', 'Mitch', 'Thomas'] },
+            { name: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaa', members: ['Péter', 'Gerhard', 'Kathi'] },
+            { name: 'Isi allein zu Haus', members: ['Maus', 'Fabian Sp.', 'Carina'] },
+            { name: 'Team 4', members: ['Michael M.', 'Isabella', 'Bianca'] },
+          ].map(({ name, members }) => (
+            <div className="team" key={name}>
+              <h2 className="team-name-editable" title="Zum Umbenennen klicken">{name}</h2>
+              <ul className="team-members team-members-editable">
+                {members.map(m => (
+                  <li className="team-member-row" key={m}>
+                    <input className="team-member-input" defaultValue={m} readOnly />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </div>
       </Section>
 

@@ -643,6 +643,7 @@ header[data-team-count="4"] .header-joker {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
     gap: clamp(12px, 2vw, 28px);
+    margin-top: clamp(8px, 1.5vw, 24px);
 }
 
 /* Three or four cards share the row, so the team heading has to fit a narrower
@@ -652,7 +653,7 @@ header[data-team-count="4"] .header-joker {
    one or two cards, and every card in the row stays the same height. */
 #teams[data-team-count="3"] .team h2,
 #teams[data-team-count="4"] .team h2 {
-    font-size: clamp(1.3rem, 2.4vw, 2rem);
+    font-size: clamp(1.3rem, 3vw, 3.25rem);
     -webkit-line-clamp: 1;
     line-clamp: 1;
 }
@@ -660,6 +661,43 @@ header[data-team-count="4"] .header-joker {
 #teams[data-team-count="3"] .team,
 #teams[data-team-count="4"] .team {
     padding: clamp(14px, 2vw, 26px);
+}
+
+/* Three or four rosters side by side used to share the 1200px home column of
+   the two-team layout: on a 1728px projector a third of the width stayed
+   empty while every name sat in a 300px card at the two-team font. The home
+   column widens to (almost) the full main width, the cards move up closer to
+   the title, and the member names + headings scale with the viewport instead
+   of stopping at the two-team cap. The rows give up some vertical padding in
+   exchange, so a nine-player roster is no taller than before although the
+   names are a third larger. (`em` here is relative to the `li`, which base.css
+   sets to 1.2× the fluid body size.) */
+#homeScreen:has(#teams[data-team-count="3"]),
+#homeScreen:has(#teams[data-team-count="4"]) {
+    /* 92% rather than the full main width: edge-to-edge cards looked crammed
+       against the screen border, so a strip of background stays on each side. */
+    max-width: min(1700px, 92%);
+}
+
+#teams[data-team-count="3"] .team-members-editable .team-member-row,
+#teams[data-team-count="4"] .team-members-editable .team-member-row {
+    padding: clamp(1px, 0.25vw, 3px) 0;
+}
+
+#teams[data-team-count="3"] .team-member-input,
+#teams[data-team-count="4"] .team-member-input {
+    padding: clamp(4px, 0.5vw, 8px);
+    font-size: clamp(1em, 2.3vw, 1.4em);
+    line-height: 1.2;
+}
+
+/* On a tablet the auto-fit grid squeezed three 220px cards into the row and
+   dropped the fourth underneath alone — four teams sit as a 2×2 grid there
+   instead. Phones (below 576px) keep the single column auto-fit gives them. */
+@media (min-width: 576px) and (max-width: 1023px) {
+    #teams[data-team-count="4"] {
+        grid-template-columns: repeat(2, 1fr);
+    }
 }
 
 /* Below a tablet the two side-by-side stacks get too narrow for a name plus a
