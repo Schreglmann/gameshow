@@ -163,6 +163,8 @@
 
   --team1-house: #ff5d6c;
   --team2-house: #4f8af0;
+  --team3-house: #3ed79a;
+  --team4-house: #b57bff;
 
   --header-bg: rgba(9, 22, 56, 0.92);
   --header-border-bottom: 1px solid rgba(255, 212, 94, 0.5);
@@ -383,6 +385,8 @@
 
   --team1-house: #c22433;
   --team2-house: #2d5fc0;
+  --team3-house: #1a7a54;
+  --team4-house: #6b3fa0;
 
   --header-bg: rgba(247, 240, 221, 0.94);
   --header-border-bottom: 1px solid rgba(24, 48, 110, 0.5);
@@ -670,9 +674,11 @@
   --card-heading-from: #6b1d3a;   /* burgundy → bronze: reads on cream */
   --card-heading-to: #7a5c0a;
 
-  /* ── House-color team accents (consumed by #team1 / #team2 in layout.css) ── */
+  /* ── House-color team accents (consumed by #team1 … #team4 in layout.css) ── */
   --team1-house: #7f0909;         /* Gryffindor crimson */
   --team2-house: #1a472a;         /* Slytherin green */
+  --team3-house: #0e1a40;         /* Ravenclaw blue */
+  --team4-house: #7a5c0a;         /* Hufflepuff gold, darkened for parchment */
 
   /* ── Sticky header: dark night-sky banner (atmosphere must not bleed through
      the score header now that the cards are bright parchment) ── */
@@ -1038,9 +1044,11 @@
   --card-heading-from: #7a1220;   /* dragon-crimson → bronze: reads on cream */
   --card-heading-to: #7a5c0a;
 
-  /* ── Team accents: Red Dragon / Blue Dragon (consumed by #team1 / #team2) ── */
+  /* ── Team accents: Red / Blue / Green / Gold Dragon (#team1 … #team4) ── */
   --team1-house: #7a1220;
   --team2-house: #1f3b52;
+  --team3-house: #1f4d2b;
+  --team4-house: #7a5c0a;
 
   /* ── Sticky header: opaque dark-stone banner (the busy lair must not bleed
      through the score header now that the cards are bright parchment) ── */
@@ -1412,6 +1420,8 @@
   --card-heading-to: initial;
   --team1-house: initial;
   --team2-house: initial;
+  --team3-house: initial;
+  --team4-house: initial;
 }
 
 /* Retro — CRT scanlines + slow horizontal scan sweep */

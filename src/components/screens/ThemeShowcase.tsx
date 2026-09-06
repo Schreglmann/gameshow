@@ -230,6 +230,38 @@ function FrontendShowcase() {
         </header>
       </Section>
 
+      <Section title="Header mit 4 Teams (ohne Joker)">
+        {/* The same header with no jokers enabled (or in the last game, where
+            they are hidden). Each side — with or without jokers — is a centred
+            row-wrap line of content-sized pills: both teams on ONE line when the
+            column is wide enough (it is at 1920px), the second dropping under
+            the first when not. In this narrow showcase section the sides wrap,
+            so drag the window wide to see the one-line form. See specs/header.md. */}
+        <header data-team-count={4} style={{ position: 'relative', animation: 'none' }}>
+          <div className="team-header-stack team-header-stack-left">
+            {(['Team 1', 'Team 2'] as const).map((name, i) => (
+              <div key={name} className="team-header-cell team-header-left">
+                <span className="team-header-label">
+                  <span className="team-header-name">{name}</span>
+                  <span className="team-header-score">: <span>{[12, 9][i]}</span> Punkte</span>
+                </span>
+              </div>
+            ))}
+          </div>
+          <div id="gameNumber">Spiel 3 von 8</div>
+          <div className="team-header-stack team-header-stack-right">
+            {(['Team 3', 'Team 4'] as const).map((name, i) => (
+              <div key={name} className="team-header-cell team-header-right">
+                <span className="team-header-label">
+                  <span className="team-header-name">{name}</span>
+                  <span className="team-header-score">: <span>{[7, 4][i]}</span> Punkte</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </header>
+      </Section>
+
       <Section title="Team-Anzahl-Warnung (Startseite)">
         {/* Non-blocking notice listing the games that cannot be scored at the
             configured team count. See specs/team-count.md. */}
@@ -1186,18 +1218,24 @@ function FrontendShowcase() {
         </div>
       </Section>
 
-      <Section title="Team Cards">
+      {/* All FOUR cards carry their `#teamN` id, because that is what the
+          house-color accent ring hangs off (--team1-house … --team4-house in
+          themes.css) — with only two cards here, a theme's teams 3/4 accents
+          were unverifiable. See specs/themes.md. */}
+      <Section title="Team Cards (Haus-Akzente, 4 Teams)">
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-          <div className="team" style={{ flex: 1, minWidth: 180 }}>
-            <h2 style={{ fontSize: '1.2em' }}>Team 1</h2>
-            <p style={{ color: 'rgba(var(--text-rgb), max(0.7, var(--text-fade-floor, 0)))' }}>Anna, Ben, Clara</p>
-            <p style={{ fontSize: '1.5em', fontWeight: 700, marginTop: 8 }}>12 Punkte</p>
-          </div>
-          <div className="team" style={{ flex: 1, minWidth: 180 }}>
-            <h2 style={{ fontSize: '1.2em' }}>Team 2</h2>
-            <p style={{ color: 'rgba(var(--text-rgb), max(0.7, var(--text-fade-floor, 0)))' }}>David, Eva, Finn</p>
-            <p style={{ fontSize: '1.5em', fontWeight: 700, marginTop: 8 }}>9 Punkte</p>
-          </div>
+          {[
+            { key: 'team1', name: 'Team 1', members: 'Anna, Ben, Clara', points: '12 Punkte' },
+            { key: 'team2', name: 'Team 2', members: 'David, Eva, Finn', points: '9 Punkte' },
+            { key: 'team3', name: 'Team 3', members: 'Greta, Hans, Ida', points: '7 Punkte' },
+            { key: 'team4', name: 'Team 4', members: 'Jonas, Klara, Lena', points: '4 Punkte' },
+          ].map(team => (
+            <div key={team.key} id={team.key} className="team" style={{ flex: 1, minWidth: 180 }}>
+              <h2 style={{ fontSize: '1.2em' }}>{team.name}</h2>
+              <p style={{ color: 'rgba(var(--text-rgb), max(0.7, var(--text-fade-floor, 0)))' }}>{team.members}</p>
+              <p style={{ fontSize: '1.5em', fontWeight: 700, marginTop: 8 }}>{team.points}</p>
+            </div>
+          ))}
         </div>
       </Section>
 

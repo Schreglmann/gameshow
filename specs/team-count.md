@@ -209,12 +209,15 @@ Declared on `GameTypeInfo.supportedTeamCounts` in
 
 ## UI behaviour
 - New: the `HomeScreen` incompatibility banner; the admin Teams select, row badge and card banner.
-- Changed: `Header` (N cells split around the counter, `--team3-*`/`--team4-*` theme variables),
-  `AwardPoints` (N cards), `HomeScreen` team overview and gamemaster team-setup controls,
+- Changed: `Header` (N cells split around the counter), `HomeScreen` team cards (each card's
+  house-color accent ring comes from `--team1-house` … `--team4-house`; every theme that sets the
+  accents must set all four, or a 3-4 team show draws accented cards next to plain ones — see
+  [themes.md](themes.md)), `AwardPoints` (N cards), gamemaster team-setup controls,
   `SessionTab` (its fixed six-field editor becomes a loop), `CorrectAnswersTracker`,
   `QuestionScorePanel`, `GamemasterView` joker cards, `SummaryScreen`.
-- `ThemeShowcase` gains a multi-team header, a 4-card award screen and the warning banner so all
-  themes stay verifiable at `/theme-showcase`.
+- `ThemeShowcase` gains a multi-team header, a 4-card award screen, a 4-card team-card row (so all
+  four house accents are verifiable) and the warning banner so all themes stay verifiable at
+  `/theme-showcase`.
 
 ## Out of scope
 - More than 4 teams.

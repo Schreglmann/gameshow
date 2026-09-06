@@ -27,6 +27,42 @@ throughout the gameshow, giving the host and players a constant overview of the 
       out at essentially the 2-team header's height (151px vs 154px at 1920)
 - [x] Everything else is the two-team styling untouched — the same glass pill, the same
       mirror-image cell layout (left: name | jokers, right: jokers | name), the same separator
+- [x] In a stacked side a label is flush against its joker separator (right on the left side,
+      left on the right) so the two rows' names and scores share one vertical line. That inner
+      flush is scoped to cells that actually HAVE a joker grid (`:has(.header-jokers)`): with no
+      jokers enabled — or in the last game, where they are hidden — the label is **centred** in its
+      pill like the two-team header's, because a flush label with no separator next to it just sat
+      at the pill's inner edge with the whole outer half empty
+- [x] Side by side (above 768px) a stack sizes its pills to the **content** and puts its two teams
+      on **one line whenever they fit**, with or without jokers: the stack is a centred row-wrap
+      flex line with a real `column-gap`, so both pills sit beside each other when the column is
+      wide enough and the second drops under the first — still centred — when it is not. The
+      browser decides from the actual widths (no breakpoint), so a long custom name or a wide joker
+      row wraps exactly when it has to. The counter keeps its usual pill and its `flex-grow: 0.7`
+      share; what buys the one-line form is the team type stepping down to `1.4vw` side by side
+      (the stacked layout's `1.85vw` overran the column by a few percent on every screen — the
+      header's type is in `vw`, so screen size buys no room, only the pills-to-counter ratio does).
+      Every pill has the same minimum width (`9.2em` — the widest default label "Team 4: 99 Punkte"
+      — plus its own padding), so the two sides always wrap **together** and a one- and a two-digit
+      score draw the same pill; the per-side decision must never leave one side on one line and the
+      other on two, which glyph-width differences ("Team 3" vs "Team 1", 9 vs 12 points) would
+      otherwise cause mid-show. **Who yields first** decides whether the row holds: each stack's
+      `flex-basis` is exactly its one-line width (two default pills + gap, in its own em — the
+      same on both sides, so the counter stays centred even at 3 teams), and the counter's basis
+      is its generous pill (`8.8em`) with `flex-shrink: 1000` (the stacks keep `1` — flexbox
+      hands out only the sum of the unfrozen factors' worth of space when that sum is below 1, so
+      a tiny stack factor left the header overflowing on narrow windows), so when the row gets
+      tight the counter gives way down to its text before a stack has to wrap. Four default-named teams
+      without jokers therefore sit on one line from a 1600px viewport up (measured 1600 → 2560)
+      with the team type at `1.55vw` (26.8px on a 1728px MacBook, 29.8px at 1920) and the counter
+      still a pill (365px around 291px of text at 1728; 445px at 1920; 581px at 2560); at 1440 and
+      below the counter has reached its text and both sides wrap alike, with the counter still
+      centred and the header never overflowing.
+      With jokers a pill is wider by its joker row and stacks.
+      Column-wide pills are gone above 768px because with no or few jokers
+      they were mostly empty glass with the text pushed inboard; attribution of a joker grid to its
+      team comes from the pill framing both, not from one team per row. Below 768px the wrapped
+      one-column layout of full-width rows is unchanged
 - [x] Each team section pairs its points label ("Team N: X Punkte", only rendered when `pointSystemEnabled`) with a compact `<TeamJokers team={...} />` row — see [jokers.md](jokers.md). When BOTH `pointSystemEnabled` is `false` AND no jokers are enabled for the active gameshow, the team section collapses to an empty `<div>` to preserve the three-column layout. That empty placeholder is styled as an **invisible flex spacer** (via `header div:empty` in `layout.css`) — it must NOT render the glass-pill background/border the populated cells use, or two empty pills would flank the centred game counter.
 - [x] Below 768px a 3-4 team header **wraps** into a single full-width column: the counter on top
       (no pill), then every team pill under it at full width, label left and joker strip right. Two
