@@ -124,6 +124,28 @@ html.gamemaster-embedded::after {
   text-shadow: none;
 }
 
+/* Hint block (city-compass): the clues the audience is looking at, rendered
+   BELOW the answer instead of replacing it — the host needs the solution while
+   asking. Reuses the answer-list grid; `--static` drops the button affordances
+   because a hint row is not a reveal control.
+   See specs/games/city-compass.md. */
+.gamemaster-hints {
+  margin: clamp(12px, 2vw, 20px) 0;
+  text-align: left;
+}
+
+.gamemaster-hints-label {
+  font-size: clamp(0.7rem, 1.1vw, 0.8rem);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.55, var(--text-fade-floor, 0)));
+}
+
+.gamemaster-hints .gamemaster-answer-list {
+  margin: clamp(6px, 1vw, 10px) 0 0;
+}
+
 /* Structured answer list (used by the ranking game): grid of rank chip + text,
    responsive single/double column layout, with a clear visual difference
    between revealed and pending entries so the GM knows what's next. */
@@ -211,6 +233,25 @@ html.gamemaster-embedded::after {
 
 .gamemaster-answer-item.pending {
   opacity: 0.75;
+}
+
+/* Static rows (hint list) are not controls: no pointer, and none of the
+   hover/press feedback the clickable rank rows above define. Declared after
+   those rules so it wins on order, not on added specificity. */
+.gamemaster-answer-item--static,
+.gamemaster-answer-item--static:hover,
+.gamemaster-answer-item--static:active {
+  cursor: default;
+  transform: none;
+  background: rgba(var(--glass-rgb), 0.08);
+  border-color: rgba(var(--glass-rgb), 0.15);
+}
+
+.gamemaster-answer-item--static.revealed,
+.gamemaster-answer-item--static.revealed:hover,
+.gamemaster-answer-item--static.revealed:active {
+  background: rgba(var(--success-rgb), 0.12);
+  border-color: rgba(var(--success-rgb), 0.4);
 }
 
 .gamemaster-answer-rank {

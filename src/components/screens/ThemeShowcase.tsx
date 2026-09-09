@@ -608,6 +608,34 @@ function FrontendShowcase() {
         </div>
       </Section>
 
+      {/* Hint list: the answer stays visible above it — that is the point of the
+          separate block. See specs/games/city-compass.md. */}
+      <Section title="Gamemaster Hinweisliste">
+        <div className="gamemaster-card" style={{ textAlign: 'center' }}>
+          <div className="gamemaster-meta">Frage 2 / 8</div>
+          <div className="gamemaster-title">Städte-Kompass</div>
+          <div className="gamemaster-question">Welche Stadt liegt im Zentrum?</div>
+          <div className="gamemaster-answer">Wien · AT</div>
+          <div className="gamemaster-hints">
+            <div className="gamemaster-hints-label">Hinweise</div>
+            <ul className="gamemaster-answer-list">
+              {[
+                { rank: 1, text: 'Budapest · 215 km', revealed: true },
+                { rank: 2, text: 'Brno · 111 km', revealed: true },
+                { rank: 3, text: 'Graz · 145 km', revealed: false },
+              ].map(hint => (
+                <li key={hint.rank}>
+                  <div className={`gamemaster-answer-item gamemaster-answer-item--static${hint.revealed ? ' revealed' : ' pending'}`}>
+                    <span className="gamemaster-answer-rank">{hint.rank}</span>
+                    <span className="gamemaster-answer-text">{hint.text}</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </Section>
+
       <Section title="Gamemaster mit versteckten Antworten">
         <div className="gamemaster-card" style={{ textAlign: 'center' }}>
           <div className="gamemaster-meta">Frage 3 / 10</div>
@@ -1262,6 +1290,23 @@ function FrontendShowcase() {
           >
             {GENERIC_JOKER_RULES.map((rule, i) => (
               <li key={i} style={{ padding: '6px 0', border: 'none' }}>{rule}</li>
+            ))}
+          </ul>
+        </div>
+      </Section>
+
+      <Section title="Siegerbildschirm mit großem Team">
+        {/* The real card is fixed and viewport-centred; here it is placed in the
+            flow so the theme is verifiable. Nine names show the balanced roster
+            grid (`memberColumns` → data-columns) — see specs/team-management.md. */}
+        <div
+          className="winner-announcement"
+          style={{ position: 'static', transform: 'none', animation: 'none', width: '100%', minWidth: 0, maxWidth: '100%' }}
+        >
+          <h1 style={{ fontSize: '2em', animation: 'none' }}>Die Rasenden Reporter hat gewonnen!</h1>
+          <ul className="winner-members" data-columns={3}>
+            {['Anna', 'Bernd', 'Christina', 'Dominik', 'Elena', 'Franz', 'Gabriele', 'Hannes', 'Isabella'].map(name => (
+              <li key={name} style={{ animation: 'none', opacity: 1 }}>{name}</li>
             ))}
           </ul>
         </div>

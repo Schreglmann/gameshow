@@ -6,6 +6,7 @@ import { useEditableConfig } from './useEditableConfig';
 import { GENERIC_JOKER_RULES } from '@/data/jokers';
 import { DEFAULT_TEAM_COUNT, normalizeTeamCount } from '@/utils/teams';
 import { ALL_POINT_MODES, pointModeLabel, POINT_MODE_RULE_DEFAULTS } from '@/utils/pointMode';
+import { DEFAULT_SHOW_TITLE } from '@/utils/showTitle';
 
 export default function ConfigTab() {
   const { theme, setTheme, adminTheme, setAdminTheme } = useTheme();
@@ -97,6 +98,24 @@ export default function ConfigTab() {
       <div className="backend-card">
         <h3>Globale Einstellungen</h3>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'flex-start' }}>
+          {/* Show title — the landing-page heading. A gameshow can override it in
+              the Gameshows tab; blank here means the built-in default.
+              See specs/show-title.md. */}
+          <div style={{ alignSelf: 'stretch' }}>
+            <label className="be-label" htmlFor="show-title">Titel der Show</label>
+            <input
+              id="show-title"
+              className="be-input"
+              value={config.showTitle ?? ''}
+              placeholder={DEFAULT_SHOW_TITLE}
+              onChange={e => setConfig({ ...config, showTitle: e.target.value })}
+            />
+            <p className="be-hint" style={{ marginTop: 4, marginBottom: 0 }}>
+              Überschrift auf der Startseite (auch Gamemaster-Anzeige und Browser-Tab).
+              Leer = „{DEFAULT_SHOW_TITLE}“. Einzelne Gameshows können den Titel im Tab
+              „Gameshows“ überschreiben.
+            </p>
+          </div>
           <label className={`be-toggle${pointsLockedOff ? ' is-locked' : ''}`}>
             <input
               type="checkbox"

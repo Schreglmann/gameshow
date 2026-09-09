@@ -66,6 +66,42 @@ describe('GameshowEditor', () => {
     expect(screen.getByDisplayValue('My Gameshow')).toBeInTheDocument();
   });
 
+  // Per-gameshow show-title override — see specs/show-title.md.
+  describe('show title override', () => {
+    it('inherits the global title as its placeholder while unset', () => {
+      renderEditor({ globalShowTitle: 'Sommerfest Quiz' });
+      const input = screen.getByLabelText('Titel');
+      expect(input).toHaveValue('');
+      expect(input).toHaveAttribute('placeholder', 'Sommerfest Quiz');
+    });
+
+    it('falls back to the built-in default placeholder when there is no global title', () => {
+      renderEditor();
+      expect(screen.getByLabelText('Titel')).toHaveAttribute('placeholder', 'Game Show');
+    });
+
+    it('shows the gameshow override when set', () => {
+      renderEditor({ gameshow: { ...gs, showTitle: 'Weihnachtsshow' }, globalShowTitle: 'Sommerfest Quiz' });
+      expect(screen.getByLabelText('Titel')).toHaveValue('Weihnachtsshow');
+    });
+
+    it('reports an edit as showTitle', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      renderEditor({ onChange });
+      await user.type(screen.getByLabelText('Titel'), 'W');
+      expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ showTitle: 'W' }));
+    });
+
+    it('stores a cleared field as absent so config.json stays clean', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      renderEditor({ gameshow: { ...gs, showTitle: 'X' }, onChange });
+      await user.clear(screen.getByLabelText('Titel'));
+      expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ showTitle: undefined }));
+    });
+  });
+
   it('shows "Als aktiv setzen" button when not active', () => {
     renderEditor({ isActive: false });
     expect(screen.getByRole('button', { name: 'Als aktiv setzen' })).toBeInTheDocument();

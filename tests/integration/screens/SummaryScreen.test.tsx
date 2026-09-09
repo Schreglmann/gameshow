@@ -84,6 +84,40 @@ describe('SummaryScreen', () => {
     expect(screen.getByText('Dave')).toBeInTheDocument();
   });
 
+  it('lays a large winning roster out in a balanced grid', async () => {
+    // Nine names used to be nine stacked paragraphs, which grew the card past
+    // the viewport — see specs/team-management.md.
+    localStorage.setItem('team1Points', '10');
+    localStorage.setItem('team2Points', '5');
+    localStorage.setItem('team1', JSON.stringify([
+      'anna', 'bernd', 'christina', 'dominik', 'elena', 'franz', 'gabriele', 'hannes', 'isabella',
+    ]));
+    localStorage.setItem('team2', JSON.stringify(['jonas']));
+
+    renderSummaryScreen();
+
+    await waitFor(() => expect(screen.getByText('Team 1 hat gewonnen!')).toBeInTheDocument());
+    const items = screen.getAllByRole('listitem');
+    expect(items).toHaveLength(9);
+    expect(items[0]).toHaveTextContent('Anna');
+    expect(items[8]).toHaveTextContent('Isabella');
+    expect(items[0].closest('ul')).toHaveAttribute('data-columns', '3');
+    // Each name has its own entrance delay instead of the four nth-child rules.
+    expect(items[0]).toHaveStyle({ animationDelay: '0.3s' });
+    expect(items[8]).toHaveStyle({ animationDelay: '0.94s' });
+  });
+
+  it('keeps a small roster in a single column', async () => {
+    localStorage.setItem('team1Points', '3');
+    localStorage.setItem('team2Points', '8');
+    localStorage.setItem('team2', JSON.stringify(['bob', 'dave']));
+
+    renderSummaryScreen();
+
+    await waitFor(() => expect(screen.getByText('Team 2 hat gewonnen!')).toBeInTheDocument());
+    expect(screen.getAllByRole('listitem')[0].closest('ul')).toHaveAttribute('data-columns', '1');
+  });
+
   it('shows zero-points draw at start', async () => {
     renderSummaryScreen();
     await waitFor(() => {

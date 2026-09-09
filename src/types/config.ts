@@ -479,6 +479,14 @@ export type GameFile = SingleInstanceGameFile | MultiInstanceGameFile;
 
 export interface GameshowConfig {
   name: string;
+  /**
+   * Overrides the global `AppConfig.showTitle` for this gameshow — the landing
+   * page heading, the gamemaster's start/summary label, and the browser tab
+   * title. Blank/absent falls through to the global value and then to
+   * `DEFAULT_SHOW_TITLE`. Resolved by `resolveShowTitle()`.
+   * See specs/show-title.md.
+   */
+  showTitle?: string;
   gameOrder: string[];
   players?: string[];
   enabledJokers?: string[];
@@ -545,6 +553,13 @@ export interface RulesPreset {
 export type JokerUsageScope = 'per-gameshow' | 'per-game';
 
 export interface AppConfig {
+  /**
+   * What the show calls itself, globally: the landing-page heading, the
+   * gamemaster's start/summary label, and the browser tab title. A gameshow can
+   * override it via `GameshowConfig.showTitle`; blank/absent at both levels
+   * means `DEFAULT_SHOW_TITLE` ("Game Show"). See specs/show-title.md.
+   */
+  showTitle?: string;
   pointSystemEnabled?: boolean;
   teamRandomizationEnabled?: boolean;
   /**
@@ -668,6 +683,13 @@ export interface IncompatibleGameInfo {
 }
 
 export interface SettingsResponse {
+  /**
+   * The resolved title of the running show (active gameshow's `showTitle` →
+   * global `showTitle` → "Game Show"). Optional so existing test fixtures don't
+   * need it — a client that gets no value falls back to the default.
+   * See specs/show-title.md.
+   */
+  showTitle?: string;
   pointSystemEnabled: boolean;
   /**
    * Teams the active gameshow runs with (0-4). `pointSystemEnabled` is exactly

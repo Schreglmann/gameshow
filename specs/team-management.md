@@ -21,6 +21,7 @@ was the original design and is still the default; everything here applies per ac
 - [x] Team member lists are persisted to `localStorage` under the key of their team (`team1` … `team4`)
 - [x] On reload, team members are restored from `localStorage` before any API call
 - [x] Team names and members are displayed in the app header and on the `AdminScreen`
+- [x] The `SummaryScreen` lists the winning (or, at one team, the only) team's members as a **balanced grid** rather than one name per line: `memberColumns()` picks 1 column up to 3 names, 2 up to 6, 3 up to 12 and 4 beyond that, rendered as `.winner-members[data-columns]` with content-sized columns so a long name widens the card instead of breaking mid-word; below 768px wide rosters fold back to 2 columns. The names step down in size as columns are added, the entrance stagger is per index (`animationDelay`, capped) instead of the four `nth-child` rules it replaces, and the card itself is `width: max-content` up to `min(1200px, 95vw)` with a `max-height` + scroll safety net. Nine names used to stack the fixed, viewport-centred card past both screen edges on a 1080p projector — the heading cut off at the top, the last names unreachable below.
 - [x] Admin can edit team members directly on `AdminScreen` without going back to `HomeScreen`
 
 ### Optional team names

@@ -5,6 +5,8 @@ import { GameProvider } from '@/context/GameContext';
 import { MusicProvider } from '@/context/MusicContext';
 import CityCompass from '@/components/games/CityCompass';
 import type { CityCompassConfig, CityCompassQuestion } from '@/types/config';
+import type { GamemasterAnswerData } from '@/types/game';
+import * as backendSocket from '@/services/useBackendSocket';
 
 vi.mock('@/services/api', () => ({
   fetchSettings: vi.fn().mockResolvedValue({
@@ -149,6 +151,45 @@ describe('CityCompass', () => {
     expect(distanceLabels()).toHaveLength(4);
     // Vienna to Budapest is a little over 200 km.
     expect(distanceLabels()).toContain('210 km');
+  });
+
+  // Regression: the neighbors used to travel on `answerList`, which the GM card
+  // renders INSTEAD of the plain answer — so the host saw the clues the players
+  // already had and no solution while asking. See specs/games/city-compass.md.
+  it('sends the center city as the answer and the neighbors as hints to the gamemaster', async () => {
+    const sendWsSpy = vi.spyOn(backendSocket, 'sendWs');
+    renderGame();
+    await enterGame();
+
+    await waitFor(() => {
+      const calls = sendWsSpy.mock.calls.filter(([ch]) => ch === 'gamemaster-answer');
+      const data = calls[calls.length - 1]?.[1] as GamemasterAnswerData | undefined;
+      expect(data?.answer).toBe('Wien · AT');
+      expect(data?.answerList).toBeUndefined();
+      expect(data?.hintList?.map(h => h.text)).toEqual([
+        'Prag · 250 km',
+        'Budapest · 210 km',
+        'Berlin · 520 km',
+        'Rom · 760 km',
+      ]);
+      expect(data?.hintList?.every(h => h.revealed)).toBe(true);
+    });
+    sendWsSpy.mockRestore();
+  });
+
+  it('marks not-yet-shown neighbors as unrevealed hints in progressive mode', async () => {
+    const sendWsSpy = vi.spyOn(backendSocket, 'sendWs');
+    renderGame(makeConfig({ reveal: 'progressive' }));
+    await enterGame();
+
+    await waitFor(() => {
+      const calls = sendWsSpy.mock.calls.filter(([ch]) => ch === 'gamemaster-answer');
+      const data = calls[calls.length - 1]?.[1] as GamemasterAnswerData | undefined;
+      // Two neighbors are on stage, the rest are still upcoming clues.
+      expect(data?.hintList?.map(h => h.revealed)).toEqual([true, true, false, false]);
+      expect(data?.answer).toBe('Wien · AT');
+    });
+    sendWsSpy.mockRestore();
   });
 
   it('reveals the center city on the host advance', async () => {

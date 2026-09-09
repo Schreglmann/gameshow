@@ -144,6 +144,29 @@ export default function GamemasterView({ showAnswerImages = false, hideAnswers =
             ) : (
               <div className="gamemaster-answer">{data.answer}</div>
             )}
+            {data.hintList && data.hintList.length > 0 && (
+              // Hints, not answers: the revealed rows are already on the projector,
+              // so they stay legible while answers are hidden — only the pending
+              // ones (clues the host has not introduced yet) are masked. Static
+              // rows, because no game listens for a hint-jump command.
+              <div className="gamemaster-hints">
+                <div className="gamemaster-hints-label">Hinweise</div>
+                <ul className="gamemaster-answer-list">
+                  {data.hintList.map(item => (
+                    <li key={item.rank}>
+                      <div
+                        className={`gamemaster-answer-item gamemaster-answer-item--static${item.revealed ? ' revealed' : ' pending'}`}
+                      >
+                        <span className="gamemaster-answer-rank">{item.rank}</span>
+                        <span className={`gamemaster-answer-text${hideAnswers && !item.revealed ? ' gamemaster-answer-text--masked' : ''}`}>
+                          {hideAnswers && !item.revealed ? ANSWER_MASK : item.text}
+                        </span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {data.answerImage && showAnswerImages && !hideAnswers && (
               <img
                 className="gamemaster-image"

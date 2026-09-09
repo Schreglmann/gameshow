@@ -32,6 +32,7 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | Dynamic team count (0–4 teams) | [team-count.md](team-count.md) | ✅ Implemented |
 | Team order & gamemaster mirror | [team-order-mirror.md](team-order-mirror.md) | ✅ Implemented |
 | Point system | [point-system.md](point-system.md) | ✅ Implemented |
+| Show title (custom landing-page text) | [show-title.md](show-title.md) | ✅ Implemented |
 | Config system | [config-system.md](config-system.md) | ✅ Implemented |
 | Config validation | [config-validation.md](config-validation.md) | ✅ Implemented |
 | gameOrder cascade-cleanup on game/instance delete | [config-gameorder-cascade.md](config-gameorder-cascade.md) | ✅ Implemented |

@@ -90,7 +90,22 @@
     border: var(--card-border, 2px solid rgba(var(--glass-rgb), var(--glass-border-opacity)));
     text-align: center;
     min-width: min(500px, 90vw);
-    max-width: 95vw;
+    /* `left: 50%` leaves a shrink-to-fit box only half the viewport to grow
+       into, so the card could never pass 50vw however much space was free —
+       the heading wrapped early and the roster grid was squeezed into 960px on
+       a 1920px projector. `width: max-content` sizes it from its content
+       instead, with the 95vw cap doing the limiting it was meant to do. */
+    width: max-content;
+    /* Capped like the rules card: 95vw alone let a long heading stretch the box
+       into a letterbox across a 1920px projector. */
+    max-width: min(1200px, 95vw);
+    /* Safety net for a roster the grid below still cannot fit (a very long team
+       name over four rows of names on a short viewport). The card is fixed and
+       centred, so without this it simply grew past both screen edges and the
+       overflow was unreachable — the heading was cut off at the top and the
+       last names off the bottom. Mirrors the .rules-container cap. */
+    max-height: calc(100dvh - clamp(16px, 4vh, 48px));
+    overflow-y: auto;
     z-index: 100;
     animation: popIn 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
 }
@@ -107,7 +122,11 @@
 }
 
 .winner-announcement h1 {
-    font-size: clamp(2em, 8vw, 4.5em);
+    /* Also tracks viewport HEIGHT: at 8vw a long winning team name wrapped to
+       three lines and took two thirds of a 1080p projector on its own, leaving
+       no room for the roster underneath. On a tall/portrait screen the vw term
+       still wins, so phones are unchanged. */
+    font-size: clamp(2em, min(8vw, 11vh), 4.5em);
     margin-bottom: clamp(1rem, 2vw, 2rem);
     text-shadow: 3px 3px 8px rgba(0, 0, 0, 0.4);
     font-weight: 800;
@@ -132,10 +151,81 @@
     opacity: 0;
 }
 
-.winner-announcement p:nth-child(2) { animation-delay: 0.3s; }
-.winner-announcement p:nth-child(3) { animation-delay: 0.5s; }
-.winner-announcement p:nth-child(4) { animation-delay: 0.7s; }
-.winner-announcement p:nth-child(5) { animation-delay: 0.9s; }
+/* The only remaining paragraph is the subtitle ("… liegen gleichauf" / "Vielen
+   Dank fürs Spielen!"), right under the heading. The roster used to follow as
+   further paragraphs and each got its own nth-child delay — it now lives in
+   .winner-members below and staggers itself. */
+.winner-announcement > p { animation-delay: 0.3s; }
+
+/* ── Winning roster ──
+   The winning team's members. Laid out as a balanced block (column count from
+   `memberColumns()` in SummaryScreen.tsx, on `data-columns`) instead of one
+   name per line: nine names are three rows of three, so the card stays inside
+   the screen and the names stay large. */
+.winner-members {
+    display: grid;
+    /* Row gap tracks viewport height, column gap width — the same split the
+       rules card uses, so a short 1080p projector loses vertical air first. */
+    gap: clamp(0.2rem, 1.2vh, 1rem) clamp(1.5rem, 4vw, 4rem);
+    justify-content: center;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+/* Columns are sized to their content (`max-content`), not to equal fractions:
+   with 1fr columns a name longer than its share was broken mid-word
+   ("Bartholomä / us"). The card widens instead, up to its max-width — only
+   past that does `overflow-wrap` below step in. */
+.winner-members[data-columns="1"] { grid-template-columns: minmax(0, max-content); }
+.winner-members[data-columns="2"] { grid-template-columns: repeat(2, minmax(0, max-content)); }
+.winner-members[data-columns="3"] { grid-template-columns: repeat(3, minmax(0, max-content)); }
+.winner-members[data-columns="4"] { grid-template-columns: repeat(4, minmax(0, max-content)); }
+
+/* Reset the global list item (base.css gives every `li` 20px padding and a
+   separator border) and take over the paragraph styling the names had. */
+.winner-members li {
+    padding: 0;
+    border-bottom: none;
+    font-size: clamp(1.2em, 4vw, 2.2em);
+    font-weight: 600;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+    text-shadow: 2px 2px 6px rgba(0, 0, 0, 0.3);
+    animation: fadeInUp 0.8s ease-out forwards;
+    opacity: 0;
+}
+
+/* More columns means narrower cells, so the names step down with them — still
+   the projector-sized type a two-person team gets, just not at nine names. The
+   wider grids also give up some of the column gap, so four columns of names
+   stay inside the card instead of being squeezed until they break mid-word. */
+.winner-members[data-columns="2"] li { font-size: clamp(1.1em, 3.4vw, 2em); }
+.winner-members[data-columns="3"] li { font-size: clamp(1em, 2.8vw, 1.75em); }
+.winner-members[data-columns="4"] li { font-size: clamp(0.95em, 2.2vw, 1.4em); }
+
+.winner-members[data-columns="3"],
+.winner-members[data-columns="4"] {
+    column-gap: clamp(1rem, 2.5vw, 2.5rem);
+}
+
+/* Below a tablet the card is too narrow for three or four name columns —
+   a long name would break mid-word — so wide rosters fold back to two. */
+@media (max-width: 767px) {
+    .winner-members[data-columns="3"],
+    .winner-members[data-columns="4"] {
+        grid-template-columns: repeat(2, minmax(0, max-content));
+    }
+}
+
+/* The names carry `opacity: 0` until their entrance animation runs, so this
+   has to restore it rather than just switching the animation off. */
+@media (prefers-reduced-motion: reduce) {
+    .winner-members li {
+        animation: none;
+        opacity: 1;
+    }
+}
 
 /* ── Confetti Canvas ── */
 

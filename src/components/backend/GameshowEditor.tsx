@@ -5,6 +5,7 @@ import { fetchGames } from '@/services/backendApi';
 import { gameTypeMatchesQuery, gameSupportsTeamCount, gameUsesCorrectAnswerTally, teamCountSupportLabel } from '@/data/gameTypeInfo';
 import { DEFAULT_TEAM_COUNT, normalizeTeamCount } from '@/utils/teams';
 import { DEFAULT_POINT_MODE, normalizePointMode } from '@/utils/pointMode';
+import { DEFAULT_SHOW_TITLE } from '@/utils/showTitle';
 import { useDragReorder } from './useDragReorder';
 import { JOKER_CATALOG } from '@/data/jokers';
 import JokerIcon from '@/components/common/JokerIcon';
@@ -459,6 +460,8 @@ interface Props {
   id: string;
   gameshow: GameshowConfig;
   allGameshows: Record<string, GameshowConfig>;
+  /** Global `AppConfig.showTitle` — shown as the placeholder this gameshow inherits. */
+  globalShowTitle?: string;
   /** Id of the active gameshow — the "now" divider for played vs. upcoming. */
   activeGameshow: string;
   isActive: boolean;
@@ -471,7 +474,7 @@ interface Props {
   onNavigateToGameshow: (gameshowId: string) => void;
 }
 
-export default function GameshowEditor({ id, gameshow, allGameshows, activeGameshow, isActive, expanded, onToggleExpand, onSetActive, onChange, onRename, onDelete, onNavigateToGameshow }: Props) {
+export default function GameshowEditor({ id, gameshow, allGameshows, globalShowTitle, activeGameshow, isActive, expanded, onToggleExpand, onSetActive, onChange, onRename, onDelete, onNavigateToGameshow }: Props) {
   const confirmDialog = useConfirm();
   const [availableGames, setAvailableGames] = useState<GameFileSummary[]>([]);
   const [pickGame, setPickGame] = useState('');
@@ -670,6 +673,25 @@ export default function GameshowEditor({ id, gameshow, allGameshows, activeGames
         ID: <code style={{ color: 'rgba(var(--text-rgb), max(0.55, var(--text-fade-floor, 0)))' }}>{id}</code>
         &nbsp;·&nbsp; {gameshow.gameOrder.length} Spiel{gameshow.gameOrder.length !== 1 ? 'e' : ''}
         &nbsp;·&nbsp; {totalQuestions} Frage{totalQuestions !== 1 ? 'n' : ''}
+      </div>
+
+      {/* Show title override — blank inherits the global title from the Konfiguration
+          tab (shown as the placeholder). See specs/show-title.md. */}
+      <div className="gs-players-row">
+        <label className="gs-players-label" htmlFor={`show-title-${id}`}>Titel</label>
+        <input
+          id={`show-title-${id}`}
+          className="be-input gs-show-title"
+          value={gameshow.showTitle ?? ''}
+          placeholder={globalShowTitle?.trim() || DEFAULT_SHOW_TITLE}
+          onChange={e => {
+            const next = e.target.value;
+            // Empty is stored as absent, so untouched gameshows keep a clean
+            // config.json — exactly like teamCount and pointMode.
+            onChange({ ...gameshow, showTitle: next === '' ? undefined : next });
+          }}
+          title="Überschrift auf der Startseite, wenn diese Gameshow aktiv ist. Leer = globaler Titel aus dem Tab „Konfiguration“."
+        />
       </div>
 
       {/* Team count, point mode, and the roster group — one row, wraps as needed */}

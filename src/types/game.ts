@@ -150,6 +150,14 @@ export interface IncompatibleGame {
 }
 
 export interface GlobalSettings {
+  /**
+   * What the show calls itself — the landing-page heading, the gamemaster's
+   * start/summary label and the browser tab title. Resolved server-side from
+   * the active gameshow's `showTitle`, then the global one, then "Game Show"
+   * (`DEFAULT_SHOW_TITLE`), so this is always a non-empty string.
+   * See specs/show-title.md.
+   */
+  showTitle: string;
   pointSystemEnabled: boolean;
   /**
    * How many teams the active gameshow runs with (0-4). Derived server-side:
@@ -269,6 +277,15 @@ export interface GamemasterAnswerData {
    * field. `revealed` reflects what the audience can already see.
    */
   answerList?: { rank: number; text: string; revealed: boolean }[];
+  /**
+   * Structured list of the *hints* the audience is looking at, for games whose
+   * puzzle is a set of clues around a single hidden answer (city-compass: the
+   * neighbor cities on the rose). Rendered as its own labelled block, so unlike
+   * `answerList` it does NOT replace `answer` — the host still needs the
+   * solution while asking. `revealed` reflects what the audience can see; a
+   * pending row is an upcoming clue, not the answer.
+   */
+  hintList?: { rank: number; text: string; revealed: boolean }[];
   /**
    * Preview of the NEXT question's answer, shown in the gamemaster card while
    * the current answer is revealed in the frontend (`answerRevealed`), gated by

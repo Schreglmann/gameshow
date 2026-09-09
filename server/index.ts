@@ -10,6 +10,7 @@ import type { AppConfig, GameConfig, MultiInstanceGameFile, GameFileSummary, Ass
 import { resolveRulesPreset } from '../src/utils/rulesPreset.js';
 import { DEFAULT_TEAM_COUNT } from '../src/utils/teams.js';
 import { normalizePointMode, pointModeRule } from '../src/utils/pointMode.js';
+import { resolveShowTitle } from '../src/utils/showTitle.js';
 import { effectiveTeamCount, gameIsScorable, listIncompatibleGames, hasTeamSplit } from './team-count.js';
 import { isAudioFile, normalizeAudioFile } from './normalize.js';
 import { fetchAndSavePoster, videoFilenameToSlug, MOVIE_POSTERS_SUBDIR } from './movie-posters.js';
@@ -3852,6 +3853,11 @@ app.get('/api/settings', async (_req, res) => {
     const pointSystemEnabled = teamCount > 0;
     const pointMode = normalizePointMode(activeShow?.pointMode);
     res.json({
+      // Landing-page heading / gamemaster label / tab title: the active gameshow's
+      // override wins over the global default, blank counts as unset at both
+      // levels. Resolved here so no client re-derives the precedence.
+      // See specs/show-title.md.
+      showTitle: resolveShowTitle(config.showTitle, activeShow?.showTitle),
       pointSystemEnabled,
       teamCount,
       pointMode,

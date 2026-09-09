@@ -24,6 +24,7 @@ games/
 
 ```json
 {
+  "showTitle": "Sommerfest Quiz",
   "pointSystemEnabled": true,
   "teamRandomizationEnabled": true,
   "jokersInLastGame": false,
@@ -37,6 +38,7 @@ games/
   "gameshows": {
     "gameshow1": {
       "name": "Gameshow 1",
+      "showTitle": "Sommerfest Quiz 2026",
       "teamCount": 2,
       "pointMode": "positional",
       "gameOrder": [
@@ -59,8 +61,10 @@ games/
 ```
 
 **Top-level Settings:**
+- `showTitle` — What the show calls itself: the `HomeScreen` heading, the gamemaster's start/summary label and the browser tab title. A gameshow can override it with its own `showTitle`; blank/omitted at both levels means `"Game Show"`. Editable in the admin (Konfiguration tab globally, Gameshows tab per show) — see [specs/show-title.md](specs/show-title.md)
 - `pointSystemEnabled` — Enable/disable the point system (default: `true`). When `false` the show has **no teams**: no scores are shown or awarded, the `HomeScreen` drops the team overview/assignment for a bare "Zum Starten klicken" start prompt, jokers are auto-disabled (`enabledJokers` served empty), and **every** game becomes a pure play-through — the inline-scored games (BetQuiz, Quizjagd, FinalQuiz, WerKenntMehr) hide their bet/point/scoring UI and advance with a plain "Weiter" (see [specs/point-system.md](specs/point-system.md))
 - `gameshows[key].teamCount` — how many teams this gameshow is played with (`0`–`4`, default `2`). `0` means no teams at all, exactly like the global `pointSystemEnabled: false`; `1` keeps the point system but still has no team assignment or randomization — the audience plays against the show. A game type whose mechanic cannot be scored at that count still plays, just without scoring — see [specs/team-count.md](specs/team-count.md)
+- `gameshows[key].showTitle` — overrides the global `showTitle` while this gameshow is active (blank/omitted inherits it) — see [specs/show-title.md](specs/show-title.md)
 - `gameshows[key].pointMode` — how this gameshow turns a game result into points: `positional` (default, omitted — game N is worth N points), `flat` (every game 1 point) or `per-correct-answer` (one point per correct answer, read off the gamemaster's tally). The four inline-scored types keep their own scoring in every mode — see [specs/point-system.md](specs/point-system.md)
 - `teamRandomizationEnabled` — How the teams are formed on the `HomeScreen` (default: `true`). `true` = enter a name pool that is shuffled + split automatically; `false` = **manual assignment** — add/remove players per team by hand on the show and the gamemaster (see [specs/team-management.md](specs/team-management.md))
 - `jokersInLastGame` — Allow jokers to stay available in the last game (default: `false`; when off, the joker UI is hidden in the last game)
@@ -183,7 +187,7 @@ See [GAME_TYPES.md](GAME_TYPES.md) for detailed per-type documentation.
 
 | Endpoint | Response |
 |----------|----------|
-| `GET /api/settings` | `{ pointSystemEnabled, teamRandomizationEnabled, jokersInLastGame, globalRules, enabledJokers, jokerRules }` |
+| `GET /api/settings` | `{ showTitle, pointSystemEnabled, teamRandomizationEnabled, jokersInLastGame, globalRules, enabledJokers, jokerRules }` |
 | `GET /api/game/:index` | `{ gameId, config, currentIndex, totalGames, pointSystemEnabled }` |
 | `GET /api/background-music` | `string[]` (audio filenames) |
 

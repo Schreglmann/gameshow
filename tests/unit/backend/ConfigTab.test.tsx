@@ -166,6 +166,40 @@ describe('ConfigTab', () => {
     });
   });
 
+  // Global show title — see specs/show-title.md.
+  it('renders the show-title field with the default as placeholder', async () => {
+    renderConfigTab();
+    await waitFor(() => {
+      expect(screen.getByLabelText('Titel der Show')).toHaveAttribute('placeholder', 'Game Show');
+    });
+    expect(screen.getByLabelText('Titel der Show')).toHaveValue('');
+  });
+
+  it('shows the configured show title', async () => {
+    mockFetchConfig.mockResolvedValue({ ...sampleConfig, showTitle: 'Sommerfest Quiz' });
+    renderConfigTab();
+    await waitFor(() => {
+      expect(screen.getByLabelText('Titel der Show')).toHaveValue('Sommerfest Quiz');
+    });
+  });
+
+  it('editing the show title autosaves config.showTitle', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderConfigTab();
+    await waitFor(() => {
+      expect(screen.getByLabelText('Titel der Show')).toBeInTheDocument();
+    });
+
+    await user.type(screen.getByLabelText('Titel der Show'), 'Sommerfest');
+    act(() => { vi.advanceTimersByTime(800); });
+
+    await waitFor(() => {
+      expect(mockSaveConfig).toHaveBeenCalledWith(
+        expect.objectContaining({ showTitle: 'Sommerfest' })
+      );
+    });
+  });
+
   it('renders "Joker-Regeln" card', async () => {
     renderConfigTab();
     await waitFor(() => {

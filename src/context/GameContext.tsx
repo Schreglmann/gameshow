@@ -20,6 +20,7 @@ import { NO_QUESTION_KEY } from '@/types/game';
 import type { ContentChangedPayload } from '@/types/config';
 import { COMEBACK_JOKER_ID } from '@/data/jokers';
 import { fetchSettings } from '@/services/api';
+import { DEFAULT_SHOW_TITLE, cacheShowTitle, normalizeShowTitle } from '@/utils/showTitle';
 import { onWsOpen, sendWs, useWsChannel } from '@/services/useBackendSocket';
 import { isInactiveShowTab, onBecameActive, onReemitRequest } from '@/services/showPresenceState';
 import {
@@ -545,6 +546,7 @@ function getInitialState(): AppState {
   captureColdStartFlags();
   return {
     settings: {
+      showTitle: DEFAULT_SHOW_TITLE,
       pointSystemEnabled: true,
       teamCount: DEFAULT_TEAM_COUNT,
       pointMode: DEFAULT_POINT_MODE,
@@ -966,9 +968,16 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const teamCount = typeof data.teamCount === 'number'
         ? normalizeTeamCount(data.teamCount)
         : (data.pointSystemEnabled !== false ? DEFAULT_TEAM_COUNT : 0);
+      // Cache the resolved title for `emitCachedGamemasterState()`, which runs
+      // before React mounts and so cannot read state. Show tabs only — the
+      // admin/gamemaster zones never emit it, and writing there would only
+      // clutter their localStorage. See specs/show-title.md.
+      const showTitle = normalizeShowTitle(data.showTitle);
+      if (isShowTab()) cacheShowTitle(showTitle);
       dispatch({
         type: 'SET_SETTINGS',
         payload: {
+          showTitle,
           pointSystemEnabled: teamCount > 0,
           teamCount,
           pointMode: normalizePointMode(data.pointMode),

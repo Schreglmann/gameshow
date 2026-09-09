@@ -27,7 +27,8 @@ A hidden city sits at the center of a compass rose and the named cities around i
 - [x] Swapping a city in the admin redraws the rose on the running show without a reload and without moving the host to a different question
 - [x] After the last question and its answer, calls `onGameComplete()`
 - [x] Points awarded by the host via `AwardPoints`, value = `currentIndex + 1`
-- [x] Gamemaster screen shows the center city as the answer and the neighbor list with a `revealed` flag per entry
+- [x] Gamemaster screen shows the center city as the answer **and**, below it, the neighbor list with a `revealed` flag per entry. The neighbors travel on `hintList`, not `answerList`: the GM card renders `answerList` *instead of* the plain answer (it is the answer for `ranking`), which left the host looking at the clues the players already see and no solution while asking. `hintList` is rendered as its own labelled "Hinweise" block, with static rows — no game listens for a hint-jump command
+- [x] Under "Antworten verstecken" the revealed hints stay legible (they are on the projector anyway) and only the pending ones are masked, while the center city is hidden like any other answer
 - [x] The rose has no background of its own: it inherits the card text color and paints every part with `currentColor` at its own opacity, so it reads on every theme, light or dark. The solved center reuses the answer colour of `.quiz-answer` — which every theme already picks to contrast with its card — as a bright outline, a soft halo and the name itself
 - [x] Validator requires `center` and at least 3 `neighbors`, each with a name and coordinates in range, and `reveal` / `showDistances` only on this game type
 - [x] A neighbor beyond 2000 km is flagged in the admin editor (the row's distance turns red and reads "über 2000 km") rather than by the validator, which has no warning channel per question. Such a question still plays
@@ -75,7 +76,7 @@ export interface CityCompassConfig extends BaseGameConfig {
 }
 ```
 
-- `GamemasterAnswerData.answerList` carries the neighbor list; no new gamemaster field
+- `GamemasterAnswerData.hintList` carries the neighbor list — same item shape as `answerList` (`{ rank, text, revealed }`), but additive to `answer` instead of replacing it. Documented on the `gamemaster-answer` channel in [../api/asyncapi.yaml](../api/asyncapi.yaml)
 
 ## City dataset
 The repository has no coordinate data, so the dataset is generated and committed.

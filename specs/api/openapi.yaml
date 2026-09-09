@@ -3258,6 +3258,14 @@ components:
       type: object
       required: [pointSystemEnabled, teamRandomizationEnabled, globalRules]
       properties:
+        showTitle:
+          type: string
+          description: >-
+            Resolved title of the running show — the landing-page heading, the
+            gamemaster's start/summary label and the browser tab title. Precedence:
+            the active gameshow's `showTitle`, then the global `AppConfig.showTitle`,
+            then `Game Show`; blank counts as unset at both levels. A client that
+            receives no value falls back to `Game Show`. See specs/show-title.md.
         pointSystemEnabled:
           type: boolean
           description: >-
@@ -3396,6 +3404,13 @@ components:
       type: object
       required: [activeGameshow, gameshows]
       properties:
+        showTitle:
+          type: string
+          description: >-
+            Global show title (admin ConfigTab, "Titel der Show"): the landing-page
+            heading, gamemaster start/summary label and browser tab title. Overridable
+            per gameshow via `GameshowConfig.showTitle`; blank/omitted at both levels
+            means `Game Show`. See [specs/show-title.md](../show-title.md).
         pointSystemEnabled: { type: boolean }
         teamRandomizationEnabled: { type: boolean }
         globalRules: { type: array, items: { type: string } }
@@ -3469,6 +3484,12 @@ components:
       required: [name, gameOrder]
       properties:
         name: { type: string }
+        showTitle:
+          type: string
+          description: >-
+            Overrides the global `AppConfig.showTitle` while this gameshow is active.
+            Blank/omitted inherits the global value (and then the `Game Show` default).
+            See [specs/show-title.md](../show-title.md).
         gameOrder: { type: array, items: { type: string } }
         players: { type: array, items: { type: string } }
         enabledJokers: { type: array, items: { type: string } }

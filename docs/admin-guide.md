@@ -162,6 +162,8 @@ Click **"+ Neue Gameshow"**. A new card appears, already expanded for editing.
 > *Add screenshot: `docs/screenshots/admin-config-new-gameshow.png` — a new gameshow card being edited*
 
 - Enter a **name** for your gameshow (e.g. *"Weihnachtsparty 2024"*)
+- Optionally fill in **Titel** to give this gameshow its own start-screen heading (empty = the global
+  title from the Config tab — see [Global Settings](#6-global-settings))
 - Click **"Set as active"** to make it the one that runs when players open the app
 
 ### Step 3 — Add games to the gameshow
@@ -553,8 +555,19 @@ Go to the **Config tab** and scroll to the top.
 
 | Setting | What it does |
 |---------|-------------|
+| **Titel der Show** | The heading on the start screen (also the gamemaster's label and the browser tab title). Leave it empty for the built-in *"Game Show"*. A single gameshow can override it — see below. |
 | **Point system enabled** | Show/hide team scores in the header and the points-awarding screen |
 | **Team randomization enabled** | Show/hide the home screen where players enter their names |
+
+### Naming the show
+
+The **Titel der Show** field replaces the *"Game Show"* heading players see on the start screen —
+enter *"Sommerfest Quiz 2026"* and that is what goes on the projector.
+
+If your gameshows each need their own title, leave the global field as the fallback and fill in the
+**Titel** field on the gameshow card in the **Gameshows tab** instead: it applies whenever that
+gameshow is the active one, and its placeholder shows the global title it would otherwise inherit.
+Clearing it goes back to inheriting. The change reaches a running show immediately — no reload.
 
 ### Global rules
 

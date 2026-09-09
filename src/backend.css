@@ -3212,6 +3212,15 @@
   min-width: 380px;
 }
 
+/* The per-gameshow show-title override. Its own row, so a long title never
+   squeezes the team-count / point-mode / roster row. Capped so it doesn't run
+   the full card width on a wide screen. See specs/show-title.md. */
+.gs-show-title {
+  flex: 1 1 240px;
+  min-width: 180px;
+  max-width: 420px;
+}
+
 /* ── Overlap badges ── */
 
 .overlap-badge {

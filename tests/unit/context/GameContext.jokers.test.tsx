@@ -18,6 +18,7 @@ vi.mock('@/services/api', () => ({
 // Full GlobalSettings payload for SET_SETTINGS in the scope tests — lets a test
 // pin `jokerUsageScope` deterministically instead of racing the async settings load.
 const BASE_SETTINGS: GlobalSettings = {
+  showTitle: 'Game Show',
   pointSystemEnabled: true,
   teamRandomizationEnabled: true,
   globalRules: [],

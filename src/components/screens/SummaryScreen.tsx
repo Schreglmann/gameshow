@@ -7,10 +7,29 @@ import { teamName, joinTeamNames } from '@/utils/teamNames';
 import { leadingTeams, teamKeys, teamPoints, teamRoster } from '@/utils/teams';
 import confetti from 'canvas-confetti';
 
+/** Highest stagger step; later names all share it so the list finishes quickly. */
+const MAX_STAGGER_STEPS = 11;
+
+/**
+ * Columns the winning roster is laid out in — roughly a square block, so nine
+ * names are three rows of three instead of nine stacked lines.
+ *
+ * One name per line was fine for the two- or three-person teams the screen was
+ * built for, but a nine-player roster grew the fixed, viewport-centred card
+ * past the screen on a 1080p projector: the heading was cut off at the top and
+ * the last names ran off the bottom, with no way to scroll to them.
+ */
+function memberColumns(count: number): number {
+  if (count <= 3) return 1;
+  if (count <= 6) return 2;
+  if (count <= 12) return 3;
+  return 4;
+}
+
 export default function SummaryScreen() {
   const { state } = useGameContext();
   const navigate = useNavigate();
-  const { pointSystemEnabled, teamCount } = state.settings;
+  const { pointSystemEnabled, teamCount, showTitle } = state.settings;
 
   const capitalize = (name: string) => name.charAt(0).toUpperCase() + name.slice(1);
 
@@ -24,7 +43,7 @@ export default function SummaryScreen() {
 
   // Broadcast screen info to gamemaster
   useGamemasterSync({
-    gameTitle: 'Game Show',
+    gameTitle: showTitle,
     questionNumber: 0,
     totalQuestions: 0,
     answer: '',
@@ -115,9 +134,19 @@ export default function SummaryScreen() {
       <div id="summaryScreen" className="winner-announcement">
         <h1>{result.text}</h1>
         {result.subtitle && <p>{result.subtitle}</p>}
-        {result.members.map((name, i) => (
-          <p key={i}>{name}</p>
-        ))}
+        {result.members.length > 0 && (
+          <ul className="winner-members" data-columns={memberColumns(result.members.length)}>
+            {/* The stagger is per index rather than the fixed nth-child rules it
+                replaces, which stopped at the fifth name and left every later
+                one appearing first (delay 0). Capped so a big roster is fully
+                on screen in about a second. */}
+            {result.members.map((name, i) => (
+              <li key={i} style={{ animationDelay: `${0.3 + Math.min(i, MAX_STAGGER_STEPS) * 0.08}s` }}>
+                {name}
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </>
   );

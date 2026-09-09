@@ -787,6 +787,39 @@ components:
             See specs/gamemaster-question-scores.md.
         question: { type: string }
         screenLabel: { type: string }
+        answerList:
+          type: array
+          description: >-
+            Structured answer for games that reveal several items in order
+            (`ranking`, and the example list in `wer-kennt-mehr`). When present the
+            gamemaster card renders these rows INSTEAD of the plain `answer`, and
+            clicking one sends the `rank-<n>` control on `gamemaster-command`.
+          items:
+            type: object
+            required: [rank, text, revealed]
+            properties:
+              rank: { type: integer, minimum: 1 }
+              text: { type: string }
+              revealed:
+                type: boolean
+                description: Whether the audience can already see this item.
+        hintList:
+          type: array
+          description: >-
+            The clues the audience is looking at, for a game whose puzzle is a set
+            of hints around one hidden answer (`city-compass`: the neighbor cities
+            on the rose). Rendered as its own labelled block IN ADDITION to
+            `answer` — the host needs the solution while asking — and the rows are
+            not controls. See specs/games/city-compass.md.
+          items:
+            type: object
+            required: [rank, text, revealed]
+            properties:
+              rank: { type: integer, minimum: 1 }
+              text: { type: string }
+              revealed:
+                type: boolean
+                description: Whether the audience can already see this hint.
         nextAnswer:
           type: object
           description: >-

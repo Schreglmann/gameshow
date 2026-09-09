@@ -127,9 +127,10 @@ function CityCompassInner({
       question: q.question || DEFAULT_PROMPT,
       answer: answerText,
       answerImage: q.answerImage,
-      // Reuses the ranking answer-list shape so the gamemaster sees which cities
-      // the audience already has, without a new field on the channel.
-      answerList: q.neighbors.map((city, i) => ({
+      // The neighbors are the audience's HINTS, not the answer, so they go on
+      // `hintList` — `answerList` would replace the plain `answer` in the GM card
+      // and hide the center city the host is asking for.
+      hintList: q.neighbors.map((city, i) => ({
         rank: i + 1,
         text: `${city.name} · ${formatDistanceKm(haversineKm(q.center, city))}`,
         revealed: i < revealedCount,

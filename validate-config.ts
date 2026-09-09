@@ -190,6 +190,17 @@ function validateConfig(): void {
     errors.push('"jokerUsageScope" must be "per-gameshow" or "per-game"');
   }
 
+  // Show title (optional, both levels). A blank value silently falls through to
+  // the next level, which is easy to mistake for a broken field — warn.
+  // See specs/show-title.md.
+  if (config.showTitle !== undefined) {
+    if (typeof config.showTitle !== 'string') {
+      errors.push('"showTitle" must be a string');
+    } else if (config.showTitle.trim() === '') {
+      warnings.push('"showTitle" is empty — the default title "Game Show" is used');
+    }
+  }
+
   // Validate gameshows & activeGameshow
   if (!config.gameshows || typeof config.gameshows !== 'object') {
     errors.push('Missing "gameshows" object');
@@ -206,6 +217,15 @@ function validateConfig(): void {
     for (const [showKey, show] of Object.entries(config.gameshows)) {
       if (!show.name) {
         warnings.push(`Gameshow "${showKey}": missing "name" field`);
+      }
+      if (show.showTitle !== undefined) {
+        if (typeof show.showTitle !== 'string') {
+          errors.push(`Gameshow "${showKey}": "showTitle" must be a string`);
+        } else if (show.showTitle.trim() === '') {
+          warnings.push(
+            `Gameshow "${showKey}": "showTitle" is empty — the global title is used instead`,
+          );
+        }
       }
       // Team count (0-4). Absent means the historic 2. See specs/team-count.md.
       let teamCount = 2;

@@ -43,7 +43,7 @@ export default function HomeScreen() {
   // the long-name warning in the GM control panel.
   const [gmEditingTeam, setGmEditingTeam] = useState<TeamKey | null>(null);
   const [gmEditValue, setGmEditValue] = useState('');
-  const { pointSystemEnabled, teamRandomizationEnabled, players, teamCount } = state.settings;
+  const { pointSystemEnabled, teamRandomizationEnabled, players, teamCount, showTitle } = state.settings;
   // The teams this gameshow runs with (0-4). Everything below iterates this list
   // instead of naming team1/team2. See specs/team-count.md.
   const activeTeams = useMemo(() => teamKeys(teamCount), [teamCount]);
@@ -77,7 +77,7 @@ export default function HomeScreen() {
 
   // Broadcast screen info to gamemaster
   useGamemasterSync({
-    gameTitle: 'Game Show',
+    gameTitle: showTitle,
     questionNumber: 0,
     totalQuestions: 0,
     answer: '',
@@ -432,7 +432,7 @@ export default function HomeScreen() {
   return (
     <div id="homeScreen">
       <CacheStatusBanner />
-      <h1>Game Show</h1>
+      <h1>{showTitle}</h1>
       <TeamCountWarning />
 
       {!teamsEnabled ? (

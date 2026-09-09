@@ -67,7 +67,7 @@ You don't need to know any of this to run the app — the admin handles it. It's
 
 1. **Game files** live in `games/` — one JSON file per game concept. Type-level examples are generated on demand (`games/beispiel-*.json`, gitignored) from code fixtures in `server/example-games.ts` — see [specs/example-games.md](specs/example-games.md)
 2. **`config.json`** defines gameshows (each with a `gameOrder`) and selects the active one via `activeGameshow`
-3. **Settings** like `pointSystemEnabled` and `globalRules` live in `config.json` (top-level)
+3. **Settings** like `showTitle` (the start-screen heading), `pointSystemEnabled` and `globalRules` live in `config.json` (top-level); a gameshow can override `showTitle` with its own
 
 > `config.json` is git-crypt encrypted on the maintainer's machine. If you don't have the key, the server writes a minimal default config and the admin offers **"Beispiele erstellen"** to populate example games — the app works without any setup. Only commit `config.json` if you have the key.
 

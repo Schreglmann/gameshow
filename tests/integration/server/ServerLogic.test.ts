@@ -4,6 +4,7 @@ import { existsSync } from 'fs';
 import path from 'path';
 import { isGitCryptBlob, DEFAULT_GLOBAL_RULES } from '../../../server/clean-install.js';
 import { normalizePointMode, pointModeRule } from '../../../src/utils/pointMode.js';
+import { resolveShowTitle } from '../../../src/utils/showTitle.js';
 
 /**
  * Server logic integration tests.
@@ -237,6 +238,20 @@ describe('Server Settings Response Shape', () => {
     const config = { globalRules: ['Custom Rule'], pointModeRules: { flat: 'Eigener Punkte-Text.' } } as any;
     const response = { globalRules: resolveGlobalRules(config, true, normalizePointMode('flat')) };
     expect(response.globalRules).toEqual(['Custom Rule', 'Eigener Punkte-Text.']);
+  });
+
+  // `showTitle` on the wire — the exact expression the route uses. See specs/show-title.md.
+  it('serves the active gameshow showTitle over the global one, and the default over neither', () => {
+    const config = {
+      showTitle: 'Sommerfest Quiz',
+      activeGameshow: 'winter',
+      gameshows: { winter: { showTitle: 'Weihnachtsshow' }, sommer: {} },
+    } as any;
+    expect(resolveShowTitle(config.showTitle, config.gameshows[config.activeGameshow]?.showTitle))
+      .toBe('Weihnachtsshow');
+    expect(resolveShowTitle(config.showTitle, config.gameshows.sommer?.showTitle))
+      .toBe('Sommerfest Quiz');
+    expect(resolveShowTitle(undefined, undefined)).toBe('Game Show');
   });
 });
 
