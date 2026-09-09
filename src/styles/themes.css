@@ -1390,7 +1390,7 @@
    panel with `data-theme="galaxia"` inside an `html[data-theme="retro"]`
    resolves its surface vars to the `var(..., default)` fallback (Galaxy
    glass look), instead of inheriting retro's opaque black from the ancestor. */
-[data-theme]:not([data-theme="retro"]):not([data-theme="minecraft"]):not([data-theme="classical-music"]):not([data-theme="modern-music"]):not([data-theme="movie-quiz"]):not([data-theme="harry-potter"]):not([data-theme="dnd"]):not([data-theme="atlas"]):not([data-theme="atlas-light"]) {
+[data-theme]:not([data-theme="retro"]):not([data-theme="minecraft"]):not([data-theme="classical-music"]):not([data-theme="modern-music"]):not([data-theme="movie-quiz"]):not([data-theme="harry-potter"]):not([data-theme="dnd"]):not([data-theme="atlas"]):not([data-theme="atlas-light"]):not([data-theme="pub-quiz"]) {
   --card-bg: initial;
   --card-border: initial;
   --card-shadow: initial;
@@ -1984,7 +1984,7 @@
    Minecraft-only bandle-stars vars so they don't cascade into nested
    [data-theme] panels (showcase, admin-shell) — keeps other themes on the
    default behaviour (translucent glass header, inherited star font). */
-[data-theme]:not([data-theme="minecraft"]):not([data-theme="classical-music"]):not([data-theme="retro"]):not([data-theme="modern-music"]):not([data-theme="movie-quiz"]):not([data-theme="harry-potter"]):not([data-theme="dnd"]):not([data-theme="atlas"]):not([data-theme="atlas-light"]) {
+[data-theme]:not([data-theme="minecraft"]):not([data-theme="classical-music"]):not([data-theme="retro"]):not([data-theme="modern-music"]):not([data-theme="movie-quiz"]):not([data-theme="harry-potter"]):not([data-theme="dnd"]):not([data-theme="atlas"]):not([data-theme="atlas-light"]):not([data-theme="pub-quiz"]) {
   --header-bg: initial;
   --header-border-bottom: initial;
   --header-blur: initial;
@@ -1997,10 +1997,11 @@
 }
 
 /* Classical Music sets --card-entrance-animate to disable the panel fade-ins
-   on .quiz-container / .rules-container; reset it on every other theme so
-   nested showcase panels under [data-theme="classical-music"] don't inherit
-   the disabled value. */
-[data-theme]:not([data-theme="classical-music"]) {
+   on .quiz-container / .rules-container, Pub Quiz sets it to a scale-free
+   fadeIn (its dashed chalk border would crawl during scaleIn); reset it on
+   every other theme so nested showcase panels under those themes don't
+   inherit the override. */
+[data-theme]:not([data-theme="classical-music"]):not([data-theme="pub-quiz"]) {
   --card-entrance-animate: initial;
 }
 
@@ -3337,6 +3338,181 @@
   opacity: 1;
 }
 
+/* ── Theme: Pub Quiz — Kreidetafel & Kneipenabend ──
+   Slate-green chalkboard, chalk-white hand-written text, chalk-yellow
+   buttons with dark text, chalk-blue primary, pastel chalk success/error.
+   Opaque "lighter board" cards with a chalk-DASHED border, no blur, fully
+   static. Frontend-scoped: body / ::before (chalk dust) / ::after (wooden
+   frame + smudges + vignette) below. In the surface + header :not() chains.
+   Picked from a rendered three-way comparison (chalkboard / dark wood & brass /
+   light beer garden) — see specs/themes.md "Pub Quiz theme — design notes". */
+[data-theme="pub-quiz"] {
+  --font-primary: 'Patrick Hand', 'Segoe Print', 'Bradley Hand', cursive;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 999px;
+  --glass-blur: 0;
+  --glass-blur-heavy: 0;
+  --glass-opacity: 0.12;              /* cards are opaque; only gamemaster pills consume this */
+  --glass-border-opacity: 0.45;
+  --btn-text-transform: none;         /* hand-written caps read badly */
+  --btn-letter-spacing: 0.5px;
+  --btn-font-weight: 400;             /* Patrick Hand ships 400 only — no faux bold */
+  --btn-color: #1c2622;
+  --btn-glow: none;
+  --btn-glow-hover: none;
+  --bg-animate: none;
+  --orb-animate: none;
+  --entrance-animate: fadeInUp 0.6s ease-out;
+  /* Cards fade in WITHOUT the default scaleIn: a dashed border is re-laid
+     out on every size change, so a scaling card makes the chalk dashes crawl
+     along the edge. Reset to initial on other themes (see the
+     --card-entrance-animate :not() chain next to classical-music). */
+  --card-entrance-animate: fadeIn 0.5s ease-out;
+  --hover-lift: none;
+  --shadow-strength: 1;
+
+  --bg-gradient-from: #1c2622;
+  --bg-gradient-to: #121a16;
+  --bg-orb-1: rgba(242, 238, 226, 0);
+  --bg-orb-2: rgba(0, 0, 0, 0);
+
+  --glass-rgb: 242, 238, 226;
+
+  --text-primary: #f2eee2;
+  --text-rgb: 242, 238, 226;
+  --text-on-accent: #1c2622;
+  --text-heading-from: #f2d264;
+  --text-heading-to: #8dc0e8;
+
+  --accent-from: #f2d264;
+  --accent-to: #e0be48;
+  --accent-rgb: 224, 190, 72;
+  --accent-hover-from: #f7dd7e;
+  --accent-hover-to: #e9c95c;
+
+  /* Primary: chalk blue — darkened so page text riding on it reads 3.4/5.5:1 */
+  --primary-from: #4a84b8;
+  --primary-to: #33628f;
+  --primary-rgb: 74, 132, 184;
+  --primary-hover-from: #5a92c4;
+  --primary-hover-to: #3f76a8;
+
+  --success: #9fd8a8;
+  --success-from: #9fd8a8;
+  --success-to: #7cc48a;
+  --success-rgb: 159, 216, 168;
+  --success-alt-from: #9fd8a8;
+  --success-alt-to: #7cc48a;
+  --success-alt-rgb: 159, 216, 168;
+  --success-deep-from: #6fb57e;
+  --success-deep-to: #4f9d63;
+  --success-deep-rgb: 111, 181, 126;
+
+  --error: #f28b8b;
+  --error-rgb: 242, 139, 139;
+  --error-light: #f6a5a5;
+  --error-lighter: #fac4c4;
+  --error-deep-rgb: 214, 92, 92;
+  --error-banner-rgb: 242, 139, 139;
+
+  --gold: #f5d86b;
+  --gold-warm: #f9e394;
+  --gold-warm-rgb: 249, 227, 148;
+  --gold-glow-from: transparent;
+  --gold-glow-to: transparent;
+  --gold-team-label: rgba(249, 227, 148, 0.95);
+
+  --disabled-from: #8c9a92;
+  --disabled-to: #7d8a82;
+
+  --admin-accent: #f2d264;
+  --admin-accent-rgb: 242, 210, 100;
+  --admin-accent-deep: #e0be48;
+  --admin-accent-deep-rgb: 224, 190, 72;
+  --admin-accent-text: #f7dd7e;
+  --admin-accent-light: #f9e394;
+  --admin-sidebar-bg: rgba(16, 24, 20, 0.97);
+  --admin-input-bg: rgba(242, 238, 226, 0.06);
+  --admin-input-focus-bg: rgba(242, 238, 226, 0.10);
+  --admin-select-bg: #1c2622;
+  --admin-secondary-from: #4a84b8;
+  --admin-secondary-to: #33628f;
+  --admin-info-key: #8dc0e8;
+  --admin-msg-success: #9fd8a8;
+  --admin-msg-success-rgb: 159, 216, 168;
+  --admin-msg-error: #f28b8b;
+  --admin-msg-error-rgb: 242, 139, 139;
+
+  --sync-blue: #8dc0e8;
+  --download-purple: #e0be48;
+
+  /* Opt-in surface family: lighter board + chalk-dashed border */
+  --card-bg: #22302a;
+  --card-border: 2px dashed rgba(242, 238, 226, 0.55);
+  --card-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), inset 0 0 0 1px rgba(242, 238, 226, 0.06);
+  --card-backdrop-blur: 0px;
+  --input-border-color: rgba(242, 238, 226, 0.4);
+  --input-bg: rgba(0, 0, 0, 0.25);
+  --input-focus-border-color: #f2d264;
+  --input-focus-bg: rgba(0, 0, 0, 0.35);
+  --input-focus-shadow: 0 0 0 3px rgba(242, 210, 100, 0.25);
+
+  /* Opt-in header family: opaque board */
+  --header-bg: rgba(18, 26, 22, 0.94);
+  --header-border-bottom: 2px dashed rgba(242, 238, 226, 0.35);
+  --header-blur: 0px;
+
+  /* Answer reveal in CHALK YELLOW, not green: the board itself is green, so
+     green chalk text on its green tint has almost no hue contrast even though
+     it clears the AA ratio. Same move as Atlas (gold). Action-success buttons
+     keep the green --success family, so "the answer" and "action succeeded"
+     stay distinct. No !important needed — pub-quiz is in the card-token
+     :not() allowlist, so the reset never touches this. */
+  --card-success: #f2d264;
+  --card-success-rgb: 242, 210, 100;
+}
+
+[data-theme="pub-quiz"] body {
+  background: radial-gradient(ellipse 120% 100% at 50% 10%, #22302a 0%, #1c2622 45%, #121a16 100%);
+  background-attachment: fixed;
+  background-color: #121a16;
+}
+/* chalk dust — the Atlas grain tile; light specks read as chalk residue */
+[data-theme="pub-quiz"]::before {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='atlasGrain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23atlasGrain)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 180px 180px;
+  opacity: 0.12;
+}
+/* wooden frame (4 bevelled 14px bars) + two erased-chalk smudges + vignette. Static. */
+[data-theme="pub-quiz"]::after {
+  opacity: 1;
+  background:
+    linear-gradient(90deg,  #8a5a2e 0, #6b4423 3px, #5a3818 11px, #3a2410 14px),
+    linear-gradient(270deg, #8a5a2e 0, #6b4423 3px, #5a3818 11px, #3a2410 14px),
+    linear-gradient(180deg, #8a5a2e 0, #6b4423 3px, #5a3818 11px, #3a2410 14px),
+    linear-gradient(0deg,   #8a5a2e 0, #6b4423 3px, #5a3818 11px, #3a2410 14px),
+    radial-gradient(ellipse 38% 16% at 28% 62%, rgba(242, 238, 226, 0.055) 0%, transparent 70%),
+    radial-gradient(ellipse 30% 12% at 70% 30%, rgba(242, 238, 226, 0.045) 0%, transparent 70%),
+    radial-gradient(ellipse 82% 82% at 50% 45%, transparent 55%, rgba(0, 0, 0, 0.35) 100%);
+  background-size: 14px 100%, 14px 100%, 100% 14px, 100% 14px, 100% 100%, 100% 100%, 100% 100%;
+  background-position: left top, right top, left top, left bottom, center, center, center;
+  background-repeat: no-repeat;
+}
+@media (max-width: 576px) {
+  /* phones: drop the frame, keep smudge + vignette */
+  [data-theme="pub-quiz"]::after {
+    background:
+      radial-gradient(ellipse 38% 16% at 28% 62%, rgba(242, 238, 226, 0.055) 0%, transparent 70%),
+      radial-gradient(ellipse 82% 82% at 50% 45%, transparent 55%, rgba(0, 0, 0, 0.35) 100%);
+    background-size: 100% 100%;
+    background-position: center;
+    background-repeat: no-repeat;
+  }
+}
 
 .theme-preview-panel::before,
 .theme-preview-panel::after {

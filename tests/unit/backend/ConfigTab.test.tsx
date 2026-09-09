@@ -323,7 +323,7 @@ describe('ConfigTab', () => {
     await waitFor(() => expect(getStatus().state).toBe('idle'));
   });
 
-  it('Gameshow theme selector renders all 12 themes', async () => {
+  it('Gameshow theme selector renders all 13 themes', async () => {
     const { container } = renderConfigTab();
     await waitFor(() => {
       expect(screen.getByText('Themes')).toBeInTheDocument();
@@ -332,7 +332,7 @@ describe('ConfigTab', () => {
     expect(selectors).toHaveLength(2);
     // First selector = Gameshow (frontend) → every theme available.
     expect(selectors[0].querySelectorAll('.theme-option')).toHaveLength(THEMES.length);
-    expect(THEMES.length).toBe(12);
+    expect(THEMES.length).toBe(13);
   });
 
   it('Admin theme selector renders only the curated admin subset', async () => {
@@ -350,7 +350,7 @@ describe('ConfigTab', () => {
     expect(adminText).toContain('Galaxia');
     expect(adminText).toContain('Tiefsee');
     expect(adminText).toContain('Enterprise');
-    for (const removed of ['Harry Potter', 'D&D', 'Retro', 'Minecraft', 'Classical Music', 'Modern Music', 'Filme']) {
+    for (const removed of ['Harry Potter', 'D&D', 'Retro', 'Minecraft', 'Classical Music', 'Modern Music', 'Filme', 'Pub Quiz']) {
       expect(adminText).not.toContain(removed);
     }
   });
