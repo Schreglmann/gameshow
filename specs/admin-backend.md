@@ -67,7 +67,8 @@ All question forms support Add, Delete, Move Up, Move Down.
 ### Config
 Global app configuration only — gameshow management lives in its own **Gameshows** tab (see below).
 - Themes: Gameshow theme + Admin theme selectors (gradient previews)
-- Global settings: `pointSystemEnabled`, `teamRandomizationEnabled`, `jokersInLastGame`, `jokerUsageScope` ("Joker pro Spiel zurücksetzen" toggle: on = `per-game`, off = `per-gameshow`) — all rendered as toggles
+- Global settings: `pointSystemEnabled`, `teamRandomizationEnabled`, `teamMirrorEnabled`, `teamColorsEnabled` ("Team-Farben"), `jokersInLastGame`, `jokerUsageScope` ("Joker pro Spiel zurücksetzen" toggle: on = `per-game`, off = `per-gameshow`) — all rendered as toggles
+- **Team-Farben** card: four `ColorPickerField`s (swatch opening the native picker + a validated `#rrggbb` text field + a ✕ that clears to `''`), one per team, prefilled with the default palette. All four stay editable whatever the active gameshow's team count is — picking in advance is the point — with an italic hint on the ones above it. An invalid hex is rejected with a German message and never reaches `config.json`. See [team-colors.md](team-colors.md)
 - Global rules: add/remove/reorder string list
 - Save writes `config.json` atomically via `PUT /api/backend/config`, debounced 800 ms through the module-scope save queue — it survives the pane unmounting on a tab switch and retries a failed write with backoff. See [admin-save-queue.md](admin-save-queue.md)
 

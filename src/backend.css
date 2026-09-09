@@ -4942,6 +4942,22 @@
   margin-top: 10px;
 }
 
+/* One block per team. The left padding is unconditional so switching team colours
+   on or off never reflows the grid — the accent edge sits in space the block
+   already reserves. See specs/team-colors.md. */
+.session-team-block {
+  padding-left: 10px;
+  box-shadow: var(--team-edge-left) var(--team-color);
+}
+
+/* ── Konfiguration tab: the four team-colour pickers ── */
+
+.config-team-colors {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+}
+
 /* ══════════════════════════════════════════
    Responsive — mobile-first overrides
    ══════════════════════════════════════════ */
@@ -5028,6 +5044,9 @@
 
   /* Session: single column teams */
   .session-team-grid { grid-template-columns: 1fr; }
+
+  /* Team colours: one picker per row */
+  .config-team-colors { grid-template-columns: 1fr; }
 
   /* Question blocks: allow wrapping */
   .question-block-row { flex-wrap: wrap; }

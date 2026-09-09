@@ -5,6 +5,7 @@ import { ALL_TEAM_KEYS, teamKeys, teamNumber, teamPoints, teamRoster, type TeamK
 import type { TeamState } from '@/types/game';
 import StatusMessage from './StatusMessage';
 import { useConfirm } from './ConfirmContext';
+import TeamDot from '@/components/common/TeamDot';
 
 interface StorageItem {
   key: string;
@@ -150,8 +151,8 @@ export default function SessionTab() {
           {activeTeams.map(key => {
             const n = teamNumber(key);
             return (
-              <div key={key}>
-                <label className="be-label">Team {n} Name (optional)</label>
+              <div key={key} className="session-team-block" data-team={key}>
+                <label className="be-label"><TeamDot team={key} />Team {n} Name (optional)</label>
                 <input
                   className="be-input"
                   placeholder={`Team ${n}`}

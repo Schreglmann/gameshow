@@ -889,6 +889,10 @@ html.gamemaster-embedded::after {
 .gm-correct-team {
   background: var(--card-bg, rgba(var(--glass-rgb), 0.10));
   border: 1px solid rgba(var(--glass-rgb), 0.15);
+  /* Team-colour edge (no-op unless the operator enabled team colours) — the host
+     attributes a row by colour instead of re-reading four names.
+     See specs/team-colors.md. */
+  box-shadow: var(--team-edge-left) var(--team-color);
   border-radius: clamp(12px, 1.5vw, 20px);
   padding: clamp(14px, 1.8vw, 20px);
   display: flex;
@@ -1542,6 +1546,7 @@ html.gamemaster-embedded::after {
 .gm-joker-team {
   background: rgba(var(--glass-rgb), 0.10);
   border: 1px solid rgba(var(--glass-rgb), 0.12);
+  box-shadow: var(--team-edge-left) var(--team-color);
   border-radius: 10px;
   padding: clamp(10px, 1.3vw, 14px);
 }

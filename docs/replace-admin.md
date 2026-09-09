@@ -15,7 +15,7 @@ A replacement admin PWA must implement the full `/api/backend/*` surface listed 
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| `GET` | `/api/settings` | Display the active gameshow meta in the admin header. |
+| `GET` | `/api/settings` | Display the active gameshow meta in the admin header; `teamColors` carries the per-team accent colours (empty when off). |
 | `GET` | `/api/theme` | Current theme names. |
 | `PUT` | `/api/theme` | Save admin (or frontend) theme switch. |
 

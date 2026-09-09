@@ -1,11 +1,13 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { useGameContext } from '@/context/GameContext';
 import TeamJokers from '@/components/common/TeamJokers';
 import TeamHeaderName from '@/components/layout/TeamHeaderName';
+import TeamDot from '@/components/common/TeamDot';
 import { teamName, joinTeamNames, hasNamedTeams } from '@/utils/teamNames';
 import { teamDisplayOrder, splitAroundCenter } from '@/utils/teamOrder';
 import { ALL_TEAM_KEYS, leadingTeams, pointsByTeam, teamPoints, type TeamKey } from '@/utils/teams';
 import { useScoreReveal } from '@/hooks/useScoreReveal';
+import { useHeaderHeightVar } from '@/hooks/useHeaderHeightVar';
 
 interface HeaderProps {
   showGameNumber?: boolean;
@@ -62,6 +64,11 @@ export default function Header({ showGameNumber = true }: HeaderProps) {
     ? joinTeamNames(state.teams, leaders)
     : null;
 
+  // Fixed theme layers (the pub-quiz wooden frame) need to start below the
+  // sticky header, whose height is fluid. See specs/themes.md.
+  const headerRef = useRef<HTMLElement>(null);
+  useHeaderHeightVar(headerRef);
+
   const [isScrolled, setIsScrolled] = useState(false);
   useEffect(() => {
     const update = () => setIsScrolled(window.scrollY > 0);
@@ -80,7 +87,7 @@ export default function Header({ showGameNumber = true }: HeaderProps) {
     const named = hasNamedTeams(teamCount);
     const label = pointSystemEnabled ? (
       <span className="team-header-label">
-        {named && <TeamHeaderName name={teamName(state.teams, teamKey)} />}
+        {named && <><TeamDot team={teamKey} /><TeamHeaderName name={teamName(state.teams, teamKey)} /></>}
         <span className="team-header-score">
           {named ? ': ' : ''}<span>{revealPoints}</span>{' '}
           {rawPoints === 1 ? 'Punkt' : 'Punkte'}
@@ -89,7 +96,7 @@ export default function Header({ showGameNumber = true }: HeaderProps) {
     ) : null;
     const jokers = <TeamJokers team={teamKey} side={side} />;
     return (
-      <div key={teamKey} id={`${teamKey}PointsContainer`} className={`team-header-cell team-header-${side}`}>
+      <div key={teamKey} id={`${teamKey}PointsContainer`} data-team={teamKey} className={`team-header-cell team-header-${side}`}>
         {side === 'left' ? <>{label}{jokers}</> : <>{jokers}{label}</>}
       </div>
     );
@@ -128,6 +135,7 @@ export default function Header({ showGameNumber = true }: HeaderProps) {
 
   return (
     <header
+      ref={headerRef}
       className={isScrolled ? 'is-scrolled' : undefined}
       data-team-count={showTeamColumns ? order.length : 0}
     >

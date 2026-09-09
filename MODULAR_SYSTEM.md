@@ -66,6 +66,7 @@ games/
 - `gameshows[key].teamCount` — how many teams this gameshow is played with (`0`–`4`, default `2`). `0` means no teams at all, exactly like the global `pointSystemEnabled: false`; `1` keeps the point system but still has no team assignment or randomization — the audience plays against the show. A game type whose mechanic cannot be scored at that count still plays, just without scoring — see [specs/team-count.md](specs/team-count.md)
 - `gameshows[key].showTitle` — overrides the global `showTitle` while this gameshow is active (blank/omitted inherits it) — see [specs/show-title.md](specs/show-title.md)
 - `gameshows[key].pointMode` — how this gameshow turns a game result into points: `positional` (default, omitted — game N is worth N points), `flat` (every game 1 point) or `per-correct-answer` (one point per correct answer, read off the gamemaster's tally). The four inline-scored types keep their own scoring in every mode — see [specs/point-system.md](specs/point-system.md)
+- `teamColorsEnabled` / `teamColors` — Opt-in per-team colours (default: off). When on, every surface that renders a team marks it with an accent edge plus a dot beside the name, in all three zones; the four colours are picked in the admin Konfiguration tab and a blank one falls back to the active theme (see [specs/team-colors.md](specs/team-colors.md))
 - `teamRandomizationEnabled` — How the teams are formed on the `HomeScreen` (default: `true`). `true` = enter a name pool that is shuffled + split automatically; `false` = **manual assignment** — add/remove players per team by hand on the show and the gamemaster (see [specs/team-management.md](specs/team-management.md))
 - `jokersInLastGame` — Allow jokers to stay available in the last game (default: `false`; when off, the joker UI is hidden in the last game)
 - `globalRules` — Array of strings for the global rules screen
@@ -187,7 +188,7 @@ See [GAME_TYPES.md](GAME_TYPES.md) for detailed per-type documentation.
 
 | Endpoint | Response |
 |----------|----------|
-| `GET /api/settings` | `{ showTitle, pointSystemEnabled, teamRandomizationEnabled, jokersInLastGame, globalRules, enabledJokers, jokerRules }` |
+| `GET /api/settings` | `{ showTitle, pointSystemEnabled, teamRandomizationEnabled, teamColors, jokersInLastGame, globalRules, enabledJokers, jokerRules }` |
 | `GET /api/game/:index` | `{ gameId, config, currentIndex, totalGames, pointSystemEnabled }` |
 | `GET /api/background-music` | `string[]` (audio filenames) |
 

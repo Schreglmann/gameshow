@@ -135,6 +135,8 @@ read-only:
 - `SummaryScreen`: announces winner with confetti animation (5 seconds); or "Unentschieden" on a draw
 - `AdminScreen`: direct numeric input for each team's points + reset button
 
+- The award screen's cards carry `data-team` and a `<TeamDot>`, so each card shows its team's configured colour as a left edge — in the `is-selected` state too. See [team-colors.md](team-colors.md).
+
 ## Out of scope
 - Negative total points
 

@@ -4,6 +4,7 @@ import { teamRoster, type TeamKey } from '@/utils/teams';
 import { teamDisplayOrder } from '@/utils/teamOrder';
 import { tallyTotals, questionTally } from '@/utils/correctAnswers';
 import { NO_QUESTION_KEY } from '@/types/game';
+import TeamDot from './TeamDot';
 
 interface CorrectAnswersTrackerProps {
   gameIndex: number;
@@ -47,8 +48,8 @@ export default function CorrectAnswersTracker({
         : `Frage ${question}`;
 
   const renderTeam = (team: TeamKey, label: string, members: string[]) => (
-    <div className="gm-correct-team" key={team}>
-      <div className="gm-correct-label">{label}</div>
+    <div className="gm-correct-team" data-team={team} key={team}>
+      <div className="gm-correct-label"><TeamDot team={team} />{label}</div>
       {members.length > 0 && (
         <div className="gm-correct-members">{members.join(', ')}</div>
       )}

@@ -49,6 +49,14 @@ describe('CorrectAnswersTracker', () => {
     expect(counts.length).toBeGreaterThanOrEqual(2);
   });
 
+  // See specs/team-colors.md — the attribute is how the colour reaches the card.
+  it('marks each team card with data-team and a colour dot', () => {
+    renderTracker(0);
+    expect(document.querySelector('.gm-correct-team[data-team="team1"]')).toBeInTheDocument();
+    expect(document.querySelector('.gm-correct-team[data-team="team2"]')).toBeInTheDocument();
+    expect(document.querySelectorAll('.team-dot[data-team]')).toHaveLength(2);
+  });
+
   it('increments Team 1 and persists under the live question', async () => {
     const user = userEvent.setup();
     renderTracker(2, '3');

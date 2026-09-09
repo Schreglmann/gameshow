@@ -5,6 +5,7 @@ import { useGamemasterSync, useGamemasterControlsSync, useGamemasterCommandListe
 import type { GamemasterCommand } from '@/types/game';
 import { teamName, joinTeamNames } from '@/utils/teamNames';
 import { leadingTeams, teamKeys, teamPoints, teamRoster } from '@/utils/teams';
+import TeamDot from '@/components/common/TeamDot';
 import confetti from 'canvas-confetti';
 
 /** Highest stagger step; later names all share it so the list finishes quickly. */
@@ -90,6 +91,9 @@ export default function SummaryScreen() {
         text: `${teamName(state.teams, winner)} hat gewonnen!`,
         subtitle: '',
         members: teamRoster(state.teams, winner).map(capitalize),
+        // Only the single-winner case names a team, so it is the only one that
+        // can carry a colour dot. See specs/team-colors.md.
+        team: winner,
       };
     }
     // Several teams share the top score. With more than two in play, naming them
@@ -132,7 +136,7 @@ export default function SummaryScreen() {
         style={{ display: showConfetti ? 'block' : 'none' }}
       />
       <div id="summaryScreen" className="winner-announcement">
-        <h1>{result.text}</h1>
+        <h1>{'team' in result && result.team && <TeamDot team={result.team} />}{result.text}</h1>
         {result.subtitle && <p>{result.subtitle}</p>}
         {result.members.length > 0 && (
           <ul className="winner-members" data-columns={memberColumns(result.members.length)}>

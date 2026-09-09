@@ -14,6 +14,7 @@ import { teamDisplayOrder } from '@/utils/teamOrder';
 import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
 import BaseGameWrapper from './BaseGameWrapper';
 import QuizQuestionView from './QuizQuestionView';
+import TeamDot from '@/components/common/TeamDot';
 
 export default function BetQuiz(props: GameComponentProps) {
   const config = props.config as BetQuizConfig;
@@ -653,7 +654,7 @@ function BetQuizInner({
               {showOrder.map(teamKey => {
                 const members = state.teams[teamKey] ?? [];
                 return (
-                  <div className="bet-quiz-team-choice" key={teamKey}>
+                  <div className="bet-quiz-team-choice" data-team={teamKey} key={teamKey}>
                     {members.length > 0 && (
                       <div className="bet-quiz-team-members">{members.join(', ')}</div>
                     )}
@@ -662,7 +663,7 @@ function BetQuizInner({
                       className={`quiz-button${bettingTeam === teamKey ? ' active' : ''}`}
                       onClick={() => setBettingTeam(teamKey)}
                     >
-                      {teamLabels[teamKey]}
+                      <TeamDot team={teamKey} />{teamLabels[teamKey]}
                     </button>
                   </div>
                 );

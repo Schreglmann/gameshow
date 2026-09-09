@@ -14,6 +14,7 @@ import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
 import BaseGameWrapper from './BaseGameWrapper';
 import QuizQuestionView from './QuizQuestionView';
 import AwardPoints, { selectedTeams, type AwardPointsWinners } from '@/components/common/AwardPoints';
+import TeamDot from '@/components/common/TeamDot';
 
 /** Nothing picked yet on the summary reward screen. Module-level for a stable identity. */
 const NO_WINNERS: AwardPointsWinners = {};
@@ -633,7 +634,7 @@ function WerKenntMehrInner({
               const members = state.teams[teamKey] ?? [];
               const sel = selected[teamKey] === true;
               return (
-                <div className="bet-quiz-team-choice" key={teamKey}>
+                <div className="bet-quiz-team-choice" data-team={teamKey} key={teamKey}>
                   {members.length > 0 && (
                     <div className="bet-quiz-team-members">{members.join(', ')}</div>
                   )}
@@ -645,7 +646,7 @@ function WerKenntMehrInner({
                       setScoringActive(true);
                     }}
                   >
-                    {labelOf(teamKey)}
+                    <TeamDot team={teamKey} />{labelOf(teamKey)}
                   </button>
                 </div>
               );

@@ -327,25 +327,24 @@ main {
     overflow-wrap: anywhere;
 }
 
-/* House-color accents — themes may set --team1-house … --team4-house to tint
-   the team cards (e.g. Harry Potter: Gryffindor crimson + Slytherin green).
-   Defaults to transparent, so other themes render the plain card. All FOUR
-   teams need a rule: with only #team1/#team2 defined, a 3-4 team show drew two
-   accented cards next to two plain ones. See specs/team-count.md. */
-#team1 {
-    box-shadow: var(--card-shadow, 0 8px 32px rgba(0, 0, 0, 0.1)), inset 0 0 0 3px var(--team1-house, transparent);
+/* Team-colour accent ring. One rule for all four teams: `--team-color` is
+   resolved per team key from `data-team` in team-accent.css — the operator's
+   configured colour if there is one, else the theme's house colour (e.g. Harry
+   Potter: Gryffindor crimson + Slytherin green), else transparent.
+
+   Deliberately UNGATED by `data-team-colors`: the house ring predates the
+   operator setting and has to keep rendering with the feature switched off.
+
+   The :hover rule exists because `.team:hover` above replaces `box-shadow`
+   wholesale, which used to drop the ring while the pointer was over a card.
+   Both selectors are (0,2,0), so this block must stay AFTER `.team:hover`.
+   See specs/team-colors.md and specs/team-count.md. */
+.team[data-team] {
+    box-shadow: var(--card-shadow, 0 8px 32px rgba(0, 0, 0, 0.1)), inset 0 0 0 3px var(--team-color);
 }
 
-#team2 {
-    box-shadow: var(--card-shadow, 0 8px 32px rgba(0, 0, 0, 0.1)), inset 0 0 0 3px var(--team2-house, transparent);
-}
-
-#team3 {
-    box-shadow: var(--card-shadow, 0 8px 32px rgba(0, 0, 0, 0.1)), inset 0 0 0 3px var(--team3-house, transparent);
-}
-
-#team4 {
-    box-shadow: var(--card-shadow, 0 8px 32px rgba(0, 0, 0, 0.1)), inset 0 0 0 3px var(--team4-house, transparent);
+.team[data-team]:hover {
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2), inset 0 0 0 3px var(--team-color);
 }
 
 /* Swap which team sits on the frontend's left (physical seating); the gamemaster

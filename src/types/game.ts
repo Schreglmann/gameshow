@@ -1,4 +1,4 @@
-import type { PointMode } from './config.js';
+import type { PointMode, TeamColors } from './config.js';
 import type { TeamKey } from '../utils/teams.js';
 
 /**
@@ -188,6 +188,14 @@ export interface GlobalSettings {
    * See specs/team-order-mirror.md.
    */
   teamMirrorEnabled: boolean;
+  /**
+   * Per-team accent colours, resolved server-side — empty when the operator has
+   * the feature switched off, so this alone says whether to mark a team. No
+   * component reads it directly: `useTeamColorVars` publishes it to CSS as
+   * `--team1-color` … `--team4-color` and every team surface picks it up through
+   * its `data-team` attribute. See specs/team-colors.md.
+   */
+  teamColors: TeamColors;
   globalRules: string[];
   /**
    * True when the server fell back to the template-based default config

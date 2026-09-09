@@ -8,6 +8,7 @@ import { useQuestionOrder } from '@/hooks/useQuestionOrder';
 import { useGameContext } from '@/context/GameContext';
 import { teamName } from '@/utils/teamNames';
 import { ALL_TEAM_KEYS, teamKeys, teamRoster, type TeamKey } from '@/utils/teams';
+import TeamDot from '@/components/common/TeamDot';
 
 type Difficulty = 'easy' | 'medium' | 'hard';
 type Phase = 'betting' | 'question';
@@ -394,8 +395,8 @@ function QuizjagdInner({ config, gameId, pointSystemEnabled, onGameComplete, set
           : ''}
       </h2>
       {(exampleDifficulty !== null || turn.phase === 'question' || turn.phase === 'betting') && (
-        <p className="quizjagd-team-label">
-          {teamLabel} ist dran{teamPlayers.length > 0 ? ` · ${teamPlayers.join(' & ')}` : ''}
+        <p className="quizjagd-team-label" data-team={turn.team}>
+          <TeamDot team={turn.team} />{teamLabel} ist dran{teamPlayers.length > 0 ? ` · ${teamPlayers.join(' & ')}` : ''}
         </p>
       )}
 

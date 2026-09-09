@@ -1,3 +1,5 @@
+import type { TeamKey } from '../utils/teams.js';
+
 // ── Game configuration types ──
 
 export type GameType =
@@ -552,6 +554,20 @@ export interface RulesPreset {
  */
 export type JokerUsageScope = 'per-gameshow' | 'per-game';
 
+/**
+ * The operator's colour per team, as `#rrggbb`.
+ *
+ * Three states per team, and the middle one is the subtle one: an ABSENT key
+ * means the operator never touched it, so the default palette applies; a key
+ * present with an EMPTY string is an explicit "no colour", falling back to the
+ * active theme's `--teamN-house` and then to no accent at all. That is why the
+ * admin stores `''` on clear instead of deleting the key.
+ *
+ * Resolved in a single place — `resolveTeamColors()` in
+ * [src/utils/teamColors.ts](../utils/teamColors.ts). See specs/team-colors.md.
+ */
+export type TeamColors = Partial<Record<TeamKey, string>>;
+
 export interface AppConfig {
   /**
    * What the show calls itself, globally: the landing-page heading, the
@@ -570,6 +586,19 @@ export interface AppConfig {
    * See specs/team-order-mirror.md.
    */
   teamMirrorEnabled?: boolean;
+  /**
+   * Master switch for per-team colours — opt-in, default false/unset. When true,
+   * every surface that renders a team marks it with that team's colour: an accent
+   * edge plus a dot next to the name. Text colour is never changed and no
+   * background is tinted. See specs/team-colors.md.
+   */
+  teamColorsEnabled?: boolean;
+  /**
+   * The four operator-picked team colours. Only consulted while
+   * `teamColorsEnabled` is true; see `TeamColors` for the absent/blank/hex
+   * semantics. See specs/team-colors.md.
+   */
+  teamColors?: TeamColors;
   /**
    * When true, jokers stay available in the last game just like any other
    * game. When false/undefined (default), the joker UI is hidden entirely
@@ -717,6 +746,14 @@ export interface SettingsResponse {
    * false there is neither. See specs/team-order-mirror.md.
    */
   teamMirrorEnabled?: boolean;
+  /**
+   * The per-team accent colours, with the master switch ALREADY applied — an
+   * empty or omitted map means "mark nothing", so no client re-derives
+   * `AppConfig.teamColorsEnabled` (which is deliberately not on the wire). A team
+   * missing from the map is marked by the active theme's `--teamN-house`, if it
+   * has one. See specs/team-colors.md.
+   */
+  teamColors?: TeamColors;
   globalRules: string[];
   /**
    * True when the server is running with the built-in template fallback

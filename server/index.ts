@@ -11,6 +11,7 @@ import { resolveRulesPreset } from '../src/utils/rulesPreset.js';
 import { DEFAULT_TEAM_COUNT } from '../src/utils/teams.js';
 import { normalizePointMode, pointModeRule } from '../src/utils/pointMode.js';
 import { resolveShowTitle } from '../src/utils/showTitle.js';
+import { resolveTeamColors } from '../src/utils/teamColors.js';
 import { effectiveTeamCount, gameIsScorable, listIncompatibleGames, hasTeamSplit } from './team-count.js';
 import { isAudioFile, normalizeAudioFile } from './normalize.js';
 import { fetchAndSavePoster, videoFilenameToSlug, MOVIE_POSTERS_SUBDIR } from './movie-posters.js';
@@ -3866,6 +3867,10 @@ app.get('/api/settings', async (_req, res) => {
       // them. Forced off at 0 and 1 teams rather than left to each client.
       teamRandomizationEnabled: hasTeamSplit(teamCount) && config.teamRandomizationEnabled !== false,
       teamMirrorEnabled: config.teamMirrorEnabled === true,
+      // Per-team accent colours, with the master switch applied HERE — an empty
+      // map already means "mark nothing", so no client re-derives the flag.
+      // See specs/team-colors.md.
+      teamColors: resolveTeamColors(config),
       // The scoring line is never stored — it always follows the active gameshow's
       // pointMode, appended after the operator's (or default) framing lines, so it
       // can't drift from a gameshow whose pointMode differs from when the text was

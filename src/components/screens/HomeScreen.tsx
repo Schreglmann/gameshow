@@ -9,6 +9,7 @@ import { ALL_TEAM_KEYS, teamKeys, teamNumber, teamRoster, isTeamKey, type TeamKe
 import TeamCountWarning from '@/components/screens/TeamCountWarning';
 import CacheStatusBanner from './CacheStatusBanner';
 import InstallButton from '@/components/common/InstallButton';
+import TeamDot from '@/components/common/TeamDot';
 
 export default function HomeScreen() {
   const { state, dispatch, assignTeams } = useGameContext();
@@ -366,7 +367,7 @@ export default function HomeScreen() {
     const n = teamNumber(key);
     const members = memberDrafts[key] ?? [];
     return (
-    <div className="team" id={`${key}`} key={key} onClick={e => e.stopPropagation()}>
+    <div className="team" id={`${key}`} data-team={key} key={key} onClick={e => e.stopPropagation()}>
       {editingTeam === key ? (
         <>
           <input
@@ -396,7 +397,7 @@ export default function HomeScreen() {
           title="Zum Umbenennen klicken"
           onClick={e => { e.stopPropagation(); startEdit(key); }}
         >
-          {teamName(state.teams, key)}
+          <TeamDot team={key} />{teamName(state.teams, key)}
         </h2>
       )}
       <ul className="team-members team-members-editable">

@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { ThemeProvider, THEMES, ADMIN_THEMES } from '@/context/ThemeContext';
 import ConfigTab from '@/components/backend/ConfigTab';
 import { GENERIC_JOKER_RULES } from '@/data/jokers';
 import { POINT_MODE_RULE_DEFAULTS } from '@/utils/pointMode';
+import { DEFAULT_TEAM_COLORS } from '@/utils/teamColors';
 import type { AppConfig } from '@/types/config';
 import { getStatus } from '@/services/saveQueue';
 
@@ -198,6 +199,110 @@ describe('ConfigTab', () => {
         expect.objectContaining({ showTitle: 'Sommerfest' })
       );
     });
+  });
+
+  // Per-team colours — see specs/team-colors.md.
+  it('prefills the four colour fields with the default palette', async () => {
+    renderConfigTab();
+    await waitFor(() => {
+      expect(screen.getByRole('checkbox', { name: 'Team-Farben' })).not.toBeChecked();
+    });
+    // Two inputs per team (the hidden native picker + the hex text field), both
+    // carrying the same accessible name.
+    expect(screen.getAllByLabelText('Farbe Team 1')[1]).toHaveValue(DEFAULT_TEAM_COLORS.team1);
+    expect(screen.getAllByLabelText('Farbe Team 4')[1]).toHaveValue(DEFAULT_TEAM_COLORS.team4);
+  });
+
+  it('flipping the Team-Farben toggle autosaves config.teamColorsEnabled', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderConfigTab();
+    await waitFor(() => {
+      expect(screen.getByRole('checkbox', { name: 'Team-Farben' })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('checkbox', { name: 'Team-Farben' }));
+
+    act(() => { vi.advanceTimersByTime(800); });
+
+    await waitFor(() => {
+      expect(mockSaveConfig).toHaveBeenCalledWith(
+        expect.objectContaining({ teamColorsEnabled: true })
+      );
+    }, { timeout: 5000 });
+  });
+
+  it('editing one colour persists only that team — the others stay absent', async () => {
+    // An untouched team must NOT be materialized: absent means "use the default",
+    // which is a different stored state from an explicit value.
+    //
+    // Driven through the native colour picker (the first of the field's two
+    // inputs), which commits inside its own onChange. The text field commits on
+    // BLUR instead, and under full-suite load the change event's state update
+    // had not always reached the draft by then, so blur committed the old value.
+    renderConfigTab();
+    await waitFor(() => {
+      expect(screen.getAllByLabelText('Farbe Team 2')[0]).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getAllByLabelText('Farbe Team 2')[0]!, {
+      target: { value: '#123456' },
+    });
+    act(() => { vi.advanceTimersByTime(800); });
+
+    await waitFor(() => {
+      expect(mockSaveConfig).toHaveBeenCalledWith(
+        expect.objectContaining({ teamColors: { team2: '#123456' } })
+      );
+    }, { timeout: 5000 });
+  });
+
+  it('clearing a colour stores an empty string, not an absent key', async () => {
+    // Blank is the operator's explicit "use the theme's colour" — deleting the
+    // key instead would silently restore the default palette entry.
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderConfigTab();
+    await waitFor(() => {
+      expect(screen.getAllByLabelText('Farbe Team 3')[1]).toBeInTheDocument();
+    });
+
+    const removeButtons = screen.getAllByTitle('Farbe entfernen (Farbe des Themes verwenden)');
+    await user.click(removeButtons[2]!);
+    act(() => { vi.advanceTimersByTime(800); });
+
+    await waitFor(() => {
+      expect(mockSaveConfig).toHaveBeenCalledWith(
+        expect.objectContaining({ teamColors: { team3: '' } })
+      );
+    }, { timeout: 5000 });
+  });
+
+  it('rejects an invalid hex with a German message and does not save it', async () => {
+    // REAL timers for this one. Nothing here waits on the save debounce — an
+    // invalid value must never reach the queue in the first place — and the
+    // fake clock actively gets in the way: it replaces the timers React's
+    // scheduler uses, so the field's draft never reached it before the blur and
+    // the handler committed the previous, VALID value with no error at all.
+    vi.useRealTimers();
+    renderConfigTab();
+    await waitFor(() => {
+      expect(screen.getAllByLabelText('Farbe Team 1')[1]).toBeInTheDocument();
+    });
+
+    const field = screen.getAllByLabelText('Farbe Team 1')[1]!;
+    fireEvent.change(field, { target: { value: '#nope' } });
+    await waitFor(() => expect(field).toHaveValue('#nope'));
+    fireEvent.blur(field);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Ungültiger Hex-Code "#nope" – bitte im Format #rrggbb eingeben.',
+    );
+    // Asserted on the VALUE rather than as "teamColors was never saved": the save
+    // queue is module-scoped, so a preceding test's debounced write can still land
+    // here and would make the broader negative assertion fail at random.
+    for (const [saved] of mockSaveConfig.mock.calls) {
+      expect((saved as AppConfig).teamColors?.team1).not.toBe('#nope');
+    }
+    expect(screen.getAllByLabelText('Farbe Team 1')[1]).toHaveValue(DEFAULT_TEAM_COLORS.team1);
   });
 
   it('renders "Joker-Regeln" card', async () => {

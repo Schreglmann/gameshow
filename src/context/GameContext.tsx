@@ -21,6 +21,8 @@ import type { ContentChangedPayload } from '@/types/config';
 import { COMEBACK_JOKER_ID } from '@/data/jokers';
 import { fetchSettings } from '@/services/api';
 import { DEFAULT_SHOW_TITLE, cacheShowTitle, normalizeShowTitle } from '@/utils/showTitle';
+import { normalizeTeamColors } from '@/utils/teamColors';
+import { useTeamColorVars } from '@/hooks/useTeamColorVars';
 import { onWsOpen, sendWs, useWsChannel } from '@/services/useBackendSocket';
 import { isInactiveShowTab, onBecameActive, onReemitRequest } from '@/services/showPresenceState';
 import {
@@ -553,6 +555,7 @@ function getInitialState(): AppState {
       incompatibleGames: [],
       teamRandomizationEnabled: true,
       teamMirrorEnabled: false,
+      teamColors: {},
       globalRules: [],
       isCleanInstall: false,
       enabledJokers: [],
@@ -984,6 +987,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
           incompatibleGames: data.incompatibleGames ?? [],
           teamRandomizationEnabled: data.teamRandomizationEnabled !== false,
           teamMirrorEnabled: data.teamMirrorEnabled === true,
+          // Already gated server-side — an empty map means "mark nothing".
+          teamColors: normalizeTeamColors(data.teamColors),
           globalRules: data.globalRules || [],
           isCleanInstall: data.isCleanInstall === true,
           enabledJokers: data.enabledJokers || [],
@@ -1265,6 +1270,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     loadSettingsAction();
   }, [loadSettingsAction]);
+
+  // Publish the operator's team colours to CSS for every zone at once — the show,
+  // the gamemaster and the admin all mount this provider. See specs/team-colors.md.
+  useTeamColorVars(state.settings.teamColors);
 
   // Cross-tab sync of currentGame: when the show tab dispatches
   // SET_CURRENT_GAME and writes to localStorage, the storage event fires in

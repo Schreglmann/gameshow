@@ -35,6 +35,14 @@ function renderAward(props: Partial<Parameters<typeof AwardPoints>[0]> = {}) {
 const confirmButton = () => screen.getByRole('button', { name: 'Punkte vergeben & weiter' });
 
 describe('AwardPoints', () => {
+  // Both card branches (button and read-only div) must carry it — the read-only
+  // one is easy to forget. See specs/team-colors.md.
+  it('marks each card with data-team and a colour dot, selectable and read-only', () => {
+    renderAward();
+    expect(document.querySelectorAll('.award-team-card[data-team]')).toHaveLength(2);
+    expect(document.querySelectorAll('.award-team-card .team-dot[data-team]')).toHaveLength(2);
+  });
+
   it('opens with nothing selected: no points, confirm disabled', () => {
     renderAward();
     expect(screen.getByText('Punkte vergeben')).toBeInTheDocument();

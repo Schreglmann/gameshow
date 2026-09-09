@@ -82,6 +82,8 @@ throughout the gameshow, giving the host and players a constant overview of the 
 - `showGameNumber` prop defaults to `true`; set to `false` on screens where no active game is loaded (e.g. `HomeScreen`, `GlobalRulesScreen`)
 - Point totals update reactively as `AppState` changes
 
+- Each team's cell carries `data-team` and a `<TeamDot>` before the name, so the operator's per-team colour marks it with a coloured underline plus a dot. See [team-colors.md](team-colors.md).
+
 ## Out of scope
 - Editing team names or points from the header (that is `AdminScreen`)
 - Per-player score breakdown

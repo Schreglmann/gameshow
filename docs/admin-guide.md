@@ -133,6 +133,24 @@ mode needs exactly two). If your gameshow contains such a game, the card shows a
 affected rows get an **"Ohne Wertung"** badge. Those games still play in full — they simply don't
 award points, and the same warning appears on the show's start screen so the host knows in advance.
 
+### Giving each team its own colour
+
+Turn on **Team-Farben** in the *Konfiguration* tab, then pick a colour per team in the
+**Team-Farben** card just below it. Once it is on, every place a team appears is marked with
+that colour — the start screen's team cards, the score header, the guess and award screens,
+the gamemaster's panels and the admin's own team fields. It is always an accent: a coloured
+edge plus a small dot next to the team's name, never coloured text or a tinted background,
+so the colours cannot make anything harder to read on a projector.
+
+All four colour fields stay editable no matter how many teams the active gameshow uses, so
+you can set them up before you decide on the team count. Clear a field (the ✕ next to it) to
+let the *theme* decide that team's colour instead — Harry Potter, for instance, brings its own
+house colours. With **Team-Farben** switched off, nothing is marked and the show looks exactly
+as it did before.
+
+Colours are global: every gameshow on this installation uses the same four. Changing one
+reaches a running show within a second, without reloading anything.
+
 ### Choosing how points are awarded
 
 Next to the **Teams** dropdown sits a **Punkte** dropdown deciding how each game's result becomes

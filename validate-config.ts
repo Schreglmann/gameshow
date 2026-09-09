@@ -12,6 +12,8 @@ import type { GameType, AppConfig, GameConfig, PointMode } from './src/types/con
 import { JOKER_CATALOG } from './src/data/jokers.js';
 import { gameSupportsTeamCount, gameUsesCorrectAnswerTally, teamCountSupportLabel } from './src/data/gameTypeInfo.js';
 import { ALL_POINT_MODES, DEFAULT_POINT_MODE } from './src/utils/pointMode.js';
+import { isTeamKey } from './src/utils/teams.js';
+import { isValidHex } from './src/utils/hexColor.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -198,6 +200,34 @@ function validateConfig(): void {
       errors.push('"showTitle" must be a string');
     } else if (config.showTitle.trim() === '') {
       warnings.push('"showTitle" is empty — the default title "Game Show" is used');
+    }
+  }
+
+  // Per-team colours (optional). Two things are worth a warning rather than an
+  // error, because both are silently ineffective rather than broken: a blank
+  // value (that team falls back to the theme) and a palette with the master
+  // switch off (nothing is marked at all). See specs/team-colors.md.
+  if (config.teamColorsEnabled !== undefined && typeof config.teamColorsEnabled !== 'boolean') {
+    errors.push('"teamColorsEnabled" must be a boolean');
+  }
+  if (config.teamColors !== undefined) {
+    if (typeof config.teamColors !== 'object' || config.teamColors === null || Array.isArray(config.teamColors)) {
+      errors.push('"teamColors" must be an object keyed by team1…team4');
+    } else {
+      for (const [key, value] of Object.entries(config.teamColors)) {
+        if (!isTeamKey(key)) {
+          errors.push(`"teamColors": unknown key "${key}" (expected team1…team4)`);
+        } else if (typeof value !== 'string') {
+          errors.push(`"teamColors.${key}" must be a string`);
+        } else if (value.trim() === '') {
+          warnings.push(`"teamColors.${key}" is empty — that team falls back to the theme colour`);
+        } else if (!isValidHex(value)) {
+          errors.push(`"teamColors.${key}": "${value}" is not a #rrggbb colour`);
+        }
+      }
+      if (config.teamColorsEnabled !== true) {
+        warnings.push('"teamColors" is set but "teamColorsEnabled" is not true — no team is marked');
+      }
     }
   }
 

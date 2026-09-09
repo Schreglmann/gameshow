@@ -940,6 +940,10 @@
     color: inherit;
     cursor: pointer;
     transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+    /* Team-colour edge (no-op unless the operator enabled team colours). Kept a
+       LEFT edge rather than a ring so it never reads as the gold selection
+       border below. See specs/team-colors.md. */
+    box-shadow: var(--team-edge-left) var(--team-color);
 }
 
 .award-team-card:hover {
@@ -963,7 +967,9 @@
 .award-team-card.is-selected {
     background: rgba(var(--card-gold-rgb, var(--gold-warm-rgb)), 0.18);
     border-color: rgba(var(--card-gold-rgb, var(--gold-warm-rgb)), 0.75);
-    box-shadow: 0 8px 32px rgba(var(--card-gold-rgb, var(--gold-warm-rgb)), 0.25);
+    /* The gold glow REPLACES the base rule's shadow, so the team edge has to be
+       re-appended here or picking a team would erase its colour. */
+    box-shadow: 0 8px 32px rgba(var(--card-gold-rgb, var(--gold-warm-rgb)), 0.25), var(--team-edge-left) var(--team-color);
 }
 
 .award-team-card-name {
@@ -1141,12 +1147,14 @@
     border-radius: 15px;
     animation: fadeIn 0.5s ease-out;
     transition: all 0.3s ease;
+    /* Team-colour edge — see the award cards above. */
+    box-shadow: var(--team-edge-left) var(--team-color);
 }
 
 .guess-result-team.is-winner {
     background: rgba(var(--card-gold-rgb, var(--gold-warm-rgb)), 0.18);
     border-color: rgba(var(--card-gold-rgb, var(--gold-warm-rgb)), 0.75);
-    box-shadow: 0 8px 32px rgba(var(--card-gold-rgb, var(--gold-warm-rgb)), 0.25);
+    box-shadow: 0 8px 32px rgba(var(--card-gold-rgb, var(--gold-warm-rgb)), 0.25), var(--team-edge-left) var(--team-color);
 }
 
 .guess-result-team-name {

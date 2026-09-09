@@ -12,6 +12,7 @@ import { ALL_TEAM_KEYS, teamKeys, teamPoints, isTeamKey, type TeamKey } from '@/
 import { teamDisplayOrder } from '@/utils/teamOrder';
 import BaseGameWrapper from './BaseGameWrapper';
 import { useFullscreen, useRegisterFullscreenMedia } from '@/context/FullscreenContext';
+import TeamDot from '@/components/common/TeamDot';
 
 export default function FinalQuiz(props: GameComponentProps) {
   const config = props.config as FinalQuizConfig;
@@ -295,6 +296,7 @@ function FinalQuizInner({ questions, order, gameTitle, pointSystemEnabled, onGam
               type="number"
               placeholder={`Punkte ${labelOf(teamKey)}`}
               className="guess-input betting-input"
+              data-team={teamKey}
               value={bets[teamKey] ?? ''}
               onChange={e => setBets(prev => ({ ...prev, [teamKey]: e.target.value }))}
             />
@@ -331,7 +333,7 @@ function FinalQuizInner({ questions, order, gameTitle, pointSystemEnabled, onGam
             const result = results[teamKey] ?? null;
             return (
               <div className="judgment-group" key={teamKey}>
-                <h3>{label}:</h3>
+                <h3><TeamDot team={teamKey} />{label}:</h3>
                 <button
                   className={`quiz-button${result === 'correct' ? ' active' : ''}`}
                   onClick={() => judgeTeam(teamKey, true)}

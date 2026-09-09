@@ -23,6 +23,7 @@ import { ALL_TEAM_KEYS, teamKeys, type TeamKey } from '@/utils/teams';
 import { teamDisplayOrder } from '@/utils/teamOrder';
 import BaseGameWrapper from './BaseGameWrapper';
 import { useFullscreen, useRegisterFullscreenMedia } from '@/context/FullscreenContext';
+import TeamDot from '@/components/common/TeamDot';
 
 export default function GuessingGame(props: GameComponentProps) {
   const config = props.config as GuessingGameConfig;
@@ -571,8 +572,8 @@ function GuessingInner({ questions, order, gameTitle, autoScoring, gameIndex, ga
         <form className="guess-form" onSubmit={handleSubmit}>
           <div className="guess-fields" data-team-count={showOrder.length}>
             {showOrder.map(teamKey => (
-              <div className="guess-field" key={teamKey}>
-                <label htmlFor={`${teamKey}Guess`}>Tipp {labelOf(teamKey)}:</label>
+              <div className="guess-field" data-team={teamKey} key={teamKey}>
+                <label htmlFor={`${teamKey}Guess`}><TeamDot team={teamKey} />Tipp {labelOf(teamKey)}:</label>
                 <input
                   type="number"
                   id={`${teamKey}Guess`}
@@ -604,8 +605,8 @@ function GuessingInner({ questions, order, gameTitle, autoScoring, gameIndex, ga
               const isTie = resultInfo.winners.length > 1;
               const won = resultInfo.winners.includes(teamKey);
               return (
-                <div className={`guess-result-team${won && !isTie ? ' is-winner' : ''}`} key={teamKey}>
-                  <span className="guess-result-team-name">{labelOf(teamKey)}</span>
+                <div className={`guess-result-team${won && !isTie ? ' is-winner' : ''}`} data-team={teamKey} key={teamKey}>
+                  <span className="guess-result-team-name"><TeamDot team={teamKey} />{labelOf(teamKey)}</span>
                   <span className="guess-result-guess">{formatNumber(entry.guess)}</span>
                   <span className="guess-result-diff">Differenz: {formatNumber(entry.diff)}</span>
                   {won && !isTie && <span className="guess-result-badge">Näher dran!</span>}

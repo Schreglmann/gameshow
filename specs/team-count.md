@@ -221,7 +221,9 @@ Declared on `GameTypeInfo.supportedTeamCounts` in
 
 ## Out of scope
 - More than 4 teams.
-- Per-team colours or avatars beyond the `--teamN-*` theme variables.
+- Avatars or images per team. Per-team *colours* are in scope again as of
+  [team-colors.md](team-colors.md) — the operator picks one per team and it marks every
+  team surface; this spec still only decides which teams exist.
 - Predefining team names or memberships in `config.json` (names still live only in live team state).
 - Generalizing the two genuinely head-to-head mechanics: `bet-quiz` `transfer` and `wer-kennt-mehr`
   `count-penalty` stay 2-only by design.

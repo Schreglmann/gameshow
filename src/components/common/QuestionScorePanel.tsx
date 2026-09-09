@@ -4,6 +4,7 @@ import { teamName, hasNamedTeams } from '@/utils/teamNames';
 import { teamDisplayOrder } from '@/utils/teamOrder';
 import { buildTallyRows, buildPointRows, type BreakdownRow, type ScoreCell } from '@/utils/questionScores';
 import type { TeamKey } from '@/utils/teams';
+import TeamDot from './TeamDot';
 
 /**
  * Gamemaster per-question breakdown ("Wertung pro Frage"). Answers the question
@@ -77,7 +78,8 @@ export default function QuestionScorePanel({
           <div className="gm-qscore-row gm-qscore-row--head" aria-hidden="true">
             <span className="gm-qscore-label" />
             {order.map(team => (
-              <span key={team} className="gm-qscore-team">
+              <span key={team} className="gm-qscore-team" data-team={team}>
+                <TeamDot team={team} />
                 {hasNamedTeams(order.length) ? teamName(state.teams, team) : 'Punkte'}
               </span>
             ))}

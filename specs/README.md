@@ -31,6 +31,7 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | Team management | [team-management.md](team-management.md) | ✅ Implemented |
 | Dynamic team count (0–4 teams) | [team-count.md](team-count.md) | ✅ Implemented |
 | Team order & gamemaster mirror | [team-order-mirror.md](team-order-mirror.md) | ✅ Implemented |
+| Per-team colours (operator-picked accents) | [team-colors.md](team-colors.md) | ✅ Implemented |
 | Point system | [point-system.md](point-system.md) | ✅ Implemented |
 | Show title (custom landing-page text) | [show-title.md](show-title.md) | ✅ Implemented |
 | Config system | [config-system.md](config-system.md) | ✅ Implemented |

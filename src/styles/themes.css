@@ -1424,6 +1424,20 @@
   --team4-house: initial;
 }
 
+/* The operator's team colours live in <html>'s inline style and therefore inherit
+   into the showcase's nested theme panels, which would make every panel show the
+   same four colours and leave each THEME's house colours unverifiable — the whole
+   point of /theme-showcase. Reset them here (a declaration on the element beats an
+   inherited value) rather than in the chain above: that chain matches <html> too,
+   so listing --teamN-color there would silently wipe the operator's setting on
+   every theme it does not exclude. See specs/team-colors.md. */
+.theme-preview-panel {
+  --team1-color: initial;
+  --team2-color: initial;
+  --team3-color: initial;
+  --team4-color: initial;
+}
+
 /* Retro — CRT scanlines + slow horizontal scan sweep */
 [data-theme="retro"]::before {
   background:
@@ -3279,6 +3293,16 @@
 [data-theme="atlas-light"] .guess-result-team.is-winner {
   box-shadow: none;
 }
+/* …but `none` above would also drop the team-colour edge on exactly the two
+   states a host looks at most (the picked award card, the winning guess row), so
+   restore it at higher specificity. With team colours off this resolves to the
+   transparent no-op, i.e. the same thing as `none`. See specs/team-colors.md. */
+[data-theme="atlas"] .award-team-card.is-selected[data-team],
+[data-theme="atlas-light"] .award-team-card.is-selected[data-team],
+[data-theme="atlas"] .guess-result-team.is-winner[data-team],
+[data-theme="atlas-light"] .guess-result-team.is-winner[data-team] {
+  box-shadow: var(--team-edge-left) var(--team-color);
+}
 /* bandlePulse / bandleAnswerPulse animate box-shadow glow — kill them (the
    active track stays marked by its solid primary fill + border). */
 [data-theme="atlas"] .bandle-track.revealed.active,
@@ -3490,6 +3514,20 @@
 /* wooden frame (4 bevelled 14px bars) + two erased-chalk smudges + vignette. Static. */
 [data-theme="pub-quiz"]::after {
   opacity: 1;
+  /* The frame is a physical object in front of the board, so it has to paint OVER
+     the content — the shared html::after sits at z-index 0, i.e. behind `main`
+     (z-index 1), which left the bars covered by anything that reached the edge.
+     Still below the sticky header (z-index 100), so the header stays fully
+     visible and the frame reads as starting underneath it. Scoped to this theme:
+     the other themes' atmosphere layers belong behind the content.
+     `pointer-events: none` on the base rule keeps it click-through.
+
+     `top` starts the frame BELOW the sticky header (--header-h, published by
+     `useHeaderHeightVar`; 0 on screens that have no header), so the top bar is
+     visible instead of hidden behind it and the content area is closed off on
+     all four sides. */
+  top: var(--header-h, 0px);
+  z-index: 50;
   background:
     linear-gradient(90deg,  #8a5a2e 0, #6b4423 3px, #5a3818 11px, #3a2410 14px),
     linear-gradient(270deg, #8a5a2e 0, #6b4423 3px, #5a3818 11px, #3a2410 14px),
@@ -3505,6 +3543,9 @@
 @media (max-width: 576px) {
   /* phones: drop the frame, keep smudge + vignette */
   [data-theme="pub-quiz"]::after {
+    /* No frame here, so back behind the content: a full-viewport vignette over
+       the content is only wanted as part of the frame. */
+    z-index: 0;
     background:
       radial-gradient(ellipse 38% 16% at 28% 62%, rgba(242, 238, 226, 0.055) 0%, transparent 70%),
       radial-gradient(ellipse 82% 82% at 50% 45%, transparent 55%, rgba(0, 0, 0, 0.35) 100%);

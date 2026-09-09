@@ -21,6 +21,8 @@ All gameshow content — which games run, in what order, with what questions —
 - `AppState.settings`: loaded once on app start from `GET /api/settings`
   - `pointSystemEnabled: boolean`
   - `teamRandomizationEnabled: boolean`
+  - `teamColorsEnabled?: boolean` — master switch for per-team colours (opt-in; see [team-colors.md](team-colors.md))
+  - `teamColors?: Partial<Record<TeamKey, string>>` — the four `#rrggbb` colours; an absent key means the default palette, a blank one means "use the active theme's colour"
   - `jokersInLastGame: boolean` (top-level `AppConfig` flag, default `false`; when `true`, jokers stay available in the last game)
   - `jokerUsageScope: 'per-gameshow' | 'per-game'` (top-level `AppConfig` flag, default `'per-gameshow'`; `'per-game'` refreshes all jokers except the Aufholjoker at the start of each game — see [jokers.md](jokers.md))
   - `globalRules: string[]` — as stored in `config.json`, holds only the pointMode-agnostic framing

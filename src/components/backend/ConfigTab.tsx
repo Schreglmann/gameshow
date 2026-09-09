@@ -1,16 +1,22 @@
+import { useState } from 'react';
 import { useTheme, THEMES, ADMIN_THEMES, THEME_SWATCHES } from '@/context/ThemeContext';
 import RulesEditor from './RulesEditor';
 import StatusMessage from './StatusMessage';
 import ConflictBanner from './ConflictBanner';
 import { useEditableConfig } from './useEditableConfig';
 import { GENERIC_JOKER_RULES } from '@/data/jokers';
-import { DEFAULT_TEAM_COUNT, normalizeTeamCount } from '@/utils/teams';
+import { ALL_TEAM_KEYS, DEFAULT_TEAM_COUNT, normalizeTeamCount, teamNumber } from '@/utils/teams';
+import { DEFAULT_TEAM_COLORS } from '@/utils/teamColors';
+import ColorPickerField from './ColorPickerField';
 import { ALL_POINT_MODES, pointModeLabel, POINT_MODE_RULE_DEFAULTS } from '@/utils/pointMode';
 import { DEFAULT_SHOW_TITLE } from '@/utils/showTitle';
 
 export default function ConfigTab() {
   const { theme, setTheme, adminTheme, setAdminTheme } = useTheme();
   const { config, setConfig, loading, message, conflict, adoptRemote, dismissConflict } = useEditableConfig();
+  // Rejected hex input. Local rather than routed through `useEditableConfig`,
+  // whose message channel reports save status. See specs/team-colors.md.
+  const [colorError, setColorError] = useState<string | null>(null);
 
   if (loading) return <div className="be-loading">Lade Config...</div>;
   if (!config) return <div className="be-loading">Config konnte nicht geladen werden.</div>;
@@ -154,6 +160,18 @@ export default function ConfigTab() {
             <span className="be-toggle-track" />
             <span className="be-toggle-label">Team-Spiegelung &amp; Seitenwechsel (Gamemaster)</span>
           </label>
+          <label
+            className="be-toggle"
+            title="Standardmäßig aus. Markiert jedes Team überall, wo es vorkommt – Show, Gamemaster und Admin – mit seiner Farbe: ein farbiger Rand und ein Punkt neben dem Teamnamen. Die Schriftfarbe bleibt unverändert. Farben unten wählbar."
+          >
+            <input
+              type="checkbox"
+              checked={config.teamColorsEnabled === true}
+              onChange={e => setConfig({ ...config, teamColorsEnabled: e.target.checked })}
+            />
+            <span className="be-toggle-track" />
+            <span className="be-toggle-label">Team-Farben</span>
+          </label>
           <label className="be-toggle">
             <input
               type="checkbox"
@@ -176,6 +194,48 @@ export default function ConfigTab() {
             <span className="be-toggle-label">Joker pro Spiel zurücksetzen</span>
           </label>
         </div>
+      </div>
+
+      {/* Team-Farben — the four colours the toggle above switches on. All four are
+          editable whatever the active gameshow's team count is: picking them in
+          advance is the point. A cleared field is stored as an empty string, which
+          is the operator's explicit "use the theme's colour" — different from a key
+          that was never touched (that one keeps the default). See specs/team-colors.md. */}
+      <div className="backend-card">
+        <h3>Team-Farben</h3>
+        <p className="be-hint" style={{ marginTop: 0, marginBottom: 12 }}>
+          Wird überall angezeigt, wo ein Team vorkommt — Show, Gamemaster und Admin:
+          farbiger Rand plus ein Punkt neben dem Teamnamen. Leeres Feld = Farbe des aktiven
+          Themes. Ohne die Option „Team-Farben“ oben werden keine Farben angezeigt.
+        </p>
+        <div className="config-team-colors">
+          {ALL_TEAM_KEYS.map(key => {
+            const n = teamNumber(key);
+            const stored = config.teamColors?.[key];
+            return (
+              <div key={key}>
+                <label className="be-label">Farbe Team {n}</label>
+                <ColorPickerField
+                  allowEmpty
+                  aria-label={`Farbe Team ${n}`}
+                  value={stored ?? DEFAULT_TEAM_COLORS[key]}
+                  placeholder="#rrggbb"
+                  removeTitle="Farbe entfernen (Farbe des Themes verwenden)"
+                  onRemove={() => setConfig({ ...config, teamColors: { ...config.teamColors, [key]: '' } })}
+                  onChange={value => {
+                    setColorError(null);
+                    setConfig({ ...config, teamColors: { ...config.teamColors, [key]: value } });
+                  }}
+                  onError={setColorError}
+                />
+                {n > showTeamCount && lockNote(
+                  `— derzeit ohne Wirkung, die aktive Gameshow läuft mit ${showTeamCount} Team${showTeamCount === 1 ? '' : 's'}`,
+                )}
+              </div>
+            );
+          })}
+        </div>
+        {colorError && <p className="be-field-hint" role="alert">{colorError}</p>}
       </div>
 
       {/* Punkte-Regel-Texte — operator-editable wording for the globalRules scoring

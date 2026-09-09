@@ -53,10 +53,11 @@ was the original design and is still the default; everything here applies per ac
 - `AdminScreen` (`SessionTab`): editable fields for each team's name + member list
 
 ## Related
+- **Per-team colours** — the operator picks a colour per team in the admin Konfiguration tab; when enabled it marks every team surface with an accent edge plus a dot beside the name. See [team-colors.md](team-colors.md).
 - **Team display order & gamemaster mirror** — which team sits on the frontend's left is operator-controllable (`TeamState.orderSwapped`, action `SET_TEAM_ORDER`), and the gamemaster screen always shows the mirror. See [team-order-mirror.md](team-order-mirror.md).
 
 ## Out of scope
 - More than four teams (0–4 are supported — see [team-count.md](team-count.md))
-- Per-team colors or avatars
+- Per-team avatars or images (per-team *colours* are their own feature — see [team-colors.md](team-colors.md))
 - Predefining team names in `config.json` (names live only in the live team state)
 - Assigning specific players to specific teams manually

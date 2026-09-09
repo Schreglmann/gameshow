@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react';
+import type { CSSProperties } from 'react';
 import { useTheme, THEMES, ADMIN_THEMES, THEME_SWATCHES } from '@/context/ThemeContext';
 import type { ThemeId } from '@/context/ThemeContext';
 import { JobRow, type UnifiedJob } from '@/components/backend/SystemTab';
 import { JOKER_CATALOG, getJoker, GENERIC_JOKER_RULES } from '@/data/jokers';
 import JokerIcon from '@/components/common/JokerIcon';
+import TeamDot from '@/components/common/TeamDot';
+import ColorPickerField from '@/components/backend/ColorPickerField';
 import DeadlineTimer from '@/components/common/DeadlineTimer';
 import { ColorPie } from '@/components/games/ColorGuess';
 import CompassRose from '@/components/common/CompassRose';
@@ -173,14 +176,14 @@ function FrontendShowcase() {
     <div>
       <Section title="Header">
         <header style={{ position: 'relative', animation: 'none' }}>
-          <div className="team-header-cell team-header-left">
+          <div className="team-header-cell team-header-left" data-team="team1">
             <span className="team-header-label">
               <span className="team-header-name">Team 1</span>
               <span className="team-header-score">: <span>12</span> Punkte</span>
             </span>
           </div>
           <div id="gameNumber">Spiel 3 von 8</div>
-          <div className="team-header-cell team-header-right">
+          <div className="team-header-cell team-header-right" data-team="team2">
             <span className="team-header-label">
               <span className="team-header-name">Team 2</span>
               <span className="team-header-score">: <span>9</span> Punkte</span>
@@ -198,7 +201,7 @@ function FrontendShowcase() {
         <header data-team-count={4} style={{ position: 'relative', animation: 'none' }}>
           <div className="team-header-stack team-header-stack-left">
             {(['Team 1', 'Team 2'] as const).map((name, i) => (
-              <div key={name} className="team-header-cell team-header-left">
+              <div key={name} data-team={i === 0 ? 'team1' : 'team2'} className="team-header-cell team-header-left">
                 <span className="team-header-label">
                   <span className="team-header-name">{name}</span>
                   <span className="team-header-score">: <span>{[12, 9][i]}</span> Punkte</span>
@@ -214,7 +217,7 @@ function FrontendShowcase() {
           <div id="gameNumber">Spiel 3 von 8</div>
           <div className="team-header-stack team-header-stack-right">
             {(['Team 3', 'Team 4'] as const).map((name, i) => (
-              <div key={name} className="team-header-cell team-header-right">
+              <div key={name} data-team={i === 0 ? 'team3' : 'team4'} className="team-header-cell team-header-right">
                 <HeaderJokersPreviewRow
                   side="right"
                   enabled={SHOWCASE_JOKERS}
@@ -240,7 +243,7 @@ function FrontendShowcase() {
         <header data-team-count={4} style={{ position: 'relative', animation: 'none' }}>
           <div className="team-header-stack team-header-stack-left">
             {(['Team 1', 'Team 2'] as const).map((name, i) => (
-              <div key={name} className="team-header-cell team-header-left">
+              <div key={name} data-team={i === 0 ? 'team1' : 'team2'} className="team-header-cell team-header-left">
                 <span className="team-header-label">
                   <span className="team-header-name">{name}</span>
                   <span className="team-header-score">: <span>{[12, 9][i]}</span> Punkte</span>
@@ -251,7 +254,7 @@ function FrontendShowcase() {
           <div id="gameNumber">Spiel 3 von 8</div>
           <div className="team-header-stack team-header-stack-right">
             {(['Team 3', 'Team 4'] as const).map((name, i) => (
-              <div key={name} className="team-header-cell team-header-right">
+              <div key={name} data-team={i === 0 ? 'team3' : 'team4'} className="team-header-cell team-header-right">
                 <span className="team-header-label">
                   <span className="team-header-name">{name}</span>
                   <span className="team-header-score">: <span>{[7, 4][i]}</span> Punkte</span>
@@ -955,6 +958,7 @@ function FrontendShowcase() {
                   key={name}
                   type="button"
                   className={`award-team-card${won ? ' is-selected' : ''}`}
+                  data-team={`team${i + 1}`}
                   aria-pressed={won}
                   style={{ animation: 'none' }}
                 >
@@ -1222,8 +1226,8 @@ function FrontendShowcase() {
             { name: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaa', members: ['Péter', 'Gerhard', 'Kathi'] },
             { name: 'Isi allein zu Haus', members: ['Maus', 'Fabian Sp.', 'Carina'] },
             { name: 'Team 4', members: ['Michael M.', 'Isabella', 'Bianca'] },
-          ].map(({ name, members }) => (
-            <div className="team" key={name}>
+          ].map(({ name, members }, i) => (
+            <div className="team" data-team={`team${i + 1}`} key={name}>
               <h2 className="team-name-editable" title="Zum Umbenennen klicken">{name}</h2>
               <ul className="team-members team-members-editable">
                 {members.map(m => (
@@ -1254,10 +1258,12 @@ function FrontendShowcase() {
         </div>
       </Section>
 
-      {/* All FOUR cards carry their `#teamN` id, because that is what the
-          house-color accent ring hangs off (--team1-house … --team4-house in
-          themes.css) — with only two cards here, a theme's teams 3/4 accents
-          were unverifiable. See specs/themes.md. */}
+      {/* All FOUR cards carry `data-team`, because that is what the accent ring
+          hangs off: it resolves --team-color per team from the operator's colour,
+          else the theme's --team1-house … --team4-house. With only two cards here,
+          a theme's teams 3/4 accents were unverifiable. The panels of the theme
+          grid reset --teamN-color, so THIS section always shows the theme's own
+          house colours. See specs/themes.md and specs/team-colors.md. */}
       <Section title="Team Cards (Haus-Akzente, 4 Teams)">
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
           {[
@@ -1266,12 +1272,79 @@ function FrontendShowcase() {
             { key: 'team3', name: 'Team 3', members: 'Greta, Hans, Ida', points: '7 Punkte' },
             { key: 'team4', name: 'Team 4', members: 'Jonas, Klara, Lena', points: '4 Punkte' },
           ].map(team => (
-            <div key={team.key} id={team.key} className="team" style={{ flex: 1, minWidth: 180 }}>
+            <div key={team.key} id={team.key} data-team={team.key} className="team" style={{ flex: 1, minWidth: 180 }}>
               <h2 style={{ fontSize: '1.2em' }}>{team.name}</h2>
               <p style={{ color: 'rgba(var(--text-rgb), max(0.7, var(--text-fade-floor, 0)))' }}>{team.members}</p>
               <p style={{ fontSize: '1.5em', fontWeight: 700, marginTop: 8 }}>{team.points}</p>
             </div>
           ))}
+        </div>
+      </Section>
+
+      {/* Per-team colours. The colours are hardcoded and the wrapper carries
+          `.team-colors-on`, so the section renders the same in every theme and in
+          a screenshot regardless of whether the operator has the feature on.
+          Team 3 deliberately has NO colour, so the fallback to the theme's own
+          --team3-house (and to nothing, in a theme without one) is visible here
+          too. See specs/team-colors.md. */}
+      <Section title="Team-Farben (Akzent + Punkt)">
+        <div
+          className="team-colors-on"
+          style={{
+            '--team1-color': '#ff5d6c',
+            '--team2-color': '#4f8af0',
+            // `initial` (the guaranteed-invalid value), not "omitted": the
+            // operator's own --team3-color on <html> would otherwise inherit in
+            // and hide the theme-fallback case this row exists to show.
+            '--team3-color': 'initial',
+            '--team4-color': '#e0c918',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 16,
+          } as CSSProperties}
+        >
+          <header style={{ position: 'relative', animation: 'none' }}>
+            <div className="team-header-cell team-header-left" data-team="team1">
+              <span className="team-header-label">
+                <TeamDot team="team1" />
+                <span className="team-header-name">Team 1</span>
+                <span className="team-header-score">: <span>12</span> Punkte</span>
+              </span>
+            </div>
+            <div id="gameNumber">Spiel 3 von 8</div>
+            <div className="team-header-cell team-header-right" data-team="team2">
+              <span className="team-header-label">
+                <TeamDot team="team2" />
+                <span className="team-header-name">Team 2</span>
+                <span className="team-header-score">: <span>9</span> Punkte</span>
+              </span>
+            </div>
+          </header>
+          <div className="award-teams" data-team-count={4}>
+            {(['team1', 'team2', 'team3', 'team4'] as const).map((key, i) => (
+              <div
+                key={key}
+                data-team={key}
+                className={`award-team-card${i === 0 ? ' is-selected' : ''}`}
+              >
+                <span className="award-team-card-name">
+                  <TeamDot team={key} />
+                  Team {i + 1}
+                </span>
+                <span className="award-team-card-points">{i === 0 ? '+4 Punkte' : '0 Punkte'}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+            {(['team1', 'team2', 'team3', 'team4'] as const).map((key, i) => (
+              <div key={key} data-team={key} className="gm-joker-team" style={{ flex: 1, minWidth: 150 }}>
+                <div className="gm-joker-team-label">
+                  <span><TeamDot team={key} />Team {i + 1}</span>
+                  <span className="gm-joker-team-remaining">{i} / 3</span>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </Section>
 
@@ -1627,6 +1700,37 @@ function AdminShowcase() {
       <Section title="Page Title">
         <h2 className="tab-title">Konfiguration</h2>
         <span className="section-title">Gameshows</span>
+      </Section>
+
+      <Section title="Team-Farben (Farbwähler)">
+        <div className="backend-card">
+          <h3>Team-Farben</h3>
+          <p className="be-hint" style={{ marginTop: 0, marginBottom: 12 }}>
+            Leeres Feld = Farbe des aktiven Themes.
+          </p>
+          <div className="config-team-colors">
+            {[
+              { label: 'Farbe Team 1', value: '#ff5d6c' },
+              { label: 'Farbe Team 2', value: '#4f8af0' },
+              { label: 'Farbe Team 3 (leer)', value: '' },
+              { label: 'Farbe Team 4 (ungültig)', value: '#zzz' },
+            ].map(field => (
+              <div key={field.label}>
+                <label className="be-label">{field.label}</label>
+                <ColorPickerField
+                  allowEmpty
+                  value={field.value}
+                  placeholder="#rrggbb"
+                  aria-label={field.label}
+                  onChange={() => {}}
+                  onError={() => {}}
+                  onRemove={() => {}}
+                  removeTitle="Farbe entfernen (Farbe des Themes verwenden)"
+                />
+              </div>
+            ))}
+          </div>
+        </div>
       </Section>
 
       <Section title="Cards & Forms">

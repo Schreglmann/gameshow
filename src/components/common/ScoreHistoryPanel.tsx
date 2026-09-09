@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useGameContext } from '@/context/GameContext';
 import { teamName, hasNamedTeams } from '@/utils/teamNames';
+import TeamDot from './TeamDot';
 
 /**
  * Gamemaster scoring-undo panel. Shows the most recent point mutations (newest
@@ -54,7 +55,7 @@ export default function ScoreHistoryPanel() {
                   {positive ? '+' : '−'}{Math.abs(entry.delta)}
                 </span>
                 <span className="gm-score-history-meta">
-                  {name && <span className="gm-score-history-team">{name}</span>}
+                  {name && <span className="gm-score-history-team"><TeamDot team={entry.team} />{name}</span>}
                   {typeof entry.gameIndex === 'number' && (
                     <span className="gm-score-history-game">Spiel {entry.gameIndex + 1}</span>
                   )}

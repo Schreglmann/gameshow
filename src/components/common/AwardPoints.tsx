@@ -2,6 +2,7 @@ import { useGameContext } from '@/context/GameContext';
 import { teamName, joinTeamNames, hasNamedTeams, type TeamNames } from '@/utils/teamNames';
 import { teamDisplayOrder } from '@/utils/teamOrder';
 import { type TeamKey } from '@/utils/teams';
+import TeamDot from './TeamDot';
 
 /**
  * Which teams are marked as winners. A partial record over the ACTIVE teams:
@@ -142,6 +143,7 @@ export default function AwardPoints({ selected, points, onToggle, onConfirm, cou
                   (the solo card arrives preselected anyway). */}
               {(named || badge(team)) && (
                 <span className="award-team-card-name">
+                  {named && <TeamDot team={team} />}
                   {named ? teamName(state.teams, team) : null}
                   {badge(team)}
                 </span>
@@ -161,11 +163,12 @@ export default function AwardPoints({ selected, points, onToggle, onConfirm, cou
           // A read-only card is a statement, not a control: no button element, so it
           // is neither focusable nor announced as pressable.
           return readOnly
-            ? <div key={team} className={className}>{content}</div>
+            ? <div key={team} data-team={team} className={className}>{content}</div>
             : (
               <button
                 type="button"
                 key={team}
+                data-team={team}
                 className={className}
                 aria-pressed={isSelected}
                 onClick={() => onToggle(team)}

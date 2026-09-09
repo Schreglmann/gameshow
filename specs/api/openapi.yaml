@@ -3304,6 +3304,8 @@ components:
             false when omitted. When true there is a "Teams tauschen" swap control and
             a gamemaster mirror; when false/omitted there is neither.
             See specs/team-order-mirror.md.
+        teamColors:
+          $ref: '#/components/schemas/TeamColors'
         globalRules: { type: array, items: { type: string } }
         isCleanInstall: { type: boolean }
         enabledJokers:
@@ -3413,6 +3415,15 @@ components:
             means `Game Show`. See [specs/show-title.md](../show-title.md).
         pointSystemEnabled: { type: boolean }
         teamRandomizationEnabled: { type: boolean }
+        teamColorsEnabled:
+          type: boolean
+          description: >-
+            Master switch for per-team colours — opt-in, false when omitted. When true,
+            every surface that renders a team marks it with an accent edge plus a dot
+            beside the name; text colour is never changed. Edited in the admin ConfigTab
+            ("Team-Farben"). See [specs/team-colors.md](../team-colors.md).
+        teamColors:
+          $ref: '#/components/schemas/TeamColors'
         globalRules: { type: array, items: { type: string } }
         jokerRules:
           type: array
@@ -3503,6 +3514,30 @@ components:
             See specs/team-count.md.
         pointMode:
           $ref: '#/components/schemas/PointMode'
+
+    TeamColors:
+      type: object
+      description: >-
+        The operator's colour per team, as `#rrggbb`. Three states per team: an ABSENT
+        key means the operator never touched it, so the default palette applies; a key
+        present with an EMPTY string is an explicit "no colour", falling back to the
+        active theme's `--teamN-house` and then to no accent at all; otherwise the
+        colour overrides the theme.
+
+        On `AppConfig` this is the raw operator setting, only consulted while
+        `teamColorsEnabled` is true. On `SettingsResponse` the switch has ALREADY been
+        applied, so an empty or omitted map means "mark nothing" and no client
+        re-derives the flag. See [specs/team-colors.md](../team-colors.md).
+      propertyNames:
+        enum: [team1, team2, team3, team4]
+      additionalProperties:
+        type: string
+        pattern: '^(#[0-9a-fA-F]{6})?$'
+      example:
+        team1: '#ff5d6c'
+        team2: '#4f8af0'
+        team3: '#3ed79a'
+        team4: '#b57bff'
 
     PointMode:
       type: string

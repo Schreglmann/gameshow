@@ -150,6 +150,9 @@ peer merely fails to sync the tally, which is visible. There is deliberately **n
   showing the gaps), but with rows only up to the current question; game change resets the row set via
   `gameIndex`; a GM reload restores everything from the cached channels.
 
+Each column head carries `data-team` and a `<TeamDot>`, so a team's column is
+identifiable by colour as well as by name. See [team-colors.md](team-colors.md).
+
 ## Out of scope
 - A whole-show ledger in the admin Session tab (gamemaster zone only).
 - Editing real point deltas from this panel — undo stays in "Letzte Wertungen".

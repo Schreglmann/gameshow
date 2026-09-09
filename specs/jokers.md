@@ -60,6 +60,10 @@ Give each team a set of jokers they can spend during a gameshow; admin selects w
 > next awarded game's positional points. See [comeback-joker.md](comeback-joker.md). All other jokers
 > remain GM-resolved with no effect logic.
 
+The gamemaster's joker card per team carries `data-team` and a `<TeamDot>`, and in
+the show the joker grid sits inside the header cell that is already marked with the
+team's colour. See [team-colors.md](team-colors.md).
+
 ## Out of scope
 - Automatic enforcement of joker effects (sit-outs, solo answers, double-answer scoring, AI integration) — except the `comeback` joker's point doubling (see above).
 - `countPerTeam` or multi-use jokers.

@@ -47,6 +47,10 @@ Give the host two manual counters at the bottom of the gamemaster screen to tall
 - `+` / `−` buttons reuse `.gm-btn` styling (square touch-friendly variant `.gm-correct-btn`)
 - On phones (≤480 px): team panels stack vertically, buttons grow to ≥44 px tap targets
 
+Each team card carries `data-team` and a `<TeamDot>` beside its label, so the host
+can attribute a card by colour instead of re-reading four names. See
+[team-colors.md](team-colors.md).
+
 ## Out of scope
 - Auto-increment tied to `AWARD_POINTS`
 - Player-facing display of the correct-answers tally

@@ -15,6 +15,7 @@ import { teamName, hasNamedTeams } from '@/utils/teamNames';
 import { teamDisplayOrder } from '@/utils/teamOrder';
 import { teamJokersUsed, teamKeys, trailingTeams } from '@/utils/teams';
 import '@/styles/gamemaster.css';
+import TeamDot from './TeamDot';
 
 /** Neutral stand-in for a masked answer text — never derived from the answer, so its
  *  length gives nothing away. */
@@ -395,7 +396,7 @@ function JokerControls() {
       </button>
       {lastUsedDef && lastUsed && (
         <div className="gm-joker-confirm" role="status" aria-live="polite">
-          {named && <span className="gm-joker-confirm-team">{teamName(state.teams, lastUsed.team)}</span>}
+          {named && <span className="gm-joker-confirm-team" data-team={lastUsed.team}><TeamDot team={lastUsed.team} />{teamName(state.teams, lastUsed.team)}</span>}
           <span className="gm-joker-confirm-name">{lastUsedDef.name}</span>
           <span className="gm-joker-confirm-desc">{lastUsedDef.description}</span>
         </div>
@@ -440,9 +441,9 @@ interface JokerTeamCardProps {
 function JokerTeamCard({ team, label, enabled, used, canUseComeback, onToggle }: JokerTeamCardProps) {
   const usedCount = enabled.filter(id => used.includes(id)).length;
   return (
-    <div className="gm-joker-team">
+    <div className="gm-joker-team" data-team={team}>
       <div className="gm-joker-team-label">
-        <span>{label}</span>
+        <span><TeamDot team={team} />{label}</span>
         <span className="gm-joker-team-remaining" aria-label={`${usedCount} von ${enabled.length} genutzt`}>
           {usedCount} / {enabled.length}
         </span>
