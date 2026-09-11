@@ -60,7 +60,12 @@ header.is-scrolled {
     margin: 0;
     z-index: 200;
     pointer-events: none;
-    white-space: nowrap;
+    /* Names the new leader, and a team name can be one long word: the banner
+       stays inside the header's width and wraps — mid-word if it has to —
+       instead of running off both screen edges. */
+    max-width: calc(100% - 2 * clamp(12px, 3vw, 40px));
+    white-space: normal;
+    overflow-wrap: anywhere;
     display: inline-block;
     text-align: center;
     padding: clamp(8px, 1.2vw, 14px) clamp(18px, 2.6vw, 34px);
@@ -327,6 +332,48 @@ main {
     overflow-wrap: anywhere;
 }
 
+/* The setup screen's card heading (`TeamCardName`) is the one that has to cope
+   with a name of any length, so it does more than the clamp above.
+
+   The box is exactly ONE full-size line, whatever the name — that is what makes
+   the rosters of all the cards in a row start at the same height. The name
+   inside it is scaled DOWN to fit by `useFitTeamName` (two half-size lines in
+   the same box when one full-size line is not enough) instead of being cut off
+   at full size, where the budget is barely a dozen characters. */
+.team h2.team-card-name {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* The height is PINNED by `useFitTeamName` to one line of the unshrunk
+       heading — measured, not expressed here, because a line box is as tall as
+       the theme's font makes it. Without the fit (no JS) the single-line clamp
+       on the span below gives the same height anyway; `overflow` is the guard
+       for the frame in which the fit measures the name unclamped. */
+    overflow: hidden;
+}
+
+.team-card-name-text {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    /* Raised to the number of lines the fitted size fits into the box; this is
+       the un-fitted fallback (no JS, no layout to measure). */
+    -webkit-line-clamp: 1;
+    line-clamp: 1;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+}
+
+/* Only for a name that still overflows at the smallest step: `overflow-wrap`
+   alone leaves Chrome rendering a truncated line as the bare ellipsis with the
+   text dropped, so the last resort breaks mid-word and keeps the beginning of
+   the name visible. Never applied while the name fits — it would break ordinary
+   two-word names in the middle. */
+.team-card-name-text[data-name-clipped] {
+    word-break: break-all;
+}
+
 /* Team-colour accent ring. One rule for all four teams: `--team-color` is
    resolved per team key from `data-team` in team-accent.css — the operator's
    configured colour if there is one, else the theme's house colour (e.g. Harry
@@ -431,6 +478,28 @@ header[data-team-count="1"] #gameNumber {
     font-size: clamp(1em, 2.2vw, 1.6em);
 }
 
+/* ── Two-team counter ── */
+/* The counter is the one thing in the header a player reads from the back of
+   the room, so at two teams it is a step larger than the team labels beside it
+   — and still a pill of the SAME height as theirs: all three stretch to the
+   row, the counter centres its text in its box, and its tighter vertical
+   padding plus a fixed line-height keep the larger type from becoming the row's
+   tallest item (Patrick Hand's normal line-height would). If a team pill is
+   taller (a two-row joker grid), the counter grows with it. */
+header[data-team-count="2"] .team-header-cell,
+header[data-team-count="2"] #gameNumber {
+    align-self: stretch;
+}
+
+header[data-team-count="2"] #gameNumber {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: clamp(1em, 3vw, 1.8em);
+    line-height: 1.2;
+    padding-block: clamp(2px, 0.4vw, 5px);
+}
+
 /* ── Multi-team header (3-4 teams) ── */
 /* The header keeps the two-team shape at every count — a side, the counter, a
    side — because above two teams each SIDE becomes a column of team pills
@@ -460,37 +529,56 @@ header[data-team-count="4"] .team-header-stack:hover {
     box-shadow: none;
 }
 
+/* The single-row joker geometry of a 3-4 team pill, declared ONCE so the joker
+   rules further down and the pill's minimum-width formula (side by side, below)
+   read the same numbers and cannot drift apart. `--hdr-joker-sep` is the
+   separator's padding plus its 1px border. */
+header[data-team-count="3"],
+header[data-team-count="4"] {
+    --hdr-joker-size: clamp(24px, 2vw, 34px);
+    --hdr-joker-gap: clamp(2px, 0.3vw, 4px);
+    --hdr-joker-sep-pad: clamp(10px, 1.2vw, 16px);
+    --hdr-joker-sep: calc(var(--hdr-joker-sep-pad) + 1px);
+    --hdr-cell-gap: clamp(6px, 1vw, 12px);
+}
+
 /* Side by side, a stack sizes its pills to the CONTENT instead of to the column
    and puts its two teams on ONE LINE whenever they fit: the stack is a centred
    row-WRAP flex line, both pills beside each other when the column is wide
    enough, the second dropping under the first — still centred — when it is not.
-   The browser decides from the actual widths; no breakpoint guesses at where a
-   long custom team name (or a wide joker row) stops fitting. Column-wide pills
-   were mostly empty box: with no jokers, or with one or two, the label plus its
-   small grid filled a fraction of the column and the rest was dead glass, the
-   text pushed inboard. Content-sized pills apply WITH jokers too — each pill
-   frames its own name and grid, and the counter sits between the two sides, so
-   attribution never depends on one team per row.
-   `flex: 0 1 auto` keeps a pill at its content width, yet lets one alone on its
-   line shrink (the name ellipsizes) instead of overflowing. `column-gap` puts
-   real air between two pills sharing a line; the tiny stack `gap` was set for
-   rows and read as the pills touching.
+   Column-wide pills were mostly empty box: with no jokers, or with one or two,
+   the label plus its small grid filled a fraction of the column and the rest was
+   dead glass, the text pushed inboard. Content-sized pills apply WITH jokers too
+   — each pill frames its own name and grid, and the counter sits between the two
+   sides, so attribution never depends on one team per row.
+   `flex: 0 1 auto` keeps a pill at its content width, yet lets it shrink (the
+   name ellipsizes) instead of overflowing. `column-gap` puts real air between
+   two pills sharing a line; the tiny stack `gap` was set for rows and read as
+   the pills touching.
+   ONLY DEFAULT CONTENT decides whether a side wraps. A pill's `max-width` is its
+   half of the line, so a long custom name can never push the sibling pill onto
+   a second row — it truncates inside the pill, exactly as it does at two teams
+   (a 14-character name used to break the whole 4-team header into two rows on
+   every screen). Its `min-width` is the width of its DEFAULT content — the
+   widest default label plus this pill's own joker row — and in CSS `min-width`
+   beats `max-width`, so when a side is too narrow for two default pills they
+   wrap just as they always did, whatever the names say. Header.tsx publishes the
+   joker count as `--joker-count` on the cell for that floor.
    WHO YIELDS FIRST decides whether the row holds. This header scales with the
    viewport — its type is in vw — so a bigger screen buys no room; only the split
    between four pills and the counter does. With every column on `flex-basis: 0`
    the counter took its 0.7 share of the free width BEFORE the teams got theirs,
    and the one-line form only survived by stepping the team type far down. So
-   the priority is inverted: each stack's basis is exactly its one-line width
-   (two default pills + gap, in its own em — the SAME on both sides, so the
-   counter stays centred even at 3 teams where the right stack holds one pill),
-   and the counter's basis is the generous pill it always had (8.8em ≈ its old
-   476px at 1920) with `flex-shrink: 100`, so when the bases overrun the header
-   it is the counter that gives way, down to its own text, before a stack has to
-   shrink and wrap its pills. Surplus is still shared 1 : 1 : 0.7. The team
-   type is one step under the stacked layout's 1.85vw; the em floor resolves
-   against the header's type, so 0.75em stays under the vw value from ~1500px up
-   and the step-down actually engages. With jokers a pill is wider by its joker
-   row, so those stack — "whenever they fit" is literal.
+   the priority is inverted: each stack's basis is its one-line width with a
+   LABEL BUDGET of `--pill-line` per pill — more than the default label needs, so
+   that the counter, whose basis is the generous pill it always had (8.8em ≈ its
+   old 476px at 1920) with `flex-shrink: 1000`, hands its spare glass to the
+   names first and shrinks down to its own text before a stack has to shrink and
+   wrap its pills. The basis is the SAME on both sides, so the counter stays
+   centred even at 3 teams where the right stack holds one pill. Surplus is still
+   shared 1 : 1 : 0.7. The team type is one step under the stacked layout's
+   1.85vw; the em floor resolves against the header's type, so 0.75em stays under
+   the vw value from ~1500px up and the step-down actually engages.
    Only while the two stacks sit SIDE BY SIDE: below 768px the header wraps into
    one column of full-width rows (see the media query at the end of this file). */
 @media (min-width: 769px) {
@@ -499,14 +587,24 @@ header[data-team-count="4"] .team-header-stack:hover {
         flex-direction: row;
         flex-wrap: wrap;
         justify-content: center;
-        align-items: center;
+        /* Stretch, not centre: the stack fills the header row (below), so its
+           pills come out as tall as the counter pill beside them — one shared
+           height across the row, like the two-team header. Each pill centres
+           its own content. */
+        align-items: stretch;
+        align-self: stretch;
         font-size: clamp(0.75em, 1.55vw, 1.4em);
         --pill-pad: clamp(12px, 1.6vw, 24px);
         --pill-gap: clamp(10px, 1.2vw, 22px);
+        /* Label budget per pill for the stack's basis: the default label is
+           9.2em, the rest is room the counter yields to a custom name before
+           anything wraps (measured: the counter goes from 445px to 262px around
+           its text at 1920, each name gains ~45px). */
+        --pill-line: 12em;
         column-gap: var(--pill-gap);
-        /* One-line width of two default pills: 2 × (9.2em label + padding) + gap,
-           plus 2px so subpixel rounding can never land the content 0.3px over
-           the basis (which is all it takes to wrap). Both stacks get this same
+        /* One-line width of two pills: 2 × (label budget + padding) + gap, plus
+           2px so subpixel rounding can never land the content 0.3px over the
+           basis (which is all it takes to wrap). Both stacks get this same
            basis whatever they hold. Shrink 1, not less: while the counter is
            still above its text it must absorb the whole overrun — that comes
            from ITS factor (1000; shares are weighted by factor × basis, so the
@@ -517,7 +615,19 @@ header[data-team-count="4"] .team-header-stack:hover {
            on a 1024 window. And never 0: once the counter sits at its floor the
            stacks have to be ABLE to shrink, or a narrow window overflows
            sideways instead of wrapping the pills. */
-        flex: 1 1 calc(18.4em + 4 * var(--pill-pad) + var(--pill-gap) + 2px);
+        flex: 1 1 calc(2 * var(--pill-line) + 4 * var(--pill-pad) + var(--pill-gap) + 2px);
+    }
+
+    /* The separator padding is the var the min-width formula below counts, so
+       the ≤1024px override in header-jokers.css must not change it here. */
+    header[data-team-count="3"] .header-jokers-left,
+    header[data-team-count="4"] .header-jokers-left {
+        padding-left: var(--hdr-joker-sep-pad);
+    }
+
+    header[data-team-count="3"] .header-jokers-right,
+    header[data-team-count="4"] .header-jokers-right {
+        padding-right: var(--hdr-joker-sep-pad);
     }
 
     header[data-team-count="3"] #gameNumber,
@@ -526,12 +636,31 @@ header[data-team-count="4"] .team-header-stack:hover {
         /* The ≤1024px rule in header-jokers.css lets the counter shrink below
            its text; with shrink 1000 it would do that FIRST here. Hold the text. */
         min-width: max-content;
+        /* Same height as the team pills: the counter stretches to the row and
+           centres its text; the fixed line-height and tight vertical padding
+           stop its larger type from towering over one-row pills (its pill used
+           to be twice their height, all of it empty glass). With two rows of
+           pills the row is taller and the counter grows with it. */
+        align-self: stretch;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1.2;
+        padding-block: clamp(2px, 0.4vw, 5px);
+        /* The stacks' basis leaves the counter at its minimum on every screen,
+           so the air around its text IS this padding — the generic 10px pill
+           padding left the text touching the glass, where the two-team counter
+           has ~60px a side from its flex share. ~38px a side at 1920 reads like
+           that pill; the names give up ~14px each for it. The slope is steeper
+           than plain vw so the air fades out towards 1024, where four default
+           pills fit their row with only a few px to spare — a flat 2vw pushed
+           them onto two rows up to ~1180. */
+        padding-inline: clamp(10px, 3vw - 20px, 40px);
     }
 
     header[data-team-count="3"] .team-header-stack .team-header-cell,
     header[data-team-count="4"] .team-header-stack .team-header-cell {
         width: auto;
-        max-width: 100%;
         flex: 0 1 auto;
         /* The generic 3-4 team `div` rule would give the cell its own 1.85vw
            type; take the stack's instead so the basis calc above and the pill
@@ -540,15 +669,39 @@ header[data-team-count="4"] .team-header-stack:hover {
         /* A content-sized pill shows its own edges, so the label needs more air
            to them than a column-wide one did. */
         padding-inline: var(--pill-pad);
+        /* The width of this pill's DEFAULT content: the widest default label
+           ("Team 4: 99 Punkte" = 9.13em, so 9.2em) plus the padding, so a one-
+           and a two-digit score draw the same pill — and, with jokers, this
+           pill's single-row grid: N icons, N−1 gaps, the separator and the cell
+           gap (`min(count, 1)` is the 0/1 switch for the per-grid terms). */
+        --pill-default: calc(
+            9.2em + 2 * var(--pill-pad)
+            + var(--joker-count, 0) * (var(--hdr-joker-size) + var(--hdr-joker-gap))
+            + min(var(--joker-count, 0), 1) * (var(--hdr-joker-sep) + var(--hdr-cell-gap) - var(--hdr-joker-gap))
+        );
+        /* Half the line — a pill's share when two sit side by side. */
+        --pill-cap: calc(50% - var(--pill-gap) / 2);
         /* Every default pill the SAME width, so both sides wrap together. Each
            stack wraps on its own, and "Team 3"/"Team 4" are a few px wider than
            "Team 1"/"Team 2" — that once left the left side on one line and the
            right on two, and one side reaching 10 points would do the same
-           mid-show. 9.2em is the widest default label ("Team 4: 99 Punkte" =
-           9.13em); the padding is added on top so a one- and a two-digit score
-           draw the same pill. A longer custom name still grows past it, and
-           `min(100%, …)` keeps a pill from overflowing a narrow column. */
-        min-width: min(100%, calc(9.2em + 2 * var(--pill-pad)));
+           mid-show. `min(100%, …)` keeps a pill from overflowing a narrow
+           column. In CSS `min-width` outranks `max-width`, so a default pill
+           is never squeezed by the cap below: without the joker terms the cap
+           left "Team 2" 0px wide beside its two jokers at 1024. */
+        min-width: min(100%, var(--pill-default));
+        /* While two default pills fit the line, a pill never takes more than
+           its half, so a long custom name truncates inside it instead of
+           pushing the sibling pill onto a second row. Once the default pill is
+           wider than that half the side has wrapped anyway — one pill per row —
+           and the cap lifts to the full row, so a custom name there gets the
+           room it always had. `max()` is the switch: when default ≤ cap the
+           second argument is at most the cap; when default > cap the huge
+           multiplier makes it exceed 100%, which `min()` then clamps. */
+        max-width: min(
+            100%,
+            max(var(--pill-cap), calc(var(--pill-cap) + 100000 * (var(--pill-default) - var(--pill-cap))))
+        );
     }
 }
 
@@ -560,7 +713,7 @@ header[data-team-count="3"] .team-header-cell,
 header[data-team-count="4"] .team-header-cell {
     padding: clamp(3px, 0.6vw, 8px) clamp(10px, 1.4vw, 18px);
     margin: 0;
-    gap: clamp(6px, 1vw, 12px);
+    gap: var(--hdr-cell-gap);
     width: 100%;
 }
 
@@ -610,11 +763,14 @@ header[data-team-count="4"] div {
 }
 
 /* The counter has a whole column to itself between the two stacks and only ever
-   holds "Spiel N von M", so it takes the space rather than matching the pills:
-   it is the one thing in the header a player reads from the back of the room. */
+   holds "Spiel N von M", so it is larger than the stepped-down team type — it is
+   the one thing in the header a player reads from the back of the room — but not
+   by the 1.8× it once was (2.8vw over 1.55vw): beside one-row pills that made
+   the counter pill twice their height. ~1.5× reads as the headline it is
+   without dwarfing the row. */
 header[data-team-count="3"] #gameNumber,
 header[data-team-count="4"] #gameNumber {
-    font-size: clamp(1.2em, 2.8vw, 2.1em);
+    font-size: clamp(1.1em, 2.35vw, 1.8em);
 }
 
 /* The joker grid drops from two rows to ONE (`grid-auto-flow: column` with no
@@ -626,13 +782,13 @@ header[data-team-count="3"] .header-jokers,
 header[data-team-count="4"] .header-jokers {
     grid-auto-flow: column;
     grid-template-columns: none;
-    gap: clamp(2px, 0.3vw, 4px);
+    gap: var(--hdr-joker-gap);
 }
 
 header[data-team-count="3"] .header-joker,
 header[data-team-count="4"] .header-joker {
-    width: clamp(24px, 2vw, 34px);
-    height: clamp(24px, 2vw, 34px);
+    width: var(--hdr-joker-size);
+    height: var(--hdr-joker-size);
 }
 
 /* The setup screen's team cards wrap into a grid once there are more than two,
@@ -647,9 +803,10 @@ header[data-team-count="4"] .header-joker {
 
 /* Three or four cards share the row, so the team heading has to fit a narrower
    card. Without the smaller font the wider digits ("Team 2/3/4") wrapped onto a
-   second line while "Team 1" did not, leaving the row visibly ragged — so the
-   heading is clamped to a single ellipsised line instead of the two it gets at
-   one or two cards, and every card in the row stays the same height. */
+   second line while "Team 1" did not, leaving the row visibly ragged. The
+   heading box is one line at every team count (`.team-card-name` above), so
+   here it is only the size that changes — and with it the box, since its height
+   is expressed in `em`. */
 #teams[data-team-count="3"] .team h2,
 #teams[data-team-count="4"] .team h2 {
     font-size: clamp(1.3rem, 3vw, 3.25rem);

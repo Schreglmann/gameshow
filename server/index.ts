@@ -3854,6 +3854,10 @@ app.get('/api/settings', async (_req, res) => {
     const pointSystemEnabled = teamCount > 0;
     const pointMode = normalizePointMode(activeShow?.pointMode);
     res.json({
+      // How many games the show runs — what the header counter's "von N" reads,
+      // so the long-name check can size the counter its team pills share the row
+      // with. See specs/team-management.md.
+      totalGames: activeShow?.gameOrder?.length ?? 0,
       // Landing-page heading / gamemaster label / tab title: the active gameshow's
       // override wins over the global default, blank counts as unset at both
       // levels. Resolved here so no client re-derives the precedence.

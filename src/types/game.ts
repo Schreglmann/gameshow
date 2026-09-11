@@ -231,6 +231,14 @@ export interface GlobalSettings {
    * configured roster. See specs/team-management.md.
    */
   players: string[];
+  /**
+   * How many games the active gameshow runs (`gameOrder.length`) — the "N" the
+   * header counter reads "Spiel x von N". Lets the long-name check size the
+   * counter its team pills share the row with; 0 when unknown (a client that got
+   * no value), which the check treats as the two-digit worst case.
+   * See specs/team-management.md.
+   */
+  totalGames: number;
 }
 
 export interface CurrentGame {

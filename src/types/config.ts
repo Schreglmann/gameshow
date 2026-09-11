@@ -790,6 +790,13 @@ export interface SettingsResponse {
    * test fixtures don't need it. See specs/team-management.md.
    */
   players?: string[];
+  /**
+   * How many games the active gameshow runs (`gameOrder.length`) — the "N" of
+   * the header counter "Spiel x von N", which the long-name check needs to size
+   * the counter its team pills share the row with. Optional so existing test
+   * fixtures don't need it. See specs/team-management.md.
+   */
+  totalGames?: number;
 }
 
 export interface GameDataResponse {

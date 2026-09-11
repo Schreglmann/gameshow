@@ -3331,6 +3331,14 @@ components:
           type: array
           items: { type: string }
           description: Roster of the active gameshow, prefills the HomeScreen randomization textarea.
+        totalGames:
+          type: integer
+          minimum: 0
+          description: >-
+            How many games the active gameshow runs (`gameOrder.length`) — the "N" the
+            header counter reads "Spiel x von N". The team-name length check sizes the
+            counter its team pills share the row with from it. 0 when the show has no
+            games. See specs/team-management.md.
 
     IncompatibleGame:
       type: object

@@ -95,8 +95,19 @@ export default function Header({ showGameNumber = true }: HeaderProps) {
       </span>
     ) : null;
     const jokers = <TeamJokers team={teamKey} side={side} />;
+    // `--joker-count` lets the stylesheet size a pill's MINIMUM width for its
+    // default label plus its joker row (layout.css, 3-4 teams side by side): a
+    // custom property set on the grid could not reach the cell, and the cell is
+    // where that floor lives. See specs/header.md.
+    const cellStyle = { '--joker-count': hasJokers ? (enabledJokers ?? []).length : 0 } as React.CSSProperties;
     return (
-      <div key={teamKey} id={`${teamKey}PointsContainer`} data-team={teamKey} className={`team-header-cell team-header-${side}`}>
+      <div
+        key={teamKey}
+        id={`${teamKey}PointsContainer`}
+        data-team={teamKey}
+        className={`team-header-cell team-header-${side}`}
+        style={cellStyle}
+      >
         {side === 'left' ? <>{label}{jokers}</> : <>{jokers}{label}</>}
       </div>
     );

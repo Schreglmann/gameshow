@@ -14,6 +14,12 @@ throughout the gameshow, giving the host and players a constant overview of the 
 - [x] At **1 team** the header centres the score and the counter as a pair at one shared size and
       drops the padding spacer — there is no second column to balance. It wraps and clips its X axis
       on a phone, where the score plus a joker strip no longer fits one line
+- [x] At **2 teams** the counter is a step larger than the team labels (`clamp(1em, 3vw, 1.8em)` of
+      the header's type — 52px beside 43px labels at 1920), yet its pill is exactly as tall as the
+      team pills: all three stretch to the row (`align-self: stretch`), the counter centres its text
+      in its box, and a `line-height: 1.2` plus tighter vertical padding keep the larger type from
+      becoming the row's tallest item. A taller team pill (a two-row joker grid) stretches the
+      counter with it, so the three pills always share one height
 - [x] Above two teams each **side becomes a column** (`.team-header-stack`, added by `Header.tsx`):
       team 1 over team 2 on the left, team 3 over team 4 on the right. The header therefore keeps
       the two-team shape — a side, the counter, a side — at every count, the two stacks are the two
@@ -23,8 +29,10 @@ throughout the gameshow, giving the host and players a constant overview of the 
       middle with nothing to say which grid belonged to which name
 - [x] A stacked side fits two rows in one header's height by stepping down: tighter vertical cell
       padding, one size smaller type, and a joker grid that drops from 3×2 to a **single row**
-      (`grid-auto-flow: column`) with icons at `clamp(22px, 1.7vw, 30px)`. The 4-team header comes
-      out at essentially the 2-team header's height (151px vs 154px at 1920)
+      (`grid-auto-flow: column`) with icons at `clamp(24px, 2vw, 34px)`. The 4-team header comes
+      out at essentially the 2-team header's height (151px vs 154px at 1920). The single-row joker
+      geometry (icon size, gap, separator padding, cell gap) is declared once as `--hdr-joker-*` /
+      `--hdr-cell-gap` on the 3–4 team header and reused by every rule that needs it
 - [x] Everything else is the two-team styling untouched — the same glass pill, the same
       mirror-image cell layout (left: name | jokers, right: jokers | name), the same separator
 - [x] In a stacked side a label is flush against its joker separator (right on the left side,
@@ -37,28 +45,49 @@ throughout the gameshow, giving the host and players a constant overview of the 
       on **one line whenever they fit**, with or without jokers: the stack is a centred row-wrap
       flex line with a real `column-gap`, so both pills sit beside each other when the column is
       wide enough and the second drops under the first — still centred — when it is not. The
-      browser decides from the actual widths (no breakpoint), so a long custom name or a wide joker
-      row wraps exactly when it has to. The counter keeps its usual pill and its `flex-grow: 0.7`
-      share; what buys the one-line form is the team type stepping down to `1.4vw` side by side
-      (the stacked layout's `1.85vw` overran the column by a few percent on every screen — the
-      header's type is in `vw`, so screen size buys no room, only the pills-to-counter ratio does).
-      Every pill has the same minimum width (`9.2em` — the widest default label "Team 4: 99 Punkte"
-      — plus its own padding), so the two sides always wrap **together** and a one- and a two-digit
-      score draw the same pill; the per-side decision must never leave one side on one line and the
-      other on two, which glyph-width differences ("Team 3" vs "Team 1", 9 vs 12 points) would
-      otherwise cause mid-show. **Who yields first** decides whether the row holds: each stack's
-      `flex-basis` is exactly its one-line width (two default pills + gap, in its own em — the
-      same on both sides, so the counter stays centred even at 3 teams), and the counter's basis
-      is its generous pill (`8.8em`) with `flex-shrink: 1000` (the stacks keep `1` — flexbox
-      hands out only the sum of the unfrozen factors' worth of space when that sum is below 1, so
-      a tiny stack factor left the header overflowing on narrow windows), so when the row gets
-      tight the counter gives way down to its text before a stack has to wrap. Four default-named teams
-      without jokers therefore sit on one line from a 1600px viewport up (measured 1600 → 2560)
-      with the team type at `1.55vw` (26.8px on a 1728px MacBook, 29.8px at 1920) and the counter
-      still a pill (365px around 291px of text at 1728; 445px at 1920; 581px at 2560); at 1440 and
-      below the counter has reached its text and both sides wrap alike, with the counter still
-      centred and the header never overflowing.
-      With jokers a pill is wider by its joker row and stacks.
+      browser decides from the actual widths (no breakpoint). The counter keeps its usual pill and
+      its `flex-grow: 0.7` share; what buys the one-line form is the team type stepping down to
+      `1.55vw` side by side (the stacked layout's `1.85vw` overran the column by a few percent on
+      every screen — the header's type is in `vw`, so screen size buys no room, only the
+      pills-to-counter ratio does).
+      **Only default content decides a wrap — a custom name never does.** Every pill is capped at
+      half its side's line (`max-width: calc(50% - gap/2)`), so a long custom name truncates inside
+      its pill — shrink-then-ellipsis, exactly as at two teams — instead of pushing the sibling pill
+      onto a second row (a 14-character name used to break the whole 4-team header into two rows on
+      every screen). Every pill also has the same **minimum width**: the widest default label
+      (`9.2em` — "Team 4: 99 Punkte") plus its padding **plus its own joker row** (N icons, N−1
+      gaps, separator, cell gap — `Header.tsx` publishes the enabled count as `--joker-count` on
+      the cell for this). In CSS `min-width` outranks `max-width`, so two default pills that no
+      longer fit their side wrap exactly as before, and a one- and a two-digit score draw the same
+      pill; without the joker term the cap squeezed a default "Team 2" to 0px beside its two
+      jokers at 1024. Both sides therefore always wrap **together**; the per-side decision must
+      never leave one side on one line and the other on two, which glyph-width differences
+      ("Team 3" vs "Team 1", 9 vs 12 points) would otherwise cause mid-show.
+      **Who yields first** decides whether the row holds: each stack's `flex-basis` is its one-line
+      width with a label budget of `--pill-line: 12em` per pill — more than the default label
+      needs, so the counter hands its spare glass to the names before anything wraps — the same on
+      both sides, so the counter stays centred even at 3 teams. The counter's basis is its generous
+      pill (`8.8em`) with `flex-shrink: 1000` (the stacks keep `1` — flexbox hands out only the sum
+      of the unfrozen factors' worth of space when that sum is below 1, so a tiny stack factor left
+      the header overflowing on narrow windows), so when the row gets tight the counter gives way
+      down to its text before a stack has to shrink and wrap. With the pub-quiz theme four
+      default-named teams without jokers sit on one line from a 1024px viewport up (measured
+      1024 → 1920) with the team type at `1.55vw` (26.8px on a 1728px MacBook, 29.8px at 1920); the
+      counter sits close around its text (228px at 1920, was 445px) and a custom name gets the
+      difference — roughly 12–13 characters at full size at 1920, more at the `0.76` step. The
+      3–4 team counter's type is `clamp(1.1em, 2.35vw, 1.8em)` — about 1.5× the team type (45px
+      over 30px at 1920), down from the 2.8vw that made its pill twice the height of one-row team
+      pills — and, as at two teams, the counter and the stacks stretch to the row (`align-self:
+      stretch`, the stack's pills stretched too) with the counter centring its text at
+      `line-height: 1.2` and tight vertical padding, so every pill in the row is the same height
+      (64px at 1920, 51 at 1440, 37 at 1024). When the pills wrap into two rows the counter spans
+      both. Because the stacks' basis leaves the counter at its minimum on every screen, the air
+      around its text is its own `padding-inline: clamp(10px, 3vw - 20px, 40px)` — ~38px a side
+      at 1920 so the pill reads like the two-team counter's, fading to ~11px at 1024 where four
+      default pills fit their row with only a few px to spare (a flat 2vw wrapped them up to
+      ~1180). Below
+      that the sides wrap alike, the counter stays centred and the header never overflows.
+      With jokers a pill is wider by its joker row and wraps when its default content no longer fits.
       Column-wide pills are gone above 768px because with no or few jokers
       they were mostly empty glass with the text pushed inboard; attribution of a joker grid to its
       team comes from the pill framing both, not from one team per row. Below 768px the wrapped

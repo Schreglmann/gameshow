@@ -1,6 +1,8 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useGameContext } from '@/context/GameContext';
-import { isTeamNameLong } from '@/utils/teamNames';
+import { teamNameLongHint } from '@/utils/teamNames';
+import { useTeamNameCheck } from '@/hooks/useTeamNameCheck';
+import { useTheme } from '@/context/ThemeContext';
 import { ALL_TEAM_KEYS, teamKeys, teamNumber, teamPoints, teamRoster, type TeamKey } from '@/utils/teams';
 import type { TeamState } from '@/types/game';
 import StatusMessage from './StatusMessage';
@@ -24,9 +26,13 @@ export default function SessionTab() {
 
   // Each joker column in the header pill steals room from the team name, so the
   // long-name check depends on how MANY jokers are enabled (1 vs 3 differ). The
-  // name's actual rendered width is measured (not its char count).
+  // name's actual rendered width is measured (not its char count) — in the SHOW's
+  // theme, not the admin's: the two fonts differ, and the admin's <html> carries
+  // the admin theme.
+  const { theme } = useTheme();
   const jokerCount = (state.settings.enabledJokers ?? []).length;
-  const jokerNote = jokerCount > 0 ? ` (mit ${jokerCount} Joker${jokerCount === 1 ? '' : 'n'} weniger Platz)` : '';
+  const activeTeamCount = teamKeys(state.settings.teamCount).length;
+  const isNameLong = useTeamNameCheck({ jokerCount, teamCount: activeTeamCount, totalGames: state.settings.totalGames, theme });
 
   // The live values, straight from context. Points are strings so a field can be
   // cleared while editing (an empty string is a valid intermediate state).
@@ -160,10 +166,8 @@ export default function SessionTab() {
                   onChange={e => editField(`${key}Name`)(e.target.value)}
                   onBlur={saveSession}
                 />
-                {isTeamNameLong(valueOf(`${key}Name`), jokerCount, activeTeams.length) && (
-                  <p className="be-field-hint" role="status">
-                    Name ist zu lang – wird im Header auf kleineren Bildschirmen abgekürzt{jokerNote}.
-                  </p>
+                {isNameLong(valueOf(`${key}Name`)) && (
+                  <p className="be-field-hint" role="status">{teamNameLongHint(jokerCount)}</p>
                 )}
                 <label className="be-label">Team {n} Mitglieder</label>
                 <input

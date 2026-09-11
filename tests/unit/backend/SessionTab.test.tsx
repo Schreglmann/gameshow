@@ -3,6 +3,7 @@ import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { GameProvider } from '@/context/GameContext';
+import { ThemeProvider } from '@/context/ThemeContext';
 import { __emitChannelForTests, __clearWsCacheForTests } from '@/services/useBackendSocket';
 import SessionTab from '@/components/backend/SessionTab';
 import type { TeamState } from '@/types/game';
@@ -23,14 +24,19 @@ vi.mock('@/services/api', () => ({
     teamRandomizationEnabled: true,
     globalRules: [],
   }),
+  // The tab reads the SHOW's theme for the long-name check (see teamNames.ts).
+  fetchTheme: vi.fn().mockResolvedValue({ frontend: 'galaxia', admin: 'galaxia' }),
+  saveTheme: vi.fn().mockResolvedValue(undefined),
 }));
 
 function renderSessionTab() {
   return render(
     <MemoryRouter>
-      <GameProvider>
-        <SessionTab />
-      </GameProvider>
+      <ThemeProvider>
+        <GameProvider>
+          <SessionTab />
+        </GameProvider>
+      </ThemeProvider>
     </MemoryRouter>
   );
 }

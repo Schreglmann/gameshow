@@ -6,6 +6,9 @@ import { JobRow, type UnifiedJob } from '@/components/backend/SystemTab';
 import { JOKER_CATALOG, getJoker, GENERIC_JOKER_RULES } from '@/data/jokers';
 import JokerIcon from '@/components/common/JokerIcon';
 import TeamDot from '@/components/common/TeamDot';
+import TeamCardName from '@/components/common/TeamCardName';
+import type { TeamKey } from '@/utils/teams';
+import { teamNameLongHint } from '@/utils/teamNames';
 import ColorPickerField from '@/components/backend/ColorPickerField';
 import DeadlineTimer from '@/components/common/DeadlineTimer';
 import { ColorPie } from '@/components/games/ColorGuess';
@@ -1206,29 +1209,29 @@ function FrontendShowcase() {
 
       <Section title="Team-Name bearbeiten (Klick auf Überschrift)">
         <div className="team" style={{ minWidth: 220 }}>
-          <h2 className="team-name-editable" title="Zum Umbenennen klicken">Die Unbesiegbaren Adler</h2>
+          <TeamCardName team="team1" name="Die Unbesiegbaren Adler" />
         </div>
         <div className="team" style={{ minWidth: 220, marginTop: 12 }}>
           <input className="team-name-edit-input" defaultValue="Die Unbesiegbaren Adler" readOnly />
-          <p className="team-name-hint" role="status">
-            Name ist zu lang – wird im Punkte-Header auf kleineren Bildschirmen abgekürzt (mit 3 Jokern weniger Platz).
-          </p>
+          <p className="team-name-hint" role="status">{teamNameLongHint(3)}</p>
         </div>
       </Section>
 
       {/* Four cards in the setup screen's own `#teams[data-team-count=4]`
-          grid: the headings are clamped to one ellipsised line, and the member
-          names use the wider 3-4 team scale (specs/team-management.md). */}
-      <Section title="Vier Teams: gekürzte Überschrift + Roster">
+          grid: every heading gets ONE full-size line of height, and a name too
+          long for it is fitted into that same height at a smaller size by
+          `useFitTeamName` instead of being cut off (specs/team-management.md).
+          The member names use the wider 3-4 team scale. */}
+      <Section title="Vier Teams: lange Überschrift + Roster">
         <div id="teams" data-team-count={4} style={{ marginTop: 0 }}>
           {[
             { name: 'Die absolut unbesiegbaren Adler vom Nordhang', members: ['Maxi', 'Mitch', 'Thomas'] },
-            { name: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaa', members: ['Péter', 'Gerhard', 'Kathi'] },
+            { name: 'Donaudampfschifffahrtsgesellschaftskapitäne', members: ['Péter', 'Gerhard', 'Kathi'] },
             { name: 'Isi allein zu Haus', members: ['Maus', 'Fabian Sp.', 'Carina'] },
             { name: 'Team 4', members: ['Michael M.', 'Isabella', 'Bianca'] },
           ].map(({ name, members }, i) => (
             <div className="team" data-team={`team${i + 1}`} key={name}>
-              <h2 className="team-name-editable" title="Zum Umbenennen klicken">{name}</h2>
+              <TeamCardName team={`team${i + 1}` as TeamKey} name={name} />
               <ul className="team-members team-members-editable">
                 {members.map(m => (
                   <li className="team-member-row" key={m}>
@@ -1243,7 +1246,7 @@ function FrontendShowcase() {
 
       <Section title="Team-Roster bearbeiten (inline)">
         <div className="team" style={{ minWidth: 260 }}>
-          <h2 className="team-name-editable" title="Zum Umbenennen klicken">Team 1</h2>
+          <TeamCardName team="team1" name="Team 1" />
           <ul className="team-members team-members-editable">
             <li className="team-member-row">
               <input className="team-member-input" defaultValue="Anna" readOnly />
@@ -1740,9 +1743,7 @@ function AdminShowcase() {
           <input className="be-input" defaultValue="Allgemeinwissen" readOnly />
           <label className="be-label">Team 1 Name (optional)</label>
           <input className="be-input" defaultValue="Die Unbesiegbaren Adler" readOnly />
-          <p className="be-field-hint" role="status">
-            Name ist zu lang – wird im Header auf kleineren Bildschirmen abgekürzt (mit 3 Jokern weniger Platz).
-          </p>
+          <p className="be-field-hint" role="status">{teamNameLongHint(3)}</p>
           <label className="be-label">Beschreibung</label>
           <textarea className="be-textarea" defaultValue="Ein kurzes Quiz..." readOnly style={{ minHeight: 50 }} />
           <label className="be-label">Spieltyp</label>

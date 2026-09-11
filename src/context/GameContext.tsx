@@ -563,6 +563,7 @@ function getInitialState(): AppState {
       jokersInLastGame: false,
       jokerUsageScope: 'per-gameshow',
       players: [],
+      totalGames: 0,
     },
     teams: readTeams(),
     settingsLoaded: false,
@@ -996,6 +997,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
           jokersInLastGame: data.jokersInLastGame === true,
           jokerUsageScope: data.jokerUsageScope === 'per-game' ? 'per-game' : 'per-gameshow',
           players: data.players || [],
+          totalGames: typeof data.totalGames === 'number' && data.totalGames > 0 ? data.totalGames : 0,
         },
       });
     } catch (err) {

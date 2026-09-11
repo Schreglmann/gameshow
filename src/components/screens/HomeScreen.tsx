@@ -3,13 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { useGameContext } from '@/context/GameContext';
 import { useGamemasterSync, useGamemasterControlsSync, useGamemasterCommandListener } from '@/hooks/useGamemasterSync';
 import type { GamemasterCommand, GamemasterControl } from '@/types/game';
-import { teamName, isTeamNameLong } from '@/utils/teamNames';
+import { teamName, teamNameLongHint } from '@/utils/teamNames';
+import { useTeamNameCheck } from '@/hooks/useTeamNameCheck';
 import { teamDisplayOrder } from '@/utils/teamOrder';
 import { ALL_TEAM_KEYS, teamKeys, teamNumber, teamRoster, isTeamKey, type TeamKey } from '@/utils/teams';
 import TeamCountWarning from '@/components/screens/TeamCountWarning';
 import CacheStatusBanner from './CacheStatusBanner';
 import InstallButton from '@/components/common/InstallButton';
-import TeamDot from '@/components/common/TeamDot';
+import TeamCardName from '@/components/common/TeamCardName';
 
 export default function HomeScreen() {
   const { state, dispatch, assignTeams } = useGameContext();
@@ -58,10 +59,12 @@ export default function HomeScreen() {
   // teams. See specs/team-count.md and specs/point-system.md.
   const teamsEnabled = pointSystemEnabled && activeTeams.length > 1;
   // Each joker column in the header pill steals room from the team name, so the
-  // long-name check depends on how MANY jokers are enabled (1 vs 3 differ). The
-  // name's actual rendered width is measured (not its char count).
+  // long-name check depends on how MANY jokers are enabled (1 vs 3 differ), on
+  // the team count (a 3-4 team pill is capped to half its side) and on the show's
+  // length (the counter's width). The name's actual rendered width is measured
+  // (not its char count). No theme here: the show's <html> already carries it.
   const jokerCount = (state.settings.enabledJokers ?? []).length;
-  const jokerNote = jokerCount > 0 ? ` (mit ${jokerCount} Joker${jokerCount === 1 ? '' : 'n'} weniger Platz)` : '';
+  const isNameLong = useTeamNameCheck({ jokerCount, teamCount: activeTeams.length, totalGames: state.settings.totalGames });
 
   // When the active gameshow has a configured roster (`GameshowConfig.players`),
   // prefill the randomization textarea once so the host only has to click "Teams
@@ -160,11 +163,11 @@ export default function HomeScreen() {
         }],
         submitLabel: 'Speichern',
       },
-      ...(isTeamNameLong(gmEditValue, jokerCount)
+      ...(isNameLong(gmEditValue)
         ? [{
             type: 'info' as const,
             id: 'rename-hint',
-            text: `Name ist zu lang – wird im Punkte-Header auf kleineren Bildschirmen abgekürzt${jokerNote}.`,
+            text: teamNameLongHint(jokerCount),
           }]
         : []),
       { type: 'button', id: 'cancel-rename', label: 'Abbrechen' },
@@ -385,20 +388,16 @@ export default function HomeScreen() {
             }}
             onBlur={() => finishEdit(true)}
           />
-          {isTeamNameLong(editValue, jokerCount, activeTeams.length) && (
-            <p className="team-name-hint" role="status">
-              Name ist zu lang – wird im Punkte-Header auf kleineren Bildschirmen abgekürzt{jokerNote}.
-            </p>
+          {isNameLong(editValue) && (
+            <p className="team-name-hint" role="status">{teamNameLongHint(jokerCount)}</p>
           )}
         </>
       ) : (
-        <h2
-          className="team-name-editable"
-          title="Zum Umbenennen klicken"
+        <TeamCardName
+          team={key}
+          name={teamName(state.teams, key)}
           onClick={e => { e.stopPropagation(); startEdit(key); }}
-        >
-          <TeamDot team={key} />{teamName(state.teams, key)}
-        </h2>
+        />
       )}
       <ul className="team-members team-members-editable">
         {(!teamRandomizationEnabled ? displayMemberSlots(members) : members).map((value, idx) => {

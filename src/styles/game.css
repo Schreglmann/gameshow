@@ -1922,3 +1922,65 @@ textarea {
 .bet-quiz-host-hint--error {
     color: rgba(var(--error-deep-rgb, 239, 68, 68), 0.9);
 }
+
+/* ── Team names inside a game ──
+   A custom team name is free text and can be one long unbreakable word. Every
+   place a game prints one WRAPS it inside its own box — mid-word if it has to —
+   instead of letting it run past the card ("Tipp <44 letters>:" used to spill
+   across the neighbouring guess field). The header pill is the one surface that
+   cuts a name, and the long-name hint is measured there; so nothing here may
+   cut or overflow, or that hint would be lying about the game.
+   `min-width: 0`: these are flex/grid items, whose default `min-width: auto`
+   refuses to shrink below the longest word. See specs/team-management.md. */
+.guess-field label,
+.guess-result-team-name,
+.award-team-card-name,
+.judgment-group h3,
+.quizjagd-team-label,
+.bet-quiz-team-choice .quiz-button,
+.bet-quiz-team-members {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+}
+
+/* The team buttons of bet-quiz and wer-kennt-mehr used to ellipsize on one
+   line, which left "Donaudampfsch…" with nothing to say which team it was.
+   They wrap now; the row already gives every button its own equal column. */
+.bet-quiz-team-choice .quiz-button {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+}
+
+/* The colour dot before a name is inline content, and a long single-word name
+   does not fit beside it — so the browser breaks at the one real opportunity on
+   the line, right after the dot, and the dot sat alone on its own line with the
+   name underneath. As a FLEX sibling the dot keeps the first line and the name
+   wraps in the room next to it (the fix the home-screen card heading already
+   uses). `baseline` pins the dot to the first line of a wrapped name; the text
+   around it (e.g. "Tipp … :", "… ist dran") is one anonymous item, centred as
+   before. `overflow-wrap: anywhere` above is what lets that item shrink below
+   its longest word. */
+.guess-field label,
+.guess-result-team-name,
+.award-team-card-name,
+.judgment-group h3,
+.quizjagd-team-label,
+.bet-quiz-team-choice .quiz-button {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: baseline;
+    justify-content: center;
+    column-gap: 0.42em;
+}
+
+/* The gap replaces the dot's inline margin. */
+.guess-field label > .team-dot,
+.guess-result-team-name > .team-dot,
+.award-team-card-name > .team-dot,
+.judgment-group h3 > .team-dot,
+.quizjagd-team-label > .team-dot,
+.bet-quiz-team-choice .quiz-button > .team-dot {
+    margin-right: 0;
+}

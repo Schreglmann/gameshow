@@ -682,6 +682,19 @@ html.gamemaster-embedded::after {
   box-shadow: none;
   letter-spacing: normal;
   text-transform: none;
+  /* Many of these carry a TEAM NAME as their label (rename, award, team-choice
+     buttons), and a name can be one long word: the button stays inside its
+     row and wraps rather than pushing the row wider than the phone. Short
+     labels never reach the cap, so they are unchanged. */
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* A label the row cannot hold on one line wraps inside the button instead of
+   overflowing it — `nowrap` above is for the common short labels. */
+.gm-button-row .gm-btn {
+  white-space: normal;
 }
 
 /* Hover only on real pointer devices — on touch (the GM runs on tablets/phones)
@@ -1556,6 +1569,10 @@ html.gamemaster-embedded::after {
   align-items: center;
   justify-content: center;
   gap: 8px;
+  /* The team name may be one long word — keep it inside the card. */
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
   font-size: clamp(0.7rem, 1.1vw, 0.8rem);
   font-weight: 700;
   text-transform: uppercase;

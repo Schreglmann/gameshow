@@ -128,6 +128,9 @@
        still wins, so phones are unchanged. */
     font-size: clamp(2em, min(8vw, 11vh), 4.5em);
     margin-bottom: clamp(1rem, 2vw, 2rem);
+    /* "<team> hat gewonnen!" — a one-word team name longer than the card's cap
+       breaks mid-word rather than pushing the fixed, centred card off screen. */
+    overflow-wrap: anywhere;
     text-shadow: 3px 3px 8px rgba(0, 0, 0, 0.4);
     font-weight: 800;
     background: linear-gradient(45deg, var(--card-heading-from, #fff), var(--card-heading-to, var(--gold)));
