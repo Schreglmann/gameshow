@@ -80,10 +80,12 @@ export function formatDistanceKm(km: number): string {
 
 /**
  * The rose is laid out in a fixed user space and then cropped: `layoutCompass` reports
- * the tight bounding box of everything it placed, and the SVG uses that as its
- * viewBox. A fixed box would have to be wide enough for the longest name a question
- * could ever carry, so every question without one drew a small ring inside wide empty
- * margins.
+ * the bounding box of everything it placed, and the SVG uses that as its viewBox. A
+ * fixed box would have to be wide enough for the longest name a question could ever
+ * carry, so every question without one drew a small ring inside wide empty margins.
+ *
+ * The box is kept symmetric around the center city horizontally, so the `?` lands in
+ * the middle of the SVG and therefore in the middle of the screen — see `cropBox`.
  */
 export const COMPASS_WIDTH = 1600;
 export const COMPASS_HEIGHT = 1000;
@@ -120,8 +122,11 @@ const LABEL_GAP_VERTICAL = 46;
 const MIN_LABEL_GAP_DEG = 14;
 const LABEL_LEVEL_OFFSET = 52;
 const MAX_LABEL_LEVELS = 3;
-/** Breathing room left around the cropped drawing. */
-const BOX_PADDING = 28;
+/** Breathing room left around the cropped drawing. Less above and below, where the
+ *  extents are a cap height and a descender rather than the generous estimate the
+ *  label widths need, and where the show has the least room to spare. */
+const BOX_PADDING_X = 28;
+const BOX_PADDING_Y = 14;
 /**
  * Average glyph advance as a fraction of the font size. Text cannot be measured
  * without a DOM, so the crop box estimates it — generously, because underestimating
@@ -275,7 +280,21 @@ function labelWidth(node: { city: CompassCity; distanceKm: number }, showDistanc
   return Math.max(name, formatDistanceKm(node.distanceKm).length * DISTANCE_FONT_SIZE * CHAR_WIDTH_RATIO);
 }
 
-/** The tight box around ring, dots and labels, padded — see COMPASS_WIDTH above. */
+/**
+ * The box around ring, dots and labels, padded — see COMPASS_WIDTH above.
+ *
+ * Horizontally it is then grown to sit symmetrically around the center city. The tight
+ * box is what the drawing needs, but the labels around the ring are never symmetric,
+ * so its middle is not the center city. The SVG is centered in the card, which put the
+ * `?` beside the middle of the screen by however much the names on one side outran the
+ * other. So each half-width is taken as the larger of the two, which centers the rose
+ * at the cost of a little air on the shorter side.
+ *
+ * Vertically the box stays tight. Nothing is centered against the middle of the screen
+ * on that axis — the card simply flows around the rose — and squaring up the taller
+ * side there only adds empty space above or below the drawing, which is the dimension
+ * the stage runs out of first.
+ */
 function cropBox(nodes: readonly CompassNode[], showDistances: boolean): CompassViewBox {
   let minX = CENTER_X - RING_RADIUS;
   let maxX = CENTER_X + RING_RADIUS;
@@ -293,11 +312,13 @@ function cropBox(nodes: readonly CompassNode[], showDistances: boolean): Compass
     maxY = Math.max(maxY, node.labelY + (lines - 1) * LABEL_LINE_HEIGHT + LABEL_FONT_SIZE * 0.3);
   }
 
+  const halfWidth = Math.max(CENTER_X - minX, maxX - CENTER_X) + BOX_PADDING_X;
+
   return {
-    x: minX - BOX_PADDING,
-    y: minY - BOX_PADDING,
-    width: maxX - minX + 2 * BOX_PADDING,
-    height: maxY - minY + 2 * BOX_PADDING,
+    x: CENTER_X - halfWidth,
+    y: minY - BOX_PADDING_Y,
+    width: 2 * halfWidth,
+    height: maxY - minY + 2 * BOX_PADDING_Y,
   };
 }
 

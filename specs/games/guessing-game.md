@@ -8,7 +8,7 @@ Both teams submit a numeric guess; the team whose answer is closest to the corre
 - [x] Host enters both teams' guesses into separate input fields on the game screen
 - [x] After both guesses are entered, host reveals the correct answer
 - [x] The team with the closer guess is highlighted as the winner
-- [x] In case of an exact tie (both equidistant), both teams are shown as tied
+- [x] In case of an exact tie (equidistant closest guesses), every tied team is shown as tied — badge plus the same highlight a sole winner gets
 - [x] Optional `answerImage`: shown after the correct answer is revealed
 - [x] Optional `questionAudio`: auto-plays when the question is shown (e.g. "guess the release year of this song"). On-screen controls (timestamp, play/pause, restart) match simple-quiz's question audio; the gamemaster gets the same play/pause + restart buttons. Audio keeps playing through the result phase and stops when advancing to the next question; on game completion it fades out and the background music fades back in
 - [x] The question audio can be trimmed: playback starts at `questionAudioStart`, stops at `questionAudioEnd`, and restarts at the start point when `questionAudioLoop` is set. The timestamp and the restart button are relative to the trimmed section. Admin picks the points on the shared `AudioTrimTimeline` waveform (the "✂ Trimmen" toggle in `GuessingGameForm`), and changing the audio file clears the trim
@@ -92,8 +92,8 @@ Both teams submit a numeric guess; the team whose answer is closest to the corre
 - Component: `src/components/games/GuessingGame.tsx`
 - Two numeric inputs, one per team, labelled clearly, side by side in a two-column grid (`.guess-fields`) so the pair stays visible next to the question audio player
 - "Reveal" button shows correct answer and highlights the winning team
-- Result layout (`.guess-result`): the correct answer in a card on top, both teams side by side in a two-column grid below it, then the optional `answerImage`, then "Nächste Frage". The verdict is a gold "Näher dran!" badge on the winning team's card (a neutral "Gleichstand!" badge on both cards when the guesses are equidistant) — there is no separate winner banner, so the guesses are never sandwiched between two result blocks
-- Visual indicator (colour/border) on the winning team's result card
+- Result layout (`.guess-result`): the correct answer in a card on top, both teams side by side in a two-column grid below it, then the optional `answerImage`, then "Nächste Frage". The verdict is a gold "Näher dran!" badge on the winning team's card (a neutral "Gleichstand!" badge on every tied card when the closest guesses are equidistant) — there is no separate winner banner, so the guesses are never sandwiched between two result blocks
+- Visual indicator (colour/border) on the winning team's result card — **every** team that wins the question carries it, ties included, so at 3–4 teams the tied pair is set apart from the teams that were further off. Sole winner and tie are then told apart by the badge alone
 - With `questionAudio`: the standard `.audio-controls` bar (timestamp / play-pause / restart) renders between question and inputs; playback uses `safePlay` + `watchMediaLoad` (asset resilience) and preloads the next question's audio via `usePreloadAsset`
 - Auto scoring (the default) changes nothing on the projector during play — the existing "Näher dran!" / "Gleichstand!" badges already state each question's verdict. It only changes how the shared award screen opens: the winner's `.award-team-card` is preselected (gold accent) and each card carries its won-question count, instead of the screen starting empty
 

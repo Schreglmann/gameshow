@@ -225,6 +225,26 @@ describe('layoutCompass — the crop box', () => {
     }
   });
 
+  it('centers the box horizontally on the center city, whichever side the long names are on', () => {
+    const { cx, viewBox } = layoutCompass(ORIGIN, [
+      city('Rothenburg ob der Tauber', 0, 5),
+      city('Ulm', 0, -5),
+      city('Bad Windsheim an der Aisch', 3, 1),
+      city('Au', -5, 0),
+    ], { showDistances: true });
+    expect(viewBox.x + viewBox.width / 2).toBeCloseTo(cx, 9);
+  });
+
+  it('stays tight above and below, where nothing is centered against the screen', () => {
+    // Two long names in the north, nothing but the ring in the south: squaring the
+    // box up would put the south\'s empty half-height above the drawing as well.
+    const { cy, viewBox } = layoutCompass(ORIGIN, [
+      city('Neustadt an der Weinstraße', 5, 1),
+      city('Sankt Pölten', 4, -2),
+    ], { showDistances: true });
+    expect(cy - viewBox.y).toBeGreaterThan(viewBox.y + viewBox.height - cy);
+  });
+
   it('grows the box for a long name and not for a short one', () => {
     const short = layoutCompass(ORIGIN, [city('Rom', 0, 5)]).viewBox;
     const long = layoutCompass(ORIGIN, [city('Rothenburg ob der Tauber', 0, 5)]).viewBox;

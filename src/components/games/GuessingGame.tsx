@@ -601,11 +601,14 @@ function GuessingInner({ questions, order, gameTitle, autoScoring, gameIndex, ga
               const entry = resultInfo.byTeam[teamKey];
               if (!entry) return null;
               // Several teams can share the best distance — then nobody is "näher
-              // dran", they are level, and all of them score.
+              // dran", they are level, and all of them score. Tied teams are
+              // highlighted just like a sole winner (at 3–4 teams the tied pair
+              // has to stand out from the teams that were further off); only the
+              // badge tells the two verdicts apart.
               const isTie = resultInfo.winners.length > 1;
               const won = resultInfo.winners.includes(teamKey);
               return (
-                <div className={`guess-result-team${won && !isTie ? ' is-winner' : ''}`} data-team={teamKey} key={teamKey}>
+                <div className={`guess-result-team${won ? ' is-winner' : ''}`} data-team={teamKey} key={teamKey}>
                   <span className="guess-result-team-name"><TeamDot team={teamKey} />{labelOf(teamKey)}</span>
                   <span className="guess-result-guess">{formatNumber(entry.guess)}</span>
                   <span className="guess-result-diff">Differenz: {formatNumber(entry.diff)}</span>

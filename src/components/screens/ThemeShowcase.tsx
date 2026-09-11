@@ -1039,6 +1039,28 @@ function FrontendShowcase() {
             </div>
           </div>
         </GlassCard>
+        <GlassCard>
+          <div className="guess-result">
+            <div className="guess-result-answer" style={{ animation: 'none' }}>
+              <span className="guess-result-label">Richtige Antwort</span>
+              <span className="guess-result-value">45</span>
+            </div>
+            <div className="guess-result-teams">
+              <div className="guess-result-team is-winner" style={{ animation: 'none' }}>
+                <span className="guess-result-team-name">Team 1</span>
+                <span className="guess-result-guess">42</span>
+                <span className="guess-result-diff">Differenz: 3</span>
+                <span className="guess-result-badge is-tie">Gleichstand!</span>
+              </div>
+              <div className="guess-result-team is-winner" style={{ animation: 'none' }}>
+                <span className="guess-result-team-name">Team 2</span>
+                <span className="guess-result-guess">48</span>
+                <span className="guess-result-diff">Differenz: 3</span>
+                <span className="guess-result-badge is-tie">Gleichstand!</span>
+              </div>
+            </div>
+          </div>
+        </GlassCard>
       </Section>
 
       <Section title="Bandle Tracks">

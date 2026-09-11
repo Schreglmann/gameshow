@@ -176,10 +176,14 @@ describe('GuessingGame', () => {
     await user.type(screen.getByLabelText('Tipp Team 2:'), '55');
     await user.click(screen.getByText('Tipp Abgeben'));
 
-    // A tie badges both team cards
+    // A tie badges both team cards — and highlights both of them, since at
+    // 3-4 teams the tied ones have to stand out from the rest
     await waitFor(() => {
       expect(screen.getAllByText('Gleichstand!')).toHaveLength(2);
     });
+    for (const badge of screen.getAllByText('Gleichstand!')) {
+      expect(badge.closest('.guess-result-team')).toHaveClass('is-winner');
+    }
   });
 
   it('shows Nächste Frage button in result phase', async () => {
