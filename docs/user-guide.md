@@ -83,6 +83,8 @@ A numerical question is asked (e.g. *"How many kilometers is it from Berlin to T
 
 Both teams write down a number — the team whose guess is **closest** to the correct answer wins.
 
+The show keeps count of the won questions itself and names the winning team at the end of the game (an equidistant guess counts for both teams) — the host only confirms the points. Games set to **Manuell** in admin let the host pick the winner instead.
+
 ![Guessing Game](./screenshots/guessing-game.png)
 > *Add screenshot: `docs/screenshots/guessing-game.png` — the guessing game screen with both team inputs*
 
@@ -204,9 +206,11 @@ Teams guess the answers to a question in the correct order (e.g. *"Top 5 highest
 After most game types, the host sees a points screen:
 
 ![Award Points](./screenshots/award-points.png)
-> *Add screenshot: `docs/screenshots/award-points.png` — the award points screen with Team 1, Draw, Team 2 buttons*
+> *Add screenshot: `docs/screenshots/award-points.png` — the award points screen with both team cards, one of them selected*
 
-The host clicks the winning team (or **Unentschieden** for a draw). Points are added automatically and the next game begins.
+The host taps the winning team's card — or both cards, which is the draw — and each card states the points it would receive. **Punkte vergeben & weiter** books them and the next game begins. Nothing is awarded by tapping a card alone, so a mis-tap is undone by tapping again.
+
+If the gamemaster kept score during the game (the `+`/`−` boxes), the leading team is already selected when the screen opens, with its number of correct answers under the points — as is the winner of a game that scored itself, such as *Schätzen*. Either way the host can pick a different team before confirming. The same two toggles and the confirm button appear on the gamemaster screen, so it can all be done from there.
 
 ---
 

@@ -1,8 +1,14 @@
-/** One team's manual correct-answer tally for a single question. */
-export interface QuestionTally {
-  team1: number;
-  team2: number;
-}
+import type { PointMode, TeamColors } from './config.js';
+import type { TeamKey } from '../utils/teams.js';
+
+/**
+ * The manual correct-answer tally for a single question, keyed by team.
+ *
+ * Partial because a gameshow runs with 0–4 teams and only the active ones ever
+ * get a bucket — read it through `questionTally`/`tallyTotals` in
+ * src/utils/correctAnswers.ts, never by indexing. See specs/team-count.md.
+ */
+export type QuestionTally = Partial<Record<TeamKey, number>>;
 
 /**
  * Manual correct-answer tally for one game, keyed by question.
@@ -30,13 +36,13 @@ export const NO_QUESTION_KEY = 'none';
  * positional awards AND inline-scored games (bet-quiz / quizjagd / final-quiz /
  * wer-kennt-mehr) — funnels through `applyPointDelta` in GameContext, which
  * appends an entry here. Backs the gamemaster scoring-undo panel. The list rides
- * the cached `gamemaster-team-state` channel and is capped (oldest dropped).
+ * the cached `gamemaster-team-state-v2` channel and is capped (oldest dropped).
  * See specs/gamemaster-cockpit.md.
  */
 export interface ScoreLogEntry {
   /** Unique id (`<ts>-<counter>`); the undo target. */
   id: string;
-  team: 'team1' | 'team2';
+  team: TeamKey;
   /** Signed, clamp-adjusted points delta actually applied. */
   delta: number;
   /** The team's total immediately after this delta. */
@@ -59,17 +65,40 @@ export interface ScoreLogEntry {
   reason?: string;
 }
 
+/**
+ * Live state of every team in the show.
+ *
+ * The fields are FLAT per team (`teamN`, `teamNName`, `teamNPoints`,
+ * `teamNJokersUsed`) rather than an array, so the localStorage keys and the
+ * `gamemaster-team-state-v2` payload stay purely additive as the supported team
+ * count grew from 2 to 4 — nothing had to be migrated.
+ *
+ * `team1`/`team2` are required (they always exist, and every pre-existing state
+ * literal has them); `team3`/`team4` are OPTIONAL and present only while a
+ * gameshow is configured for 3-4 teams. Never index those fields directly —
+ * read through `teamRoster` / `teamPoints` / `teamJokersUsed` in
+ * src/utils/teams.ts, which default a missing team to `[]` / `0`.
+ * See specs/team-count.md.
+ */
 export interface TeamState {
   team1: string[];
   team2: string[];
+  team3?: string[];
+  team4?: string[];
   /** Optional custom name for team 1. Falls back to "Team 1" when unset/blank. */
   team1Name?: string;
   /** Optional custom name for team 2. Falls back to "Team 2" when unset/blank. */
   team2Name?: string;
+  team3Name?: string;
+  team4Name?: string;
   team1Points: number;
   team2Points: number;
+  team3Points?: number;
+  team4Points?: number;
   team1JokersUsed: string[];
   team2JokersUsed: string[];
+  team3JokersUsed?: string[];
+  team4JokersUsed?: string[];
   /**
    * Bounded audit log of point mutations (most recent last), powering the
    * gamemaster scoring-undo. Optional because legacy / minimal TeamState
@@ -81,15 +110,16 @@ export interface TeamState {
    * Armed Aufholjoker (comeback-joker) multiplier target: the next awarded
    * game doubles this team's positional points, then clears. Transient pending
    * state (correct to store, unlike the trailing-team gate which is derived).
-   * Rides the cached gamemaster-team-state channel. See specs/comeback-joker.md.
+   * Rides the cached gamemaster-team-state-v2 channel. See specs/comeback-joker.md.
    */
-  doubleNextGame?: 'team1' | 'team2' | null;
+  doubleNextGame?: TeamKey | null;
   /**
-   * Presentation flag: when true the crowd-facing frontend shows `team2` on the
-   * LEFT and `team1` on the right (for whichever way the teams are seated). Team
+   * Presentation flag: when true the crowd-facing frontend REVERSES the team
+   * display order (with two teams: `team2` on the LEFT and `team1` on the
+   * right), for whichever way the teams are seated. Team
    * identities/points/jokers are unaffected — only display order flips. The
    * gamemaster screen always shows the mirror of the frontend order (it faces the
-   * crowd). Rides the cached gamemaster-team-state channel + localStorage. See
+   * crowd). Rides the cached gamemaster-team-state-v2 channel + localStorage. See
    * specs/team-order-mirror.md and src/utils/teamOrder.ts.
    */
   orderSwapped?: boolean;
@@ -97,7 +127,7 @@ export interface TeamState {
    * Monotonic revision counter (Lamport clock) guarding against a client
    * publishing a snapshot older than one already in circulation. Every local
    * mutation sets `rev = (highest rev this client has seen) + 1`; the server
-   * relays a `gamemaster-team-state` write only when its `rev` is strictly
+   * relays a `gamemaster-team-state-v2` write only when its `rev` is strictly
    * higher than the cached one, and echoes the cache back to a rejected writer
    * so it converges instead of diverging. Never reset to 0 (not even by
    * RESET_POINTS / CLEAR_ALL) — a reset that lost the race would resurrect the
@@ -107,8 +137,48 @@ export interface TeamState {
   rev?: number;
 }
 
+/**
+ * One entry of the active gameshow's `gameOrder` whose game type cannot be
+ * scored at the configured team count. It still plays — just without scoring.
+ * Surfaced as the HomeScreen warning banner. See specs/team-count.md.
+ */
+export interface IncompatibleGame {
+  /** Position in the active gameshow's `gameOrder` (0-based). */
+  index: number;
+  title: string;
+  type: string;
+}
+
 export interface GlobalSettings {
+  /**
+   * What the show calls itself — the landing-page heading, the gamemaster's
+   * start/summary label and the browser tab title. Resolved server-side from
+   * the active gameshow's `showTitle`, then the global one, then "Game Show"
+   * (`DEFAULT_SHOW_TITLE`), so this is always a non-empty string.
+   * See specs/show-title.md.
+   */
+  showTitle: string;
   pointSystemEnabled: boolean;
+  /**
+   * How many teams the active gameshow runs with (0-4). Derived server-side:
+   * the global `pointSystemEnabled: false` forces 0, otherwise the active
+   * gameshow's `teamCount` (default 2). `pointSystemEnabled` is exactly
+   * `teamCount > 0`. See specs/team-count.md.
+   */
+  teamCount: number;
+  /**
+   * How the active gameshow turns a game result into points: `positional`
+   * (default — game N is worth N points), `flat` (every game 1 point) or
+   * `per-correct-answer` (one point per correct answer, off the gamemaster's
+   * tally). Mirrors `PointMode` in config.ts. See specs/point-system.md.
+   */
+  pointMode: PointMode;
+  /**
+   * Games in the active gameshow that cannot be scored at `teamCount`. Empty
+   * when everything fits (and always empty at `teamCount: 0`, where nothing
+   * scores anyway).
+   */
+  incompatibleGames: IncompatibleGame[];
   teamRandomizationEnabled: boolean;
   /**
    * Master switch for the team-order/gamemaster-mirror feature — opt-in, default
@@ -118,6 +188,14 @@ export interface GlobalSettings {
    * See specs/team-order-mirror.md.
    */
   teamMirrorEnabled: boolean;
+  /**
+   * Per-team accent colours, resolved server-side — empty when the operator has
+   * the feature switched off, so this alone says whether to mark a team. No
+   * component reads it directly: `useTeamColorVars` publishes it to CSS as
+   * `--team1-color` … `--team4-color` and every team surface picks it up through
+   * its `data-team` attribute. See specs/team-colors.md.
+   */
+  teamColors: TeamColors;
   globalRules: string[];
   /**
    * True when the server fell back to the template-based default config
@@ -153,6 +231,14 @@ export interface GlobalSettings {
    * configured roster. See specs/team-management.md.
    */
   players: string[];
+  /**
+   * How many games the active gameshow runs (`gameOrder.length`) — the "N" the
+   * header counter reads "Spiel x von N". Lets the long-name check size the
+   * counter its team pills share the row with; 0 when unknown (a client that got
+   * no value), which the check treats as the two-digit worst case.
+   * See specs/team-management.md.
+   */
+  totalGames: number;
 }
 
 export interface CurrentGame {
@@ -207,6 +293,15 @@ export interface GamemasterAnswerData {
    * field. `revealed` reflects what the audience can already see.
    */
   answerList?: { rank: number; text: string; revealed: boolean }[];
+  /**
+   * Structured list of the *hints* the audience is looking at, for games whose
+   * puzzle is a set of clues around a single hidden answer (city-compass: the
+   * neighbor cities on the rose). Rendered as its own labelled block, so unlike
+   * `answerList` it does NOT replace `answer` — the host still needs the
+   * solution while asking. `revealed` reflects what the audience can see; a
+   * pending row is an upcoming clue, not the answer.
+   */
+  hintList?: { rank: number; text: string; revealed: boolean }[];
   /**
    * Preview of the NEXT question's answer, shown in the gamemaster card while
    * the current answer is revealed in the frontend (`answerRevealed`), gated by
@@ -275,6 +370,18 @@ export interface GamemasterControlsData {
   /** Game types that track progress via team points (bet-quiz, quizjagd, final-quiz)
    * don't need a separate correct-answers tally on the gamemaster screen. */
   hideCorrectTracker?: boolean;
+  /** True while the playing game keeps the per-question tally itself (guessing-game's
+   *  automatic scoring). The counters and the "Wertung pro Frage" rows still SHOW, but
+   *  their `+`/`−` are left out: with the show awarding the points, an edit control there
+   *  would leave the host unsure who scored what. See specs/games/guessing-game.md. */
+  tallyReadOnly?: boolean;
+  /** True while the playing game awards no points at all — the show-wide point
+   *  system is off, or the game's type cannot be scored at the configured team
+   *  count. The gamemaster hides the "Wertung pro Frage" breakdown then: every
+   *  row could only ever read "keine Wertung". The GM has no other way to know,
+   *  since `pointSystemEnabled` is resolved PER GAME by `GET /api/game/:index`.
+   *  See specs/team-count.md and specs/gamemaster-question-scores.md. */
+  pointsDisabled?: boolean;
   /** True while a GM-triggered deadline timer has a value set (counting down
    * OR showing the "Zeit abgelaufen!" badge until auto-clear). */
   deadlineActive?: boolean;

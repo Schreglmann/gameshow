@@ -503,9 +503,27 @@ export function trashRel(rel: string, runId: string): string {
  *  interval firing during a manual `npm run sync`) get distinct trash dirs.
  *  Without the suffix they'd interleave files into one folder and a `.1/.2`
  *  collision-suffix chain would mask which run trashed what — important for
- *  forensics on the next data-loss incident. */
+ *  forensics on the next data-loss incident.
+ *
+ *  Within one process the suffix is additionally guaranteed unique per
+ *  millisecond: 36^4 is only ~1.7M values, so pure randomness collides in
+ *  roughly 0.3% of 100-draw bursts (birthday bound). A separate process
+ *  (CLI sync next to the server) still relies on the random draw alone. */
+let lastRunTs = '';
+const issuedSuffixes = new Set<string>();
+
 export function makeRunId(now: Date = new Date()): string {
   const ts = now.toISOString().replace(/[:.]/g, '-');
-  const suffix = Math.random().toString(36).slice(2, 6);
+  if (ts !== lastRunTs) {
+    lastRunTs = ts;
+    issuedSuffixes.clear();
+  }
+  let suffix: string;
+  do {
+    // toString(36) can yield fewer than 4 fractional digits (e.g. 0.25 → "0.9"),
+    // so pad to keep the documented 4-char shape.
+    suffix = Math.random().toString(36).slice(2, 6).padEnd(4, '0');
+  } while (issuedSuffixes.has(suffix));
+  issuedSuffixes.add(suffix);
   return `${ts}-${suffix}`;
 }

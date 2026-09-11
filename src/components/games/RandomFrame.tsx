@@ -107,7 +107,6 @@ export default function RandomFrame(props: GameComponentProps) {
       rules={config.rules || ['Ein zufälliges Standbild aus einem Film — erratet, aus welchem Film es stammt!']}
       totalQuestions={totalQuestions}
       pointSystemEnabled={props.pointSystemEnabled}
-      pointValue={props.currentIndex + 1}
       currentIndex={props.currentIndex}
       onAwardPoints={props.onAwardPoints}
       onNextGame={props.onNextGame}

@@ -49,3 +49,10 @@ A turn-based quiz where each team alternately selects a difficulty level (easy/m
 - Teams choosing difficulty for their opponent
 - Time limits per question
 - Questions worth anything other than 3/5/7 points
+
+## Team count
+**1–4 teams.** The turn order is a round-robin over the active teams, each team's asked-question
+count is tracked separately, and the game ends once every team has had `questionsPerTeam` questions —
+so the pools must supply `questionsPerTeam × teamCount` playable questions (a validator warning, not
+an error, since one file may serve gameshows with different counts).
+See [../team-count.md](../team-count.md).

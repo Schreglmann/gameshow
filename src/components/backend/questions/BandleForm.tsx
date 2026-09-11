@@ -3,7 +3,7 @@ import type { BandleQuestion, BandleCatalogEntry } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
 import { AssetField } from '../AssetPicker';
 import MoveQuestionButton from './MoveQuestionButton';
-import { fetchBandleCatalog } from '@/services/backendApi';
+import { fetchBandleCatalog, fetchBandleUsedSongs } from '@/services/backendApi';
 
 interface Props {
   questions: BandleQuestion[];
@@ -59,6 +59,31 @@ function parLabel(par: number): string {
   if (par <= 3) return 'Mittel';
   if (par <= 4) return 'Schwer';
   return 'Sehr schwer';
+}
+
+/** `202607` → `"07/2026"`, for the picker's "Hinzugefügt" badge. */
+function addedLabel(month: number): string {
+  return `${String(month % 100).padStart(2, '0')}/${Math.floor(month / 100)}`;
+}
+
+const MONTH_NAMES = [
+  'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
+  'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember',
+];
+
+/**
+ * Hover text for the badge: the exact day when one is known ("15. Juli 2026"), otherwise
+ * the month with an explicit "(Tag unbekannt)" rather than a day we do not have. Most
+ * songs are month-only — bandle serves daily planning for just the last few days, so only
+ * songs added while syncing regularly ever get a day.
+ */
+export function addedTitle(entry: BandleCatalogEntry): string {
+  const month = addedMonth(entry)!;
+  const monthName = `${MONTH_NAMES[(month % 100) - 1] ?? '?'} ${Math.floor(month / 100)}`;
+  const day = addedDay(entry);
+  return day === null
+    ? `Bei Bandle hinzugefügt: ${monthName} (Tag unbekannt)`
+    : `Bei Bandle hinzugefügt: ${day}. ${monthName}`;
 }
 
 function viewLabel(view: number): string {
@@ -133,6 +158,102 @@ function TrackPlayer({ src }: { src: string }) {
   );
 }
 
+// ── Sorting ──
+
+export type BandleSortField = 'song' | 'view' | 'added' | 'year';
+export type BandleSortDir = 'asc' | 'desc';
+export interface BandleSort { field: BandleSortField; dir: BandleSortDir }
+
+/**
+ * Sortable fields, in the order they appear as chips. `defaultDir` is the direction a
+ * field starts in when newly picked: A→Z for the name, and the high end first for the
+ * three numeric ones (most clicks, most recently added, newest release).
+ */
+const SORT_FIELDS: { value: BandleSortField; label: string; defaultDir: BandleSortDir }[] = [
+  { value: 'song', label: 'Name', defaultDir: 'asc' },
+  { value: 'view', label: 'Klicks', defaultDir: 'desc' },
+  { value: 'added', label: 'Hinzugefügt', defaultDir: 'desc' },
+  { value: 'year', label: 'Erscheinungsjahr', defaultDir: 'desc' },
+];
+
+/**
+ * What clicking a chip does, as a three-step cycle per field: pick it (default direction)
+ * → flip it → **no sort at all**, back to the catalog order the picker opens in. Without
+ * the third step that original order is unreachable once anything has been clicked.
+ */
+export function nextSort(clicked: BandleSortField, current: BandleSort | null): BandleSort | null {
+  const defaultDir = SORT_FIELDS.find(f => f.value === clicked)!.defaultDir;
+  if (current?.field !== clicked) return { field: clicked, dir: defaultDir };
+  if (current.dir === defaultDir) return { field: clicked, dir: defaultDir === 'desc' ? 'asc' : 'desc' };
+  return null;
+}
+
+/**
+ * Month bandle added the song, as a sortable `YYYYMM` number, from the `folder` slot
+ * ("202607/Wanted" → 202607). Songs whose only slot is a themed pack ("_kpop/Yeobo")
+ * never ran as a daily puzzle and have no added date — they yield null and sort last.
+ */
+export function addedMonth(entry: BandleCatalogEntry): number | null {
+  const m = entry.folder?.match(/^(\d{6})\//);
+  return m ? Number(m[1]) : null;
+}
+
+/**
+ * Day of the month a song was added, but **only** when `dailyDate` corroborates `folder`.
+ * Bandle re-runs old songs, so a planning hit can be a repeat airing years after the song
+ * was added — The Fray's "How to Save a Life" sits in `202408` yet aired again on
+ * 2026-08-18. A `dailyDate` outside the folder's month is therefore a re-run, not the
+ * added date, and is ignored so the song keeps its (correct) month-only position.
+ */
+function addedDay(entry: BandleCatalogEntry): number | null {
+  const day = entry.dailyDate?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!day) return null;
+  return Number(`${day[1]}${day[2]}`) === addedMonth(entry) ? Number(day[3]) : null;
+}
+
+/**
+ * Added-date sort key as `YYYYMMDD`. A song whose day is unknown falls back to day `00`,
+ * which sorts it just ahead of that month's dated songs rather than to the bottom.
+ */
+function addedKey(entry: BandleCatalogEntry): number | null {
+  const month = addedMonth(entry);
+  if (month === null) return null;
+  return month * 100 + (addedDay(entry) ?? 0);
+}
+
+/** Numeric sort key; entries missing the field sort last in both directions. */
+function sortKey(entry: BandleCatalogEntry, field: BandleSortField): number | null {
+  if (field === 'view') return entry.view;
+  if (field === 'year') return entry.year;
+  return addedKey(entry);
+}
+
+/**
+ * Sort a filtered catalog slice. A null sort is the picker's opening state and leaves the
+ * catalog order untouched. Numeric fields tie-break on the song title so equal keys keep a
+ * stable order — the added month is shared by every song bandle ran that month, and `year`
+ * by every song released that year.
+ */
+export function sortCatalog(
+  entries: BandleCatalogEntry[], sort: BandleSort | null,
+): BandleCatalogEntry[] {
+  if (!sort) return entries;
+  const sign = sort.dir === 'asc' ? 1 : -1;
+  if (sort.field === 'song') {
+    return [...entries].sort((a, b) => a.song.localeCompare(b.song, 'de') * sign);
+  }
+  return [...entries].sort((a, b) => {
+    const ka = sortKey(a, sort.field);
+    const kb = sortKey(b, sort.field);
+    if (ka === null || kb === null) {
+      if (ka !== kb) return ka === null ? 1 : -1;
+    } else if (ka !== kb) {
+      return (ka - kb) * sign;
+    }
+    return a.song.localeCompare(b.song, 'de');
+  });
+}
+
 // ── Multi-select toggle chips ──
 
 function ToggleChips({ options, selected, onToggle, label, scroll }: {
@@ -160,6 +281,42 @@ function ToggleChips({ options, selected, onToggle, label, scroll }: {
   );
 }
 
+// ── Single-select sort chips ──
+
+/**
+ * One chip per sortable field, cycling through `nextSort`: pick → flip → back to the
+ * default sort. Rendered as chips to match the picker's other filter rows.
+ */
+function SortChips({ sort, onChange }: {
+  sort: BandleSort | null;
+  onChange: (sort: BandleSort | null) => void;
+}) {
+  return (
+    <div className="bandle-chip-group">
+      <span className="bandle-chip-label">Sortierung</span>
+      {SORT_FIELDS.map(f => {
+        const active = sort?.field === f.value;
+        return (
+          <button
+            type="button"
+            key={f.value}
+            className={`bandle-chip${active ? ' active' : ''}`}
+            aria-pressed={active}
+            title={!active
+              ? `Nach ${f.label} sortieren`
+              : sort!.dir === f.defaultDir
+                ? `${f.label} — klicken für ${sort!.dir === 'desc' ? 'aufsteigend' : 'absteigend'}`
+                : `${f.label} — klicken für ursprüngliche Reihenfolge`}
+            onClick={() => onChange(nextSort(f.value, sort))}
+          >
+            {f.label}{active ? (sort!.dir === 'desc' ? ' ↓' : ' ↑') : ''}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Song Picker Modal ──
 
 interface PickerFilters {
@@ -171,19 +328,25 @@ interface PickerFilters {
   setSelectedPacks: React.Dispatch<React.SetStateAction<Set<string>>>;
   selectedDecades: Set<string>;
   setSelectedDecades: React.Dispatch<React.SetStateAction<Set<string>>>;
+  hideUsed: boolean;
+  setHideUsed: React.Dispatch<React.SetStateAction<boolean>>;
+  sort: BandleSort | null;
+  setSort: (sort: BandleSort | null) => void;
 }
 
 interface PickerProps extends PickerFilters {
   catalog: BandleCatalogEntry[];
-  existingPaths: Set<string>;
+  existingSlugs: Set<string>;
+  usedSlugs: Set<string>;
   onAdd: (entries: BandleCatalogEntry[]) => void;
   onClose: () => void;
 }
 
 function BandleSongPicker({
-  catalog, existingPaths, onAdd, onClose,
+  catalog, existingSlugs, usedSlugs, onAdd, onClose,
   search, setSearch, selectedPars, setSelectedPars,
   selectedPacks, setSelectedPacks, selectedDecades, setSelectedDecades,
+  hideUsed, setHideUsed, sort, setSort,
 }: PickerProps) {
   const [visibleCount, setVisibleCount] = useState(50);
   // Songs checked for adding — keyed by catalog path, insertion-ordered (Set).
@@ -207,7 +370,7 @@ function BandleSongPicker({
     return () => observer.disconnect();
   }, []);
 
-  useEffect(() => { setVisibleCount(50); }, [search, selectedPars, selectedPacks, selectedDecades]);
+  useEffect(() => { setVisibleCount(50); }, [search, selectedPars, selectedPacks, selectedDecades, hideUsed, sort]);
 
   const toggleSet = (set: Set<string>, value: string): Set<string> => {
     const next = new Set(set);
@@ -229,7 +392,11 @@ function BandleSongPicker({
   const allPacks = [...new Set(catalog.flatMap(s => s.packs))].filter(p => p !== 'Gratis').sort();
 
   const filtered = catalog.filter(s => {
-    if (existingPaths.has(s.path)) return false;
+    // Questions carry no catalog path — the audio folder slug is the shared identity
+    // between a catalog entry and a question added from it.
+    const slug = songSlug(s.song);
+    if (existingSlugs.has(slug)) return false;
+    if (hideUsed && usedSlugs.has(slug)) return false;
     if (search) {
       const q = search.toLowerCase();
       const haystack = `${s.song} ${s.frontperson || ''} ${(s.sources || []).join(' ')}`.toLowerCase();
@@ -242,14 +409,16 @@ function BandleSongPicker({
       if (!selectedDecades.has(decade)) return false;
     }
     return true;
-  }).sort((a, b) => b.view - a.view);
+  });
+
+  const sorted = sortCatalog(filtered, sort);
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="picker-modal bandle-picker-modal" onClick={e => e.stopPropagation()}>
         <div className="picker-header">
           <h3>Song hinzufügen</h3>
-          <span className="bandle-picker-count">{filtered.length} Songs</span>
+          <span className="bandle-picker-count">{sorted.length} Songs</span>
           <button type="button" className="be-delete-btn" onClick={onClose} style={btnStyle}>✕</button>
         </div>
 
@@ -284,10 +453,23 @@ function BandleSongPicker({
             selected={selectedPacks}
             onToggle={v => setSelectedPacks(prev => toggleSet(prev, v))}
           />
+
+          <div className="bandle-chip-group">
+            <span className="bandle-chip-label">Verwendung</span>
+            <button
+              type="button"
+              className={`bandle-chip${hideUsed ? ' active' : ''}`}
+              onClick={() => setHideUsed(prev => !prev)}
+            >
+              Bereits verwendete Songs ausblenden
+            </button>
+          </div>
+
+          <SortChips sort={sort} onChange={setSort} />
         </div>
 
         <div className="bandle-picker-list" ref={listRef}>
-          {filtered.slice(0, visibleCount).map(entry => {
+          {sorted.slice(0, visibleCount).map(entry => {
             const checked = checkedPaths.has(entry.path);
             return (
               <div
@@ -306,6 +488,11 @@ function BandleSongPicker({
                   <div className="bandle-picker-item-meta">
                     <span className="bandle-picker-badge" title="Schwierigkeit">Par {entry.par} – {parLabel(entry.par)}</span>
                     <span className="bandle-picker-badge" title="YouTube Views">{viewLabel(entry.view)}</span>
+                    {addedMonth(entry) !== null && (
+                      <span className="bandle-picker-badge" title={addedTitle(entry)}>
+                        {addedLabel(addedMonth(entry)!)}
+                      </span>
+                    )}
                     {entry.packs.filter(p => p !== 'Gratis').slice(0, 2).map(p => (
                       <span key={p} className="bandle-picker-badge bandle-badge-pack">{p}</span>
                     ))}
@@ -315,7 +502,7 @@ function BandleSongPicker({
             );
           })}
           <div ref={sentinelRef} style={{ height: 1 }} />
-          {filtered.length === 0 && (
+          {sorted.length === 0 && (
             <div className="bandle-picker-empty">Keine Songs gefunden</div>
           )}
         </div>
@@ -353,6 +540,13 @@ export default function BandleForm({ questions, onChange, otherInstances, onMove
   const [selectedPars, setSelectedPars] = useState<Set<string>>(new Set());
   const [selectedPacks, setSelectedPacks] = useState<Set<string>>(new Set());
   const [selectedDecades, setSelectedDecades] = useState<Set<string>>(new Set());
+  const [hideUsed, setHideUsed] = useState(true);
+  // null = the catalog order the picker opens in; a field's third click returns to it.
+  const [sort, setSort] = useState<BandleSort | null>(null);
+
+  // Audio folder slugs referenced by any bandle game — re-fetched on every picker
+  // open so edits to other games in the meantime are reflected.
+  const [usedSlugs, setUsedSlugs] = useState<Set<string>>(new Set());
 
   // Click outside any question-block to close expanded
   useEffect(() => {
@@ -368,6 +562,9 @@ export default function BandleForm({ questions, onChange, otherInstances, onMove
   }, [expandedIdx]);
 
   const openPicker = useCallback(async () => {
+    fetchBandleUsedSongs()
+      .then(folders => setUsedSlugs(new Set(folders)))
+      .catch(e => console.error('Failed to load used bandle songs:', e));
     if (catalog.length === 0 && !catalogLoading) {
       setCatalogLoading(true);
       try { setCatalog(await fetchBandleCatalog()); }
@@ -377,7 +574,7 @@ export default function BandleForm({ questions, onChange, otherInstances, onMove
     setPickerOpen(true);
   }, [catalog.length, catalogLoading]);
 
-  const existingPaths = new Set(
+  const existingSlugs = new Set(
     questions.map(q => {
       const m = q.tracks[0]?.audio?.match(/\/audio\/bandle\/([^/]+)\//);
       return m ? m[1]! : '';
@@ -518,7 +715,8 @@ export default function BandleForm({ questions, onChange, otherInstances, onMove
       {pickerOpen && (
         <BandleSongPicker
           catalog={catalog}
-          existingPaths={existingPaths}
+          existingSlugs={existingSlugs}
+          usedSlugs={usedSlugs}
           onAdd={addManyFromCatalog}
           onClose={() => setPickerOpen(false)}
           search={search}
@@ -529,6 +727,10 @@ export default function BandleForm({ questions, onChange, otherInstances, onMove
           setSelectedPacks={setSelectedPacks}
           selectedDecades={selectedDecades}
           setSelectedDecades={setSelectedDecades}
+          hideUsed={hideUsed}
+          setHideUsed={setHideUsed}
+          sort={sort}
+          setSort={setSort}
         />
       )}
     </div>

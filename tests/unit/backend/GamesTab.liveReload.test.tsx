@@ -15,6 +15,7 @@ vi.mock('@/services/backendApi', () => ({
   createExampleGames: vi.fn().mockResolvedValue({ createdGames: [], gameshow: 'x' }),
   deleteGame: vi.fn().mockResolvedValue({ success: true, removedRefs: [] }),
   saveGame: vi.fn().mockResolvedValue(undefined),
+  saveGameBeacon: vi.fn(),
   fetchConfig: vi.fn().mockResolvedValue({ activeGameshow: 'test', gameshows: {} }),
 }));
 

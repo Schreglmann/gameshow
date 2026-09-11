@@ -540,6 +540,21 @@
   color: rgba(var(--text-rgb), 0.85);
 }
 
+/* A switch whose value is dictated by something else — currently the active
+   gameshow's team count, which forces the point system off at 0 teams and the
+   team randomization off at 0-1. It shows its EFFECTIVE value and cannot be
+   toggled; the note beside it says why. The stored config value is untouched, so
+   raising the team count restores whatever the operator had chosen.
+   See specs/team-count.md. */
+.be-toggle.is-locked {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.be-toggle.is-locked:hover {
+  color: rgba(var(--text-rgb), max(0.6, var(--text-fade-floor, 0)));
+}
+
 /* ── Buttons ── */
 
 .be-icon-btn {
@@ -908,6 +923,16 @@
   background: rgba(var(--success-rgb), 0.88);
   border: 1px solid rgba(var(--success-rgb), 0.95);
   color: var(--text-primary);
+}
+
+/* Neither success nor failure: the save is held up by something outside our control
+   (offline, server unreachable) and is still being retried. Deep amber rather than the
+   #facc15-ish tint the banners use — a solid toast fill needs to carry light text, and on
+   light themes the contrast token supplies ivory exactly as .be-toast-error does. */
+.be-toast-warning {
+  background: rgba(var(--warning-deep-rgb, 140, 94, 8), 0.92);
+  border: 1px solid rgba(var(--warning-deep-rgb, 140, 94, 8), 0.95);
+  color: var(--primary-contrast-text, var(--text-primary));
 }
 
 .be-toast-error {
@@ -1763,6 +1788,17 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Names the team-count band the locked rows below belong to. Only rendered when
+   the active gameshow is not on the 2-team default, so the author can tell that
+   the wording on screen is the 0-1 or 3-4 team variant. */
+.be-rules-band-note {
+  margin: 0 0 4px 26px;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)));
 }
 
 .be-rule-locked .be-drag-disabled {
@@ -3121,10 +3157,15 @@
 
 /* ── Gameshow players row ── */
 
+/* Wraps as a whole when Teams + Punkte + the roster group's floor width (see
+   .gs-roster-group) don't fit one line — the roster group then drops to its own
+   line intact, rather than the combobox breaking apart internally. */
 .gs-players-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
+  row-gap: 10px;
   margin-bottom: 10px;
 }
 
@@ -3133,6 +3174,51 @@
   color: rgba(var(--text-rgb), max(0.45, var(--text-fade-floor, 0)));
   white-space: nowrap;
   flex-shrink: 0;
+}
+
+/* Team count sits in the same row as the player roster. It holds one short
+   option, so cap it — left to grow it took half the row and pushed the roster
+   combobox into the Planung button. See specs/team-count.md. */
+.gs-team-count {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 130px;
+  max-width: 170px;
+  margin-right: 10px;
+}
+
+/* Point mode sits next to the team count. Capped for the same reason. See
+   specs/point-system.md. */
+.gs-point-mode {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 150px;
+  max-width: 210px;
+  margin-right: 10px;
+}
+
+/* The roster (label + combobox + Planung button) as one unbreakable unit.
+   flex-shrink: 0 is the actual mechanism: an item that CANNOT shrink below its
+   380px basis forces the flex-wrap row to push it to the next line whole,
+   instead of compressing it (which was letting the combobox get squeezed below
+   what its tags + input need, breaking the input onto its own line inside it).
+   Still grows on a wide row, so it isn't stuck at 380px once it has the line to
+   itself. See specs/point-system.md. */
+.gs-roster-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 0 380px;
+  min-width: 380px;
+}
+
+/* The per-gameshow show-title override. Its own row, so a long title never
+   squeezes the team-count / point-mode / roster row. Capped so it doesn't run
+   the full card width on a wide screen. See specs/show-title.md. */
+.gs-show-title {
+  flex: 1 1 240px;
+  min-width: 180px;
+  max-width: 420px;
 }
 
 /* ── Overlap badges ── */
@@ -4337,7 +4423,7 @@
   border: 1px solid rgba(var(--glass-rgb), 0.14);
   border-radius: 10px;
   padding: 14px 18px;
-  width: min(540px, calc(100vw - 32px));
+  width: min(540px, 100%);
   box-sizing: border-box;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
   display: flex;
@@ -4436,7 +4522,7 @@
   border: 1px solid rgba(var(--glass-rgb), 0.14);
   border-radius: 8px;
   padding: 6px 12px;
-  width: min(540px, calc(100vw - 32px));
+  width: min(540px, 100%);
   box-sizing: border-box;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
   display: flex;
@@ -4446,6 +4532,8 @@
   color: inherit;
   font: inherit;
   text-align: left;
+  text-transform: none;
+  letter-spacing: normal;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
@@ -4508,6 +4596,239 @@
   .upload-progress-minimized-row {
     font-size: 11px;
   }
+}
+
+/* ── Grouped progress rows ──
+ * Every in-flight job (upload, YouTube single/playlist, audio covers) is one compact
+ * row inside a single panel. Four concurrent downloads used to stack four ~145px
+ * boxes with no height cap; the stack below is capped and scrolls instead. */
+
+.progress-stack {
+  pointer-events: auto;
+  width: min(540px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.progress-group {
+  padding: 10px 12px;
+  gap: 8px;
+}
+
+.progress-group-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(var(--glass-rgb), 0.1);
+}
+
+.progress-group-header-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.progress-group-title {
+  font-size: 12px;
+  color: rgba(var(--text-rgb), max(0.55, var(--text-fade-floor, 0)));
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.progress-group-summary {
+  font-size: 11px;
+  color: rgba(var(--text-rgb), max(0.45, var(--text-fade-floor, 0)));
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.progress-group-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* ~6 collapsed rows; beyond that the list scrolls instead of growing the panel. */
+  max-height: 280px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.progress-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.progress-row-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.progress-row-toggle {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  padding: 2px 4px;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-transform: none;
+  letter-spacing: normal;
+  transition: background 0.15s ease;
+}
+
+.progress-row-toggle:hover,
+.progress-row-toggle:focus-visible {
+  background: rgba(var(--glass-rgb), 0.08);
+  outline: none;
+}
+
+.progress-row-chevron {
+  width: 11px;
+  flex-shrink: 0;
+  font-size: 11px;
+  line-height: 1;
+  text-align: center;
+  color: rgba(var(--text-rgb), max(0.55, var(--text-fade-floor, 0)));
+}
+
+.progress-row-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: rgba(var(--text-rgb), 0.8);
+}
+
+.progress-row-detail {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)));
+  font-variant-numeric: tabular-nums;
+}
+
+.progress-row-cancel {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  border: 1px solid rgba(var(--glass-rgb), 0.2);
+  border-radius: 4px;
+  color: rgba(var(--text-rgb), max(0.55, var(--text-fade-floor, 0)));
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: normal;
+  padding: 2px 6px;
+  flex-shrink: 0;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.progress-row-cancel:hover,
+.progress-row-cancel:focus-visible {
+  background: rgba(248, 113, 113, 0.12);
+  border-color: rgba(248, 113, 113, 0.4);
+  color: rgba(var(--text-rgb), 0.9);
+  outline: none;
+}
+
+.progress-row-track {
+  height: 4px;
+}
+
+.progress-row-detail-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 0 2px 16px;
+}
+
+.progress-row-stats {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  font-size: 11px;
+  font-family: monospace;
+  color: rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)));
+}
+
+.progress-row-note {
+  font-size: 11px;
+}
+
+.progress-row-note--ok { color: rgba(74, 222, 128, 0.9); }
+.progress-row-note--error { color: rgba(248, 113, 113, 0.9); }
+
+/* Per-track lists inside an expanded playlist / audio-cover row */
+.progress-track-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.progress-track-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.progress-track-index {
+  width: 14px;
+  flex-shrink: 0;
+  text-align: center;
+  font-size: 10px;
+  color: rgba(var(--text-rgb), max(0.3, var(--text-fade-floor, 0)));
+}
+
+.progress-track-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.progress-track-name {
+  font-size: 11px;
+  color: rgba(var(--text-rgb), max(0.6, var(--text-fade-floor, 0)));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.progress-track-name--ok { color: rgba(74, 222, 128, 0.7); }
+.progress-track-name--error { color: rgba(248, 113, 113, 0.7); }
+
+.progress-track-bar {
+  height: 3px;
+  margin-top: 2px;
+}
+
+@media (max-width: 576px) {
+  .progress-group { padding: 8px 10px; }
+  .progress-group-rows { max-height: 200px; }
+  .progress-row-label { font-size: 11px; }
+  .progress-row-detail,
+  .progress-group-summary { font-size: 10px; }
 }
 
 @keyframes pulse-text {
@@ -4621,6 +4942,22 @@
   margin-top: 10px;
 }
 
+/* One block per team. The left padding is unconditional so switching team colours
+   on or off never reflows the grid — the accent edge sits in space the block
+   already reserves. See specs/team-colors.md. */
+.session-team-block {
+  padding-left: 10px;
+  box-shadow: var(--team-edge-left) var(--team-color);
+}
+
+/* ── Konfiguration tab: the four team-colour pickers ── */
+
+.config-team-colors {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+}
+
 /* ══════════════════════════════════════════
    Responsive — mobile-first overrides
    ══════════════════════════════════════════ */
@@ -4708,16 +5045,15 @@
   /* Session: single column teams */
   .session-team-grid { grid-template-columns: 1fr; }
 
+  /* Team colours: one picker per row */
+  .config-team-colors { grid-template-columns: 1fr; }
+
   /* Question blocks: allow wrapping */
   .question-block-row { flex-wrap: wrap; }
 
-  /* Gameshow picker row & players row: wrap */
+  /* Gameshow picker row: wrap. (.gs-players-row wraps unconditionally now — see
+     the base rule above — so it needs no mobile override here.) */
   .gs-picker-row {
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-
-  .gs-players-row {
     flex-wrap: wrap;
     gap: 6px;
   }
@@ -7792,3 +8128,138 @@
   .spell-dict-row { flex-wrap: wrap; }
 }
 
+/* ── City Compass question editor ── */
+
+.city-compass-settings {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(var(--glass-rgb), 0.08);
+}
+
+.city-compass-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.city-compass-toolbar__select {
+  width: auto;
+  min-width: 110px;
+  margin: 0;
+}
+
+.city-compass-hint {
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgba(var(--text-rgb), max(0.55, var(--text-fade-floor, 0)));
+  margin: 2px 0 8px;
+}
+
+/* One picked city: rank, name, country, and its distance + bearing from the center. */
+.city-chip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  margin-bottom: 6px;
+  border: 1px solid rgba(var(--glass-rgb), 0.12);
+  border-radius: 5px;
+  background: rgba(var(--glass-rgb), 0.05);
+  font-size: 13px;
+}
+
+.city-chip--center {
+  margin-bottom: 8px;
+  border-color: var(--admin-accent-deep);
+  background: rgba(var(--glass-rgb), 0.09);
+}
+
+.city-chip__rank {
+  min-width: 20px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)));
+}
+
+.city-chip__name {
+  font-weight: 600;
+  color: rgba(var(--text-rgb), 0.95);
+}
+
+.city-chip__meta {
+  font-size: 12px;
+  color: rgba(var(--text-rgb), max(0.55, var(--text-fade-floor, 0)));
+  font-variant-numeric: tabular-nums;
+}
+
+.city-chip__meta--warn {
+  color: rgba(239, 68, 68, 0.85);
+}
+
+.city-search {
+  position: relative;
+}
+
+/* Typeahead results. Absolute so the list overlays the fields below instead of
+   pushing the whole question block around while the user types. */
+.city-search-results {
+  position: absolute;
+  z-index: 150;
+  left: 0;
+  right: 0;
+  top: calc(100% - 4px);
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid rgba(var(--glass-rgb), 0.18);
+  border-radius: 4px;
+  background: var(--admin-select-bg);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+}
+
+/* A result row is a button, and the admin themes uppercase button text — city names
+   have to keep their own capitalization. */
+.city-search-result {
+  text-transform: none;
+  letter-spacing: normal;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-bottom: 1px solid rgba(var(--glass-rgb), 0.07);
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.city-search-result:last-child {
+  border-bottom: none;
+}
+
+.city-search-result:hover,
+.city-search-result:focus-visible,
+.city-search-result.highlighted {
+  background: rgba(var(--glass-rgb), 0.14);
+}
+
+.city-search-result__name {
+  font-weight: 600;
+}
+
+.city-search-result__meta {
+  margin-left: auto;
+  font-size: 12px;
+  color: rgba(var(--text-rgb), max(0.55, var(--text-fade-floor, 0)));
+  font-variant-numeric: tabular-nums;
+}

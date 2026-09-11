@@ -67,7 +67,7 @@ You don't need to know any of this to run the app — the admin handles it. It's
 
 1. **Game files** live in `games/` — one JSON file per game concept. Type-level examples are generated on demand (`games/beispiel-*.json`, gitignored) from code fixtures in `server/example-games.ts` — see [specs/example-games.md](specs/example-games.md)
 2. **`config.json`** defines gameshows (each with a `gameOrder`) and selects the active one via `activeGameshow`
-3. **Settings** like `pointSystemEnabled` and `globalRules` live in `config.json` (top-level)
+3. **Settings** like `showTitle` (the start-screen heading), `pointSystemEnabled` and `globalRules` live in `config.json` (top-level); a gameshow can override `showTitle` with its own
 
 > `config.json` is git-crypt encrypted on the maintainer's machine. If you don't have the key, the server writes a minimal default config and the admin offers **"Beispiele erstellen"** to populate example games — the app works without any setup. Only commit `config.json` if you have the key.
 
@@ -93,6 +93,7 @@ The admin's "Neues Spiel" dialog lists all 16 types:
 | `ranking` | Guess the answers to a question in the correct order — host reveals one rank at a time |
 | `wer-kennt-mehr` | Final game — both teams name as many of a thing as possible; the team that named more scores that count |
 | `random-frame` | Guess the movie/show from a single random still frame pulled from a video (GM can re-roll) |
+| `city-compass` | Name the hidden city at the center of a compass rose, from the cities around it at their true bearing |
 
 See [GAME_TYPES.md](GAME_TYPES.md) for the per-type field reference.
 

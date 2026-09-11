@@ -32,8 +32,9 @@ describe('Config Types', () => {
       'ranking',
       'wer-kennt-mehr',
       'random-frame',
+      'city-compass',
     ];
-    expect(types).toHaveLength(14);
+    expect(types).toHaveLength(15);
   });
 
   it('SimpleQuizQuestion supports all optional fields', () => {

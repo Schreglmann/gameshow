@@ -25,6 +25,7 @@ const mockDeleteGameInstance = vi.fn().mockResolvedValue({ success: true, remove
 
 vi.mock('@/services/backendApi', () => ({
   saveGame: (...args: unknown[]) => mockSaveGame(...args),
+  saveGameBeacon: vi.fn(),
   fetchGame: (...args: unknown[]) => mockFetchGame(...args),
   deleteGameInstance: (...args: unknown[]) => mockDeleteGameInstance(...args),
   renameGame: vi.fn().mockResolvedValue(undefined),

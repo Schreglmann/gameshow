@@ -110,6 +110,12 @@ const QUESTION_FIELDS: Record<GameType, ProseField[]> = {
     { kind: 'scalar', field: 'question', label: 'Fragetext' },
     { kind: 'scalar', field: 'answer', label: 'Antwort' },
   ],
+  // City names are deliberately absent: they are place names, and checking them
+  // would report every second neighbor as a typo.
+  'city-compass': [
+    { kind: 'scalar', field: 'question', label: 'Fragetext' },
+    { kind: 'scalar', field: 'info', label: 'Zusatzinfo' },
+  ],
 };
 
 const INSTANCE_RESERVED_KEYS = new Set(['template', 'archive']);

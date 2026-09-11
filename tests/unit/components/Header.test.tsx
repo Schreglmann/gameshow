@@ -36,6 +36,17 @@ describe('Header', () => {
     expect(screen.getAllByText(/Punkte/)).toHaveLength(2);
   });
 
+  // The `data-team` attribute + `.team-dot` are how a team's colour reaches this
+  // cell at all — a refactor that drops either silently unmarks the header.
+  // See specs/team-colors.md.
+  it('marks each team cell with data-team and a colour dot', async () => {
+    renderHeader();
+    await vi.waitFor(() => expect(screen.getByText('Team 1')).toBeInTheDocument());
+    expect(document.querySelector('.team-header-cell[data-team="team1"]')).toBeInTheDocument();
+    expect(document.querySelector('.team-header-cell[data-team="team2"]')).toBeInTheDocument();
+    expect(document.querySelectorAll('.team-dot[data-team]')).toHaveLength(2);
+  });
+
   it('renders with default showGameNumber=true', () => {
     renderHeader();
     // When there's no current game, game number div won't show numbers

@@ -10,6 +10,10 @@ Players and the host navigate a linear route from team setup through all game ro
 - [x] Games advance sequentially: index 0 → 1 → … → totalGames - 1
 - [x] After the last game, navigation goes to `/summary` (SummaryScreen); from the summary, back (ArrowLeft / GM "Zurück") returns to the last game opened at its end
 - [x] `/admin` is accessible at any time as an out-of-band route (not part of the linear flow)
+- [x] The gamemaster can jump the show to any point in the flow out of order, via the
+      `goto:home` / `goto:rules` / `goto:game-<index>` / `goto:summary` commands handled at app
+      level in `AppContent`. Only the active show reacts. See
+      [gamemaster-run-of-show.md](gamemaster-run-of-show.md)
 - [x] `currentGame.currentIndex` and `currentGame.totalGames` are set in `AppState` when a game loads
 - [x] Sequential back-navigation is supported: pressing back (ArrowLeft key / gamemaster "Zurück") on a game's landing (title) screen navigates one step back through the flow. Reached only after a game's in-game phases are exhausted — the full back cascade within a game is `game → rules → landing → (previous step)`. From a later game the previous step is the **previous game** (opened at its title screen); from the **first** game it is the **global rules** screen (`/rules`), or the **start page** (`/`) directly when the rules screen has nothing to show — no global rules and no enabled jokers (`hasGlobalRulesContent()`; the rules screen auto-forwards when empty). From the global rules screen, back goes to the start page (`/`); the start page is the beginning and has no back. Going back to a previous game replays it from its start, which can re-award points; use the gamemaster undo / `scoreHistory` (see [point-system.md](point-system.md)) to reconcile
 - [x] The gamemaster back control ("Zurück") is shown on every screen where back is possible (all games, the global rules screen) and hidden only on the start page
@@ -28,7 +32,10 @@ Players and the host navigate a linear route from team setup through all game ro
 - `AdminScreen`: always accessible via direct URL; does not affect the linear flow
 
 ## Out of scope
-- Non-linear navigation (jumping to an arbitrary game) — only stepping back one game at a time is supported
+- Non-linear navigation from the **show itself** — within the show, forward is sequential and
+  back steps one game at a time. Jumping to an arbitrary point is a *gamemaster* action: the
+  run-of-show panel sends a `goto:*` command that this flow's routes answer. See
+  [gamemaster-run-of-show.md](gamemaster-run-of-show.md)
 - Resuming a previous game mid-phase (going back always opens it at its title screen — phase history is not persisted)
 - Resuming a partially completed gameshow after a full page reload
 - Multi-device sync (all state is local)

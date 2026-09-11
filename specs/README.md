@@ -29,8 +29,11 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 |------|------|--------|
 | App navigation flow | [app-navigation-flow.md](app-navigation-flow.md) | ✅ Implemented |
 | Team management | [team-management.md](team-management.md) | ✅ Implemented |
+| Dynamic team count (0–4 teams) | [team-count.md](team-count.md) | ✅ Implemented |
 | Team order & gamemaster mirror | [team-order-mirror.md](team-order-mirror.md) | ✅ Implemented |
+| Per-team colours (operator-picked accents) | [team-colors.md](team-colors.md) | ✅ Implemented |
 | Point system | [point-system.md](point-system.md) | ✅ Implemented |
+| Show title (custom landing-page text) | [show-title.md](show-title.md) | ✅ Implemented |
 | Config system | [config-system.md](config-system.md) | ✅ Implemented |
 | Config validation | [config-validation.md](config-validation.md) | ✅ Implemented |
 | gameOrder cascade-cleanup on game/instance delete | [config-gameorder-cascade.md](config-gameorder-cascade.md) | ✅ Implemented |
@@ -70,6 +73,7 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | Game naming improvements | [game-naming.md](game-naming.md) | 🗂 Planned |
 | Admin backend (games/assets/config CMS) | [admin-backend.md](admin-backend.md) | ✅ Implemented |
 | Admin Gameshows tab (split from Config, collapsible cards) | [admin-gameshows-tab.md](admin-gameshows-tab.md) | ✅ Implemented |
+| Admin save queue (unmount-safe autosave, retry, status indicator) | [admin-save-queue.md](admin-save-queue.md) | ✅ Implemented |
 | DAM asset merge (deduplication) | [asset-merge.md](asset-merge.md) | 🗂 Planned |
 | Audio cover override + source labels + propagation | [audio-cover-override.md](audio-cover-override.md) | 🗂 Planned |
 | Admin system status dashboard | [admin-system-status.md](admin-system-status.md) | ✅ Implemented |
@@ -81,7 +85,8 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | Gamemaster show-scroll controls | [gamemaster-scroll.md](gamemaster-scroll.md) | ✅ Implemented |
 | Gamemaster fullscreen toggle | [gamemaster-fullscreen.md](gamemaster-fullscreen.md) | ✅ Implemented |
 | Gamemaster background-music remote control | [gamemaster-music-control.md](gamemaster-music-control.md) | ✅ Implemented |
-| Gamemaster cockpit (scoring-undo, panic-hold, joker-confirm; readiness planned) | [gamemaster-cockpit.md](gamemaster-cockpit.md) | 🚧 Partial (Pieces 1–3 ✅) |
+| Gamemaster run-of-show ("Ablauf" sidebar + jump-to-game) | [gamemaster-run-of-show.md](gamemaster-run-of-show.md) | ✅ Implemented |
+| Gamemaster cockpit (scoring-undo, panic-hold, joker-confirm; readiness planned) | [gamemaster-cockpit.md](gamemaster-cockpit.md) | 🚧 Partial (Pieces 1–3, 5a ✅) |
 | Comeback-Joker (Aufholjoker — trailing team doubles next game) | [comeback-joker.md](comeback-joker.md) | ✅ Implemented |
 | Score reveal (Zähl-Animation + Führungswechsel-Sting) | [score-reveal.md](score-reveal.md) | ✅ Implemented |
 | Cross-device gamemaster sync (WebSocket) | [cross-device-gamemaster.md](cross-device-gamemaster.md) | ✅ Implemented |
@@ -123,6 +128,7 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | Wer kennt mehr? (name-more duel) | [games/wer-kennt-mehr.md](games/wer-kennt-mehr.md) | ✅ Implemented |
 | Cover oder Original (uses simple-quiz) | [games/cover-oder-original.md](games/cover-oder-original.md) | ✅ Implemented |
 | Random frame (guess the movie from a random video still) | [games/random-frame.md](games/random-frame.md) | ✅ Implemented |
+| City compass (guess the center city from its neighbors' bearings) | [games/city-compass.md](games/city-compass.md) | ✅ Implemented |
 | Ein Stern. Würde nicht wiederkommen. (uses simple-quiz) | [games/ein-stern.md](games/ein-stern.md) | ✅ Implemented |
 | Sprachsalat (uses simple-quiz) | [games/sprachsalat.md](games/sprachsalat.md) | ✅ Implemented — clips placed, need listen-check |
 

@@ -1,12 +1,16 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGameContext } from '@/context/GameContext';
 import { useGamemasterSync, useGamemasterControlsSync, useGamemasterCommandListener } from '@/hooks/useGamemasterSync';
 import type { GamemasterCommand, GamemasterControl } from '@/types/game';
-import { teamName, isTeamNameLong } from '@/utils/teamNames';
+import { teamName, teamNameLongHint } from '@/utils/teamNames';
+import { useTeamNameCheck } from '@/hooks/useTeamNameCheck';
 import { teamDisplayOrder } from '@/utils/teamOrder';
+import { ALL_TEAM_KEYS, teamKeys, teamNumber, teamRoster, isTeamKey, type TeamKey } from '@/utils/teams';
+import TeamCountWarning from '@/components/screens/TeamCountWarning';
 import CacheStatusBanner from './CacheStatusBanner';
 import InstallButton from '@/components/common/InstallButton';
+import TeamCardName from '@/components/common/TeamCardName';
 
 export default function HomeScreen() {
   const { state, dispatch, assignTeams } = useGameContext();
@@ -19,7 +23,7 @@ export default function HomeScreen() {
   // has already blurred (`editingRef` back to false). So the listener snapshots
   // `editingRef` at pointer-DOWN (capture phase, before the blur) and swallows
   // the click if we were editing; only a second click advances. See the effect.
-  const [editingTeam, setEditingTeam] = useState<1 | 2 | null>(null);
+  const [editingTeam, setEditingTeam] = useState<TeamKey | null>(null);
   const [editValue, setEditValue] = useState('');
   const editingRef = useRef(false);
   // Guards against a second finishEdit() firing when the focused input unmounts
@@ -30,29 +34,37 @@ export default function HomeScreen() {
   // We keep a local draft while typing (so a cleared field doesn't vanish
   // mid-keystroke) and commit to SET_TEAMS on blur; the resync effect below
   // mirrors external changes (e.g. the gamemaster) back in when we're not typing.
-  const [memberDrafts, setMemberDrafts] = useState<{ team1: string[]; team2: string[] }>({
-    team1: state.teams.team1,
-    team2: state.teams.team2,
+  const [memberDrafts, setMemberDrafts] = useState<Partial<Record<TeamKey, string[]>>>(() => {
+    const drafts: Partial<Record<TeamKey, string[]>> = {};
+    for (const key of ALL_TEAM_KEYS) drafts[key] = state.teams[key] ?? [];
+    return drafts;
   });
   const [membersEditing, setMembersEditing] = useState(false);
   // GM-driven rename: which team the gamemaster is currently editing (null = none),
   // plus the value it's typing (mirrored via emitOnChange) so the show can surface
   // the long-name warning in the GM control panel.
-  const [gmEditingTeam, setGmEditingTeam] = useState<1 | 2 | null>(null);
+  const [gmEditingTeam, setGmEditingTeam] = useState<TeamKey | null>(null);
   const [gmEditValue, setGmEditValue] = useState('');
-  const { pointSystemEnabled, teamRandomizationEnabled, players } = state.settings;
-  const { team1, team2 } = state.teams;
-  const hasTeams = team1.length > 0 || team2.length > 0;
-  // With the point system off the show has no teams at all, so the whole team
-  // overview / assignment UI is suppressed here — mirroring the Header, which
-  // drops both team columns in that mode. The host just starts the show.
-  // See specs/point-system.md.
-  const teamsEnabled = pointSystemEnabled;
+  const { pointSystemEnabled, teamRandomizationEnabled, players, teamCount, showTitle } = state.settings;
+  // The teams this gameshow runs with (0-4). Everything below iterates this list
+  // instead of naming team1/team2. See specs/team-count.md.
+  const activeTeams = useMemo(() => teamKeys(teamCount), [teamCount]);
+  const hasTeams = activeTeams.some(key => teamRoster(state.teams, key).length > 0);
+  // Whether this show has TEAMS to set up at all. Two things switch it off, and
+  // both suppress the entire assignment/overview UI so the host just starts:
+  //   0 teams — the point system is off, there is nothing to score.
+  //   1 team  — points ARE awarded, but there is no second team to split players
+  //             between or compete against: the audience plays the show itself.
+  // The server backs this up by forcing `teamRandomizationEnabled` off below two
+  // teams. See specs/team-count.md and specs/point-system.md.
+  const teamsEnabled = pointSystemEnabled && activeTeams.length > 1;
   // Each joker column in the header pill steals room from the team name, so the
-  // long-name check depends on how MANY jokers are enabled (1 vs 3 differ). The
-  // name's actual rendered width is measured (not its char count).
+  // long-name check depends on how MANY jokers are enabled (1 vs 3 differ), on
+  // the team count (a 3-4 team pill is capped to half its side) and on the show's
+  // length (the counter's width). The name's actual rendered width is measured
+  // (not its char count). No theme here: the show's <html> already carries it.
   const jokerCount = (state.settings.enabledJokers ?? []).length;
-  const jokerNote = jokerCount > 0 ? ` (mit ${jokerCount} Joker${jokerCount === 1 ? '' : 'n'} weniger Platz)` : '';
+  const isNameLong = useTeamNameCheck({ jokerCount, teamCount: activeTeams.length, totalGames: state.settings.totalGames });
 
   // When the active gameshow has a configured roster (`GameshowConfig.players`),
   // prefill the randomization textarea once so the host only has to click "Teams
@@ -69,7 +81,7 @@ export default function HomeScreen() {
 
   // Broadcast screen info to gamemaster
   useGamemasterSync({
-    gameTitle: 'Game Show',
+    gameTitle: showTitle,
     questionNumber: 0,
     totalQuestions: 0,
     answer: '',
@@ -79,25 +91,18 @@ export default function HomeScreen() {
   // ── Manual member add / remove (both show + GM go through these) ──
   // Members-only update via SET_TEAMS; names/points/jokers are preserved and the
   // change auto-syncs to GM/admin over the gamemaster-team-state WS channel.
-  const addMember = useCallback((n: 1 | 2, raw: string) => {
+  // SET_TEAMS is a patch, so only the edited team travels — the others keep
+  // their rosters untouched.
+  const addMember = useCallback((key: TeamKey, raw: string) => {
     const name = raw.trim();
     if (!name) return;
-    dispatch({
-      type: 'SET_TEAMS',
-      payload: {
-        team1: n === 1 ? [...state.teams.team1, name] : state.teams.team1,
-        team2: n === 2 ? [...state.teams.team2, name] : state.teams.team2,
-      },
-    });
+    dispatch({ type: 'SET_TEAMS', payload: { [key]: [...teamRoster(state.teams, key), name] } });
   }, [dispatch, state.teams]);
 
-  const removeMember = useCallback((n: 1 | 2, index: number) => {
+  const removeMember = useCallback((key: TeamKey, index: number) => {
     dispatch({
       type: 'SET_TEAMS',
-      payload: {
-        team1: n === 1 ? state.teams.team1.filter((_, i) => i !== index) : state.teams.team1,
-        team2: n === 2 ? state.teams.team2.filter((_, i) => i !== index) : state.teams.team2,
-      },
+      payload: { [key]: teamRoster(state.teams, key).filter((_, i) => i !== index) },
     });
   }, [dispatch, state.teams]);
 
@@ -110,30 +115,30 @@ export default function HomeScreen() {
   // feature is disabled the natural team1→team2 order is used and the swap
   // control is hidden. See specs/team-order-mirror.md.
   const mirrorEnabled = state.settings.teamMirrorEnabled;
-  const gmTeamOrder = teamDisplayOrder(state.teams.orderSwapped, true, mirrorEnabled);
+  const gmTeamOrder = teamDisplayOrder(state.teams.orderSwapped, true, mirrorEnabled, teamCount);
   const gmEditTeamButtons = gmTeamOrder.map(teamKey => ({
     id: `edit-${teamKey}`,
-    label: teamName(state.teams, teamKey === 'team1' ? 1 : 2),
+    label: teamName(state.teams, teamKey),
     variant: 'primary' as const,
   }));
   const gmSwapControl: GamemasterControl[] = mirrorEnabled
     ? [{ type: 'button', id: 'swap-teams', label: 'Teams tauschen' }]
     : [];
-  const manualTeamControls = (teamKey: 'team1' | 'team2'): GamemasterControl[] => {
-    const n = teamKey === 'team1' ? 1 : 2;
-    const members = teamKey === 'team1' ? team1 : team2;
+  const manualTeamControls = (teamKey: TeamKey): GamemasterControl[] => {
+    const label = teamName(state.teams, teamKey);
+    const members = teamRoster(state.teams, teamKey);
     return [
       {
         type: 'input-group',
         id: `add-${teamKey}`,
-        inputs: [{ id: 'name', label: `${teamName(state.teams, n)} – Spieler hinzufügen`, inputType: 'text', placeholder: 'Name' }],
+        inputs: [{ id: 'name', label: `${label} – Spieler hinzufügen`, inputType: 'text', placeholder: 'Name' }],
         submitLabel: 'Hinzufügen',
       },
       ...(members.length > 0
         ? [{
             type: 'button-group' as const,
             id: `members-${teamKey}`,
-            label: `${teamName(state.teams, n)} – zum Entfernen tippen`,
+            label: `${label} – zum Entfernen tippen`,
             buttons: members.map((m, i) => ({ id: `rm-${teamKey}-${i}`, label: m, variant: 'danger' as const })),
           }]
         : []),
@@ -150,19 +155,19 @@ export default function HomeScreen() {
         id: 'rename-team',
         inputs: [{
           id: 'teamName',
-          label: `Name Team ${gmEditingTeam}`,
+          label: `Name Team ${teamNumber(gmEditingTeam)}`,
           inputType: 'text',
-          placeholder: `Team ${gmEditingTeam}`,
-          value: (gmEditingTeam === 1 ? state.teams.team1Name : state.teams.team2Name) ?? '',
+          placeholder: `Team ${teamNumber(gmEditingTeam)}`,
+          value: state.teams[`${gmEditingTeam}Name`] ?? '',
           emitOnChange: true,
         }],
         submitLabel: 'Speichern',
       },
-      ...(isTeamNameLong(gmEditValue, jokerCount)
+      ...(isNameLong(gmEditValue)
         ? [{
             type: 'info' as const,
             id: 'rename-hint',
-            text: `Name ist zu lang – wird im Punkte-Header auf kleineren Bildschirmen abgekürzt${jokerNote}.`,
+            text: teamNameLongHint(jokerCount),
           }]
         : []),
       { type: 'button', id: 'cancel-rename', label: 'Abbrechen' },
@@ -219,22 +224,23 @@ export default function HomeScreen() {
       const names = ((cmd.value as Record<string, string>).names ?? '')
         .split(/[,\n]/).map(n => n.trim()).filter(Boolean);
       if (names.length > 0) assignTeams(names);
-    } else if (cmd.controlId === 'add-team1' && cmd.value && typeof cmd.value === 'object') {
-      addMember(1, (cmd.value as Record<string, string>).name ?? '');
-    } else if (cmd.controlId === 'add-team2' && cmd.value && typeof cmd.value === 'object') {
-      addMember(2, (cmd.value as Record<string, string>).name ?? '');
-    } else if (cmd.controlId.startsWith('rm-team1-')) {
-      removeMember(1, parseInt(cmd.controlId.slice('rm-team1-'.length), 10));
-    } else if (cmd.controlId.startsWith('rm-team2-')) {
-      removeMember(2, parseInt(cmd.controlId.slice('rm-team2-'.length), 10));
+    } else if (cmd.controlId.startsWith('add-team') && cmd.value && typeof cmd.value === 'object') {
+      const key = cmd.controlId.slice('add-'.length);
+      if (isTeamKey(key)) addMember(key, (cmd.value as Record<string, string>).name ?? '');
+    } else if (cmd.controlId.startsWith('rm-team')) {
+      // `rm-<teamKey>-<index>`
+      const rest = cmd.controlId.slice('rm-'.length);
+      const dash = rest.lastIndexOf('-');
+      const key = rest.slice(0, dash);
+      if (isTeamKey(key)) removeMember(key, parseInt(rest.slice(dash + 1), 10));
     } else if (cmd.controlId === 'swap-teams') {
       dispatch({ type: 'SET_TEAM_ORDER', payload: { swapped: !state.teams.orderSwapped } });
-    } else if (cmd.controlId === 'edit-team1') {
-      setGmEditValue(state.teams.team1Name ?? '');
-      setGmEditingTeam(1);
-    } else if (cmd.controlId === 'edit-team2') {
-      setGmEditValue(state.teams.team2Name ?? '');
-      setGmEditingTeam(2);
+    } else if (cmd.controlId.startsWith('edit-team')) {
+      const key = cmd.controlId.slice('edit-'.length);
+      if (isTeamKey(key)) {
+        setGmEditValue(state.teams[`${key}Name`] ?? '');
+        setGmEditingTeam(key);
+      }
     } else if (cmd.controlId === 'cancel-rename') {
       setGmEditingTeam(null);
     } else if (cmd.controlId === 'rename-team:change' && cmd.value && typeof cmd.value === 'object') {
@@ -242,13 +248,7 @@ export default function HomeScreen() {
     } else if (cmd.controlId === 'rename-team' && cmd.value && typeof cmd.value === 'object') {
       const newName = (cmd.value as Record<string, string>).teamName ?? '';
       if (gmEditingTeam) {
-        dispatch({
-          type: 'SET_TEAM_NAMES',
-          payload: {
-            team1Name: gmEditingTeam === 1 ? newName : state.teams.team1Name,
-            team2Name: gmEditingTeam === 2 ? newName : state.teams.team2Name,
-          },
-        });
+        dispatch({ type: 'SET_TEAM_NAMES', payload: { [`${gmEditingTeam}Name`]: newName } });
       }
       setGmEditingTeam(null);
     }
@@ -267,22 +267,16 @@ export default function HomeScreen() {
   };
 
   // ── Inline team-name editing (show) ──
-  const startEdit = (n: 1 | 2) => {
+  const startEdit = (key: TeamKey) => {
     editingRef.current = true;
-    setEditValue((n === 1 ? state.teams.team1Name : state.teams.team2Name) ?? '');
-    setEditingTeam(n);
+    setEditValue(state.teams[`${key}Name`] ?? '');
+    setEditingTeam(key);
   };
   const finishEdit = (commit: boolean) => {
     if (committingRef.current) return; // already finishing (e.g. blur after Enter)
     committingRef.current = true;
     if (commit && editingTeam) {
-      dispatch({
-        type: 'SET_TEAM_NAMES',
-        payload: {
-          team1Name: editingTeam === 1 ? editValue : state.teams.team1Name,
-          team2Name: editingTeam === 2 ? editValue : state.teams.team2Name,
-        },
-      });
+      dispatch({ type: 'SET_TEAM_NAMES', payload: { [`${editingTeam}Name`]: editValue } });
     }
     setEditingTeam(null);
     editingRef.current = false;
@@ -291,10 +285,15 @@ export default function HomeScreen() {
 
   // ── Inline member editing (show, manual mode) ──
   // Mirror external roster changes into the draft whenever we're not typing.
-  const teamsKey = `${state.teams.team1.join(' ')}|${state.teams.team2.join(' ')}`;
+  // Keyed on EVERY team's roster, so a change to team 3 or 4 resyncs the drafts
+  // too — a key covering only team1/team2 left their rosters out of the draft and
+  // the show rendered them as empty.
+  const teamsKey = ALL_TEAM_KEYS.map(k => (state.teams[k] ?? []).join(' ')).join('|');
   useEffect(() => {
     if (!membersEditing) {
-      setMemberDrafts({ team1: state.teams.team1, team2: state.teams.team2 });
+      const drafts: Partial<Record<TeamKey, string[]>> = {};
+      for (const key of ALL_TEAM_KEYS) drafts[key] = state.teams[key] ?? [];
+      setMemberDrafts(drafts);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teamsKey, membersEditing]);
@@ -304,11 +303,10 @@ export default function HomeScreen() {
   const displayMemberSlots = (members: string[]): string[] =>
     members.length === 0 || members[members.length - 1]!.trim() !== '' ? [...members, ''] : members;
 
-  const updateMemberSlot = (n: 1 | 2, idx: number, value: string) => {
+  const updateMemberSlot = (key: TeamKey, idx: number, value: string) => {
     setMembersEditing(true);
     setMemberDrafts(prev => {
-      const key = n === 1 ? 'team1' : 'team2';
-      const arr = [...prev[key]];
+      const arr = [...(prev[key] ?? [])];
       while (arr.length <= idx) arr.push('');
       arr[idx] = value;
       return { ...prev, [key]: arr };
@@ -320,12 +318,13 @@ export default function HomeScreen() {
   const commitMembers = () => {
     setMembersEditing(false);
     const clean = (arr: string[]) => arr.map(s => s.trim()).filter(Boolean);
-    const t1 = clean(memberDrafts.team1);
-    const t2 = clean(memberDrafts.team2);
-    if (t1.join(' ') !== state.teams.team1.join(' ') ||
-        t2.join(' ') !== state.teams.team2.join(' ')) {
-      dispatch({ type: 'SET_TEAMS', payload: { team1: t1, team2: t2 } });
+    // Only the teams that actually changed travel — SET_TEAMS is a patch.
+    const patch: Partial<Record<TeamKey, string[]>> = {};
+    for (const key of activeTeams) {
+      const next = clean(memberDrafts[key] ?? []);
+      if (next.join(' ') !== teamRoster(state.teams, key).join(' ')) patch[key] = next;
     }
+    if (Object.keys(patch).length > 0) dispatch({ type: 'SET_TEAMS', payload: patch });
   };
 
   const canAdvance = !teamsEnabled || hasTeams || !teamRandomizationEnabled;
@@ -367,9 +366,12 @@ export default function HomeScreen() {
   // propagation so editing the roster (or renaming a team) never triggers the
   // window "click to advance" listener — advancing happens via empty-space
   // clicks, the arrow/space keys, or the gamemaster forward control.
-  const renderTeam = (n: 1 | 2, members: string[]) => (
-    <div className="team" id={`team${n}`} onClick={e => e.stopPropagation()}>
-      {editingTeam === n ? (
+  const renderTeam = (key: TeamKey) => {
+    const n = teamNumber(key);
+    const members = memberDrafts[key] ?? [];
+    return (
+    <div className="team" id={`${key}`} data-team={key} key={key} onClick={e => e.stopPropagation()}>
+      {editingTeam === key ? (
         <>
           <input
             className="team-name-edit-input"
@@ -386,20 +388,16 @@ export default function HomeScreen() {
             }}
             onBlur={() => finishEdit(true)}
           />
-          {isTeamNameLong(editValue, jokerCount) && (
-            <p className="team-name-hint" role="status">
-              Name ist zu lang – wird im Punkte-Header auf kleineren Bildschirmen abgekürzt{jokerNote}.
-            </p>
+          {isNameLong(editValue) && (
+            <p className="team-name-hint" role="status">{teamNameLongHint(jokerCount)}</p>
           )}
         </>
       ) : (
-        <h2
-          className="team-name-editable"
-          title="Zum Umbenennen klicken"
-          onClick={e => { e.stopPropagation(); startEdit(n); }}
-        >
-          {teamName(state.teams, n)}
-        </h2>
+        <TeamCardName
+          team={key}
+          name={teamName(state.teams, key)}
+          onClick={e => { e.stopPropagation(); startEdit(key); }}
+        />
       )}
       <ul className="team-members team-members-editable">
         {(!teamRandomizationEnabled ? displayMemberSlots(members) : members).map((value, idx) => {
@@ -413,7 +411,7 @@ export default function HomeScreen() {
                 aria-label={isGhost ? `Spieler zu Team ${n} hinzufügen` : `Spieler ${idx + 1} · Team ${n}`}
                 onClick={e => e.stopPropagation()}
                 onFocus={() => { editingRef.current = true; setMembersEditing(true); }}
-                onChange={e => updateMemberSlot(n, idx, e.target.value)}
+                onChange={e => updateMemberSlot(key, idx, e.target.value)}
                 onBlur={() => { commitMembers(); editingRef.current = false; }}
                 onKeyDown={e => {
                   e.stopPropagation();
@@ -428,12 +426,14 @@ export default function HomeScreen() {
         })}
       </ul>
     </div>
-  );
+    );
+  };
 
   return (
     <div id="homeScreen">
       <CacheStatusBanner />
-      <h1>Game Show</h1>
+      <h1>{showTitle}</h1>
+      <TeamCountWarning />
 
       {!teamsEnabled ? (
         // Point system off → no teams. Just a start prompt; advancing is handled
@@ -461,19 +461,9 @@ export default function HomeScreen() {
               Spieler den Teams zuweisen:
             </p>
           )}
-          <div id="teams">
+          <div id="teams" data-team-count={activeTeams.length}>
             {/* Crowd-facing setup screen → follow the frontend team order. */}
-            {(mirrorEnabled && state.teams.orderSwapped) ? (
-              <>
-                {renderTeam(2, memberDrafts.team2)}
-                {renderTeam(1, memberDrafts.team1)}
-              </>
-            ) : (
-              <>
-                {renderTeam(1, memberDrafts.team1)}
-                {renderTeam(2, memberDrafts.team2)}
-              </>
-            )}
+            {teamDisplayOrder(state.teams.orderSwapped, false, mirrorEnabled, teamCount).map(renderTeam)}
           </div>
           {hasTeams && mirrorEnabled && (
             <button

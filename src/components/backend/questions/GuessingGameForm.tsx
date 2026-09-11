@@ -1,7 +1,10 @@
+import { useState } from 'react';
 import type { GuessingGameQuestion } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
 import SpellField from '../SpellField';
 import { AssetField } from '../AssetPicker';
+import AudioTrimTimeline from '../AudioTrimTimeline';
+import { toMediaSrc } from '@/utils/assetUrl';
 import MoveQuestionButton from './MoveQuestionButton';
 import { stripTrailingEmpty } from './ghostRow';
 import { useConfirm } from '../ConfirmContext';
@@ -15,12 +18,31 @@ interface Props {
 
 const empty = (): GuessingGameQuestion => ({ question: '', answer: 0 });
 const isEmpty = (q: GuessingGameQuestion) =>
-  !q.question.trim() && q.answer === 0 && !q.answerImage;
+  !q.question.trim() && q.answer === 0 && !q.answerImage && !q.questionAudio;
 
 export default function GuessingGameForm({ questions, onChange, otherInstances, onMoveQuestion }: Props) {
   const confirmDialog = useConfirm();
   const drag = useDragReorder(questions, onChange);
   const displayQuestions = [...questions, empty()];
+
+  // Which questions have their trim panel open; already-trimmed ones start open.
+  const [trimExpanded, setTrimExpanded] = useState<Set<number>>(() => {
+    const initial = new Set<number>();
+    questions.forEach((q, i) => {
+      if (q.questionAudioStart !== undefined || q.questionAudioEnd !== undefined) initial.add(i);
+    });
+    return initial;
+  });
+
+  const toggleTrim = (i: number) =>
+    setTrimExpanded(prev => {
+      const next = new Set(prev);
+      next.has(i) ? next.delete(i) : next.add(i);
+      return next;
+    });
+
+  const hasTrim = (q: GuessingGameQuestion) =>
+    q.questionAudioStart !== undefined || q.questionAudioEnd !== undefined;
 
   const update = (i: number, patch: Partial<GuessingGameQuestion>) => {
     let next: GuessingGameQuestion[];
@@ -30,6 +52,11 @@ export default function GuessingGameForm({ questions, onChange, otherInstances, 
       next = [...questions];
       next[i] = { ...next[i]!, ...patch };
     }
+    // Drop keys the patch cleared, so a removed trim doesn't linger as `undefined`.
+    const target = next[Math.min(i, next.length - 1)]!;
+    (Object.keys(target) as (keyof GuessingGameQuestion)[]).forEach(k => {
+      if (target[k] === undefined) delete target[k];
+    });
     onChange(stripTrailingEmpty(next, isEmpty));
   };
   const remove = async (i: number) => { if (await confirmDialog({ title: 'Frage löschen?' })) onChange(questions.filter((_, idx) => idx !== i)); };
@@ -67,6 +94,44 @@ export default function GuessingGameForm({ questions, onChange, otherInstances, 
               <label className="be-label">Antwort (Zahl)</label>
               <input className="be-input" type="number" value={q.answer} onChange={e => update(i, { answer: parseFloat(e.target.value) || 0 })} />
             </div>
+            {!isVirtual && (
+              <div className="full-width">
+                <div className="audio-field-with-trim">
+                  <AssetField
+                    label="Frage-Audio (optional, spielt automatisch)"
+                    value={q.questionAudio}
+                    category="audio"
+                    scope={`q-${i}-question`}
+                    audioStart={q.questionAudioStart}
+                    audioEnd={q.questionAudioEnd}
+                    audioLoop={q.questionAudioLoop}
+                    onChange={v => {
+                      update(i, { questionAudio: v, questionAudioStart: undefined, questionAudioEnd: undefined, questionAudioLoop: undefined });
+                      if (v === undefined) setTrimExpanded(prev => { const n = new Set(prev); n.delete(i); return n; });
+                    }}
+                  />
+                  <button
+                    className={`audio-trim-toggle-btn${trimExpanded.has(i) ? ' active' : ''}${hasTrim(q) ? ' has-trim' : ''}`}
+                    onClick={() => toggleTrim(i)}
+                    title={trimExpanded.has(i) ? 'Trim ausblenden' : 'Startpunkt / Ausschnitt wählen'}
+                    style={q.questionAudio ? undefined : { display: 'none' }}
+                  >
+                    ✂ Trimmen
+                  </button>
+                  {q.questionAudio && trimExpanded.has(i) && (
+                    <AudioTrimTimeline
+                      src={toMediaSrc(q.questionAudio) ?? q.questionAudio}
+                      scope={`q-${i}-question`}
+                      start={q.questionAudioStart}
+                      end={q.questionAudioEnd}
+                      loop={q.questionAudioLoop}
+                      onChange={(s, e) => update(i, { questionAudioStart: s, questionAudioEnd: e })}
+                      onLoopChange={v => update(i, { questionAudioLoop: v || undefined })}
+                    />
+                  )}
+                </div>
+              </div>
+            )}
             {!isVirtual && (
               <div className="full-width">
                 <AssetField

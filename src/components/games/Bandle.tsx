@@ -60,7 +60,6 @@ export default function Bandle(props: GameComponentProps) {
       ]}
       totalQuestions={totalQuestions}
       pointSystemEnabled={props.pointSystemEnabled}
-      pointValue={props.currentIndex + 1}
       currentIndex={props.currentIndex}
       onRulesShow={() => music.fadeOut(2000)}
       onNextShow={handleNextShow}

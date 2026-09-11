@@ -8,6 +8,12 @@ while it is still fixable, instead of only showing up as a per-game total that i
 Extends Piece 1 of [gamemaster-cockpit.md](gamemaster-cockpit.md) (the scoring audit log) and supersedes
 its "Out of scope: Per-game grouping / full session ledger UI" bullet.
 
+**The tally is load-bearing in one point mode.** Under `per-correct-answer` the counts kept here ARE the
+points: at the end of the game each team is booked its `tallyTotals`. Everything below still holds —
+the counters remain manual, nothing auto-increments from `AWARD_POINTS`, and the panel stays correctable
+— but a miscount now changes the score rather than only the award screen's preselection. Correct it
+before confirming the award; the show follows the tally live. See [point-system.md](point-system.md).
+
 ## Acceptance criteria
 
 ### Attribution — the `+`/`−` tally (normal games)
@@ -48,11 +54,25 @@ its "Out of scope: Per-game grouping / full session ledger UI" bullet.
       Deliberately **not** on `landing`: `gameIndex` there is already the *next* game, so the panel would
       show empty rows for a game that has not been played. Between-games review stays with
       "Letzte Wertungen".
+- [x] ...and **not while the game awards no points at all** — the show-wide point system is off
+      (0 teams), or the game's type cannot be scored at the configured team count. Every row could
+      then only read "keine Wertung", so the panel promises a breakdown that never arrives. The show
+      publishes `pointsDisabled` on the `gamemaster-controls` channel for this: `pointSystemEnabled`
+      is resolved **per game** by `GET /api/game/:index`, which the gamemaster never fetches.
+      See [team-count.md](team-count.md).
+- [x] Below two teams the panel's column header drops the team name (there is no team — see
+      [team-count.md](team-count.md)) and reads "Punkte".
 - [x] Collapsible, collapsed by default, header "Wertung pro Frage" with a count pill — the same
       pattern as `.gm-score-history` / `.gm-jokers`.
 - [x] One row model, two feeds, selected off the existing `hideCorrectTracker` signal:
       normal games read the per-question tally (counts); inline-scored games aggregate `scoreHistory`
       filtered to the current `gameIndex`, grouped by `questionNumber` (net signed points per team).
+      guessing-game's automatic scoring (its default) writes its per-question winners INTO the tally
+      feed, so the panel shows real rows during play even though the points are awarded only at the end;
+      it also sets `tallyReadOnly` on the controls channel, which drops the rows' `+`/`−` (and the
+      `CorrectAnswersTracker` buttons) so a hand-edit can't compete with the show's own scoring, and it
+      clears its own bucket (`RESET_GAME_TALLY`) when the host starts the game from its title screen.
+      See [games/guessing-game.md](games/guessing-game.md).
 - [x] Rows run `1 … max(current question, highest question holding data)`. Taking the max is what keeps
       a corrected row visible after the host navigates **back** — hiding a just-corrected row would be
       this feature's worst failure mode.
@@ -65,7 +85,8 @@ its "Out of scope: Per-game grouping / full session ledger UI" bullet.
       would render a double award or a reversal-under-clamp as "nothing happened" — masking exactly what
       the host opened the panel to find.
 - [x] Tally rows are editable via compact per-team `−`/`+` (that is how a forgotten question gets fixed
-      where it happened). Point rows are read-only — corrections there go through the existing per-entry
+      where it happened) — except while the playing game scores itself (`tallyReadOnly`), when they are
+      not rendered at all. Point rows are read-only — corrections there go through the existing per-entry
       undo in "Letzte Wertungen".
 - [x] Every write path is suppressed while `GamemasterView`'s `desynced` flag is true: attribution
       depends on both `gamemaster-answer` (question) and `gamemaster-controls` (gameIndex) being fresh.
@@ -105,7 +126,7 @@ terminated only by the server's echo-dedup rather than by anything noticing. Und
 peer merely fails to sync the tally, which is visible. There is deliberately **no legacy migration**.
 
 ### Known limitations
-- `gamemaster-question-tally` has **no** Lamport `rev` guard (only `gamemaster-team-state` does), so it
+- `gamemaster-question-tally` has **no** Lamport `rev` guard (only `gamemaster-team-state-v2` does), so it
   stays last-write-wins. Two gamemaster devices editing different rows at the same time can lose one
   edit. Pre-existing for this channel; out of scope here.
 - Admin Session-tab point edits go through `SET_TEAM_STATE` and are **not** logged, so panel rows will
@@ -129,9 +150,18 @@ peer merely fails to sync the tally, which is visible. There is deliberately **n
   showing the gaps), but with rows only up to the current question; game change resets the row set via
   `gameIndex`; a GM reload restores everything from the cached channels.
 
+Each column head carries `data-team` and a `<TeamDot>`, so a team's column is
+identifiable by colour as well as by name. See [team-colors.md](team-colors.md).
+
 ## Out of scope
 - A whole-show ledger in the admin Session tab (gamemaster zone only).
 - Editing real point deltas from this panel — undo stays in "Letzte Wertungen".
 - Player-facing display of the breakdown.
 - Fixing the pre-existing BetQuiz re-judge double-award and the FinalQuiz reversal-under-clamp
   arithmetic. The `2×` marker makes both visible instead of netting them away.
+
+## Team count
+The tally and the breakdown carry one column per active team (0–4). `QuestionTally` is **sparse** —
+a team that never scored has no key, so read it through the helpers in
+[src/utils/correctAnswers.ts](../src/utils/correctAnswers.ts). `BreakdownRow.cells` is a full
+`Record<TeamKey, ScoreCell>`. See [team-count.md](team-count.md).

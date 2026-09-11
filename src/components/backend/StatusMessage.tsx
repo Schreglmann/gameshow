@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { getToastRoot } from './toastRoot';
 
 export interface ToastAction {
   label: string;
@@ -33,6 +34,30 @@ const EXIT_ANIMATION_MS = 300;
 export default function StatusMessage({ message }: Props) {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
+  // Every dismiss timer is tracked so unmount can cancel it. A toast's timers
+  // deliberately outlive the `message` effect that scheduled them (a newer
+  // message must not freeze an older toast on screen), so they can only be
+  // cleared on unmount — otherwise they fire into an unmounted component,
+  // which in vitest surfaces as "window is not defined" after jsdom teardown.
+  const timersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+
+  const schedule = useCallback((fn: () => void, ms: number) => {
+    const timers = timersRef.current;
+    const handle = setTimeout(() => {
+      timers.delete(handle);
+      fn();
+    }, ms);
+    timers.add(handle);
+  }, []);
+
+  useEffect(() => {
+    const timers = timersRef.current;
+    return () => {
+      timers.forEach(clearTimeout);
+      timers.clear();
+    };
+  }, []);
+
   useEffect(() => {
     if (!message) return;
 
@@ -46,26 +71,28 @@ export default function StatusMessage({ message }: Props) {
     }]);
 
     const dismissMs = message.action ? DISMISS_WITH_ACTION_MS : DISMISS_DEFAULT_MS;
-    setTimeout(() => {
+    schedule(() => {
       setToasts(prev => prev.map(t => t.id === id ? { ...t, exiting: true } : t));
     }, dismissMs);
 
-    setTimeout(() => {
+    schedule(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
     }, dismissMs + EXIT_ANIMATION_MS);
-  }, [message]);
+  }, [message, schedule]);
 
   if (toasts.length === 0) return null;
 
   const dismissToast = (id: number) => {
     setToasts(prev => prev.map(t => t.id === id ? { ...t, exiting: true } : t));
-    setTimeout(() => {
+    schedule(() => {
       setToasts(prev => prev.filter(t => t.id !== id));
     }, EXIT_ANIMATION_MS);
   };
 
+  // Into the shared container, so a pane toast and the shell's save status stack
+  // instead of overlapping in the same corner.
   return createPortal(
-    <div className="be-toast-container">
+    <>
       {toasts.map(toast => (
         <div
           key={toast.id}
@@ -85,7 +112,7 @@ export default function StatusMessage({ message }: Props) {
           )}
         </div>
       ))}
-    </div>,
-    document.body,
+    </>,
+    getToastRoot(),
   );
 }

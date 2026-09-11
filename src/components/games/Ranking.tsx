@@ -6,6 +6,7 @@ import { useQuestionOrder, type QuestionOrderHandle } from '@/hooks/useQuestionO
 import { useLiveQuestionIndex } from '@/hooks/useLiveQuestionIndex';
 import { useArrowRightLongPress } from '@/hooks/useArrowRightLongPress';
 import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
+import { scrollToCardBottom } from '@/utils/scrollToCardAnchor';
 import { safePlay } from '@/utils/safePlay';
 import { toMediaSrc } from '@/utils/assetUrl';
 import { useMusicPlayer } from '@/context/MusicContext';
@@ -38,7 +39,6 @@ export default function Ranking(props: GameComponentProps) {
       ]}
       totalQuestions={totalQuestions}
       pointSystemEnabled={props.pointSystemEnabled}
-      pointValue={props.currentIndex + 1}
       currentIndex={props.currentIndex}
       onRulesShow={hasAudio ? () => music.fadeOut(2000) : undefined}
       onNextShow={
@@ -425,12 +425,8 @@ function RankingInner({ questions, order, resumeAtEnd, gameTitle, audioRef, onGa
   useEffect(() => {
     if (revealedCount === 0) return;
     const timers: number[] = [];
-    const scrollToBottom = () => {
-      const target = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
-      window.scrollTo({ top: target, behavior: 'smooth' });
-    };
     [0, 80, 200, 500].forEach(delay => {
-      timers.push(window.setTimeout(scrollToBottom, delay));
+      timers.push(window.setTimeout(scrollToCardBottom, delay));
     });
     return () => { timers.forEach(clearTimeout); };
   }, [revealedCount, qKey]);

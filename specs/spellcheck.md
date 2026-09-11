@@ -181,7 +181,8 @@ global on/off switch that is **off by default**.
   (`ruleExplanationDe`), e.g. `MORFOLOGIK_RULE_IT_IT` → "Rechtschreibprüfung (Italienisch): …".
 - **Game editor** (`GameEditor`): a header toggle (shown only when the feature is on) reveals
   inline underlines + a per-game report panel for the current instance. Applying a fix flows
-  through `setData`/`updateInstance` so the existing 800 ms auto-save persists it.
+  through `setData`/`updateInstance` so the existing auto-save persists it (debounced in the
+  module-scope save queue — see [admin-save-queue.md](admin-save-queue.md)).
 - **Report panel** (`SpellCheckPanel`): issue cards with label ("Frage 4 · Antwort"), the
   flagged text in context (red/blue), an **always-German** explanation of the issue (hover =
   German rule explanation; LanguageTool's own localized message is never shown), the

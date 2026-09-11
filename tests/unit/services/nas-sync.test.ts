@@ -1210,7 +1210,9 @@ describe('trashRel and makeRunId (Layer 1 — soft-delete path)', () => {
     const now = new Date('2026-05-08T18:45:12.345Z');
     const ids = new Set<string>();
     for (let i = 0; i < 100; i++) ids.add(makeRunId(now));
-    // 4 chars of [0-9a-z] = 36^4 = ~1.7M; collisions in 100 trials are vanishingly rare.
+    // 4 chars of [0-9a-z] = 36^4 = ~1.7M, so 100 random draws collide in ~0.3% of runs
+    // (birthday bound) — the helper therefore dedups per millisecond within the process,
+    // which is what makes this assertion deterministic rather than merely likely.
     expect(ids.size).toBe(100);
   });
 

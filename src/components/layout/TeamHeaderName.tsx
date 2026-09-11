@@ -8,7 +8,7 @@ interface TeamHeaderNameProps {
 // just enough to fit a few more characters before the ellipsis takes over —
 // capped at 0.76em so it stays clearly readable ("a bit smaller", never tiny).
 // Short names that already fit keep the full 1em (the loop stops at the first
-// step that fits).
+// step that fits). `NAME_MIN_FONT_SCALE` in utils/teamNames.ts mirrors the floor.
 const STEPS = [1, 0.92, 0.84, 0.76];
 
 /**
@@ -36,13 +36,26 @@ export default function TeamHeaderName({ name }: TeamHeaderNameProps) {
 
     fit();
 
-    // Re-fit when the surrounding cell is resized (viewport changes, the score
-    // width changing as points grow, etc.). Observe the PARENT, not `el`:
-    // mutating `el`'s font-size mustn't feed back into the observer.
-    if (typeof ResizeObserver === 'undefined' || !el.parentElement) return;
+    // The first fit can run on the FALLBACK font (the theme's web font is still
+    // loading), whose metrics differ enough to pick the wrong step — and the
+    // swap resizes nothing the observer below watches. Re-fit once it is in.
+    let cancelled = false;
+    if (typeof document !== 'undefined' && document.fonts && document.fonts.status !== 'loaded') {
+      void document.fonts.ready.then(() => { if (!cancelled) fit(); });
+    }
+
+    // Re-fit when the room for the name changes. Two boxes matter: the label
+    // (viewport changes, the pill being capped or wrapping) and the name span
+    // ITSELF — when the score grows to two digits the label keeps its width in a
+    // capped pill and only the name's box shrinks, so watching the parent alone
+    // left the name at its old size, cut shorter than it had to be. Observing
+    // the span does not loop: a re-fit lands on the same step, so the box does
+    // not change again and the observer stays quiet.
+    if (typeof ResizeObserver === 'undefined') return () => { cancelled = true; };
     const ro = new ResizeObserver(fit);
-    ro.observe(el.parentElement);
-    return () => ro.disconnect();
+    ro.observe(el);
+    if (el.parentElement) ro.observe(el.parentElement);
+    return () => { cancelled = true; ro.disconnect(); };
   }, [name]);
 
   return (

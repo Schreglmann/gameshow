@@ -66,6 +66,42 @@ describe('GameshowEditor', () => {
     expect(screen.getByDisplayValue('My Gameshow')).toBeInTheDocument();
   });
 
+  // Per-gameshow show-title override — see specs/show-title.md.
+  describe('show title override', () => {
+    it('inherits the global title as its placeholder while unset', () => {
+      renderEditor({ globalShowTitle: 'Sommerfest Quiz' });
+      const input = screen.getByLabelText('Titel');
+      expect(input).toHaveValue('');
+      expect(input).toHaveAttribute('placeholder', 'Sommerfest Quiz');
+    });
+
+    it('falls back to the built-in default placeholder when there is no global title', () => {
+      renderEditor();
+      expect(screen.getByLabelText('Titel')).toHaveAttribute('placeholder', 'Game Show');
+    });
+
+    it('shows the gameshow override when set', () => {
+      renderEditor({ gameshow: { ...gs, showTitle: 'Weihnachtsshow' }, globalShowTitle: 'Sommerfest Quiz' });
+      expect(screen.getByLabelText('Titel')).toHaveValue('Weihnachtsshow');
+    });
+
+    it('reports an edit as showTitle', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      renderEditor({ onChange });
+      await user.type(screen.getByLabelText('Titel'), 'W');
+      expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ showTitle: 'W' }));
+    });
+
+    it('stores a cleared field as absent so config.json stays clean', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      renderEditor({ gameshow: { ...gs, showTitle: 'X' }, onChange });
+      await user.clear(screen.getByLabelText('Titel'));
+      expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ showTitle: undefined }));
+    });
+  });
+
   it('shows "Als aktiv setzen" button when not active', () => {
     renderEditor({ isActive: false });
     expect(screen.getByRole('button', { name: 'Als aktiv setzen' })).toBeInTheDocument();
@@ -462,6 +498,37 @@ describe('GameshowEditor', () => {
     // Title still resolves for the referenced-but-disabled game.
     await waitFor(() => expect(screen.getByText('Deaktiviert')).toBeInTheDocument());
     expect(screen.getByDisplayValue('Bad Game')).toBeInTheDocument();
+  });
+
+  it('shows "Ohne Wertung" alone, never alongside "Eigene Wertung", for a game unscorable at this team count', async () => {
+    // wer-kennt-mehr/count-penalty is head-to-head only (2 teams) — at 4 teams it's
+    // already unscorable, so per-correct-answer's "keeps its own scoring" badge
+    // would contradict that ("doesn't score" next to "scores its own way"). Only
+    // "Ohne Wertung" should show. See specs/point-system.md.
+    mockFetchGames.mockResolvedValue([
+      {
+        fileName: 'wkm', type: 'wer-kennt-mehr', title: 'Wer kennt mehr', instances: ['v1'],
+        isSingleInstance: false, questionCounts: { v1: 5 }, scoringModes: { v1: 'count-penalty' },
+      },
+    ]);
+    renderEditor({
+      gameshow: { name: 'Show', gameOrder: ['wkm/v1'], teamCount: 4, pointMode: 'per-correct-answer' },
+    });
+    await waitFor(() => expect(mockFetchGames).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByText('Ohne Wertung')).toBeInTheDocument());
+    expect(screen.queryByText('Eigene Wertung')).not.toBeInTheDocument();
+  });
+
+  it('shows "Eigene Wertung" for a no-tally game that IS scorable at this team count', async () => {
+    mockFetchGames.mockResolvedValue([
+      { fileName: 'bq', type: 'bet-quiz', title: 'Bet Quiz', instances: [], isSingleInstance: true, questionCount: 5 },
+    ]);
+    renderEditor({
+      gameshow: { name: 'Show', gameOrder: ['bq'], teamCount: 2, pointMode: 'per-correct-answer' },
+    });
+    await waitFor(() => expect(mockFetchGames).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByText('Eigene Wertung')).toBeInTheDocument());
+    expect(screen.queryByText('Ohne Wertung')).not.toBeInTheDocument();
   });
 });
 

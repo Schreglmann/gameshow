@@ -1,3 +1,5 @@
+import type { TeamKey } from '../utils/teams.js';
+
 // ── Game configuration types ──
 
 export type GameType =
@@ -16,7 +18,8 @@ export type GameType =
   | 'colorguess'
   | 'ranking'
   | 'wer-kennt-mehr'
-  | 'random-frame';
+  | 'random-frame'
+  | 'city-compass';
 
 // ── Question types per game ──
 
@@ -64,6 +67,14 @@ export interface GuessingGameQuestion {
   question: string;
   answer: number;
   answerImage?: string;
+  /** Auto-played while the question is shown. */
+  questionAudio?: string;
+  /** Trim: playback starts here instead of 0 (seconds). */
+  questionAudioStart?: number;
+  /** Trim: playback stops here (seconds). */
+  questionAudioEnd?: number;
+  /** Restart at `questionAudioStart` when the trimmed section ends. */
+  questionAudioLoop?: boolean;
   disabled?: boolean;
 }
 
@@ -118,6 +129,21 @@ export interface BandleCatalogEntry {
   stream?: number;
   frontperson?: string;
   sources?: string[];
+  /**
+   * Bandle's own slot for the song, verbatim from the pack listing. Two forms:
+   * `"202607/Wanted"` — the year+month it ran as a daily puzzle, i.e. when bandle added
+   * it — and `"_kpop/Yeobo"` for songs that only belong to a themed pack and never had a
+   * dated slot. The month is the finest "added" resolution bandle exposes; there is no
+   * day and no running id (`path` is an opaque 20-char hex key).
+   */
+  folder?: string;
+  /**
+   * Exact date the song ran as bandle's daily puzzle (`"2026-07-15"`), from the
+   * `/v2/planning/<date>.txt` files the app itself uses to pick each day. Set by
+   * `scripts/bandle-sync.cjs`; absent for songs that only ever appeared in a themed pack,
+   * which never had a daily slot. When absent the `folder` month is the best available date.
+   */
+  dailyDate?: string;
 }
 
 export interface VideoGuessQuestion {
@@ -172,6 +198,29 @@ export interface ColorGuessQuestion {
   /** Populated by the server from the sidecar color-profile cache.
    *  Never present in authored JSON. */
   colors?: ColorSlice[];
+}
+
+/** A city on the compass rose. Coordinates are stored, not looked up, so the show
+ *  renders offline and the city dataset stays out of the show bundle. */
+export interface CompassCity {
+  name: string;
+  lat: number;
+  lon: number;
+  /** ISO 3166-1 alpha-2, shown next to the name once the answer is revealed. */
+  country?: string;
+}
+
+export interface CityCompassQuestion {
+  /** The city teams have to name. Never rendered before the reveal. */
+  center: CompassCity;
+  /** 3-8 cities around it, in reveal order. */
+  neighbors: CompassCity[];
+  /** Overrides the default prompt "Welche Stadt liegt im Zentrum?". */
+  question?: string;
+  /** Optional small-font subtitle rendered above the question text. */
+  info?: string;
+  answerImage?: string;
+  disabled?: boolean;
 }
 
 export interface Q1Question {
@@ -278,6 +327,13 @@ export interface BetQuizConfig extends BaseGameConfig {
 export interface GuessingGameConfig extends BaseGameConfig {
   type: 'guessing-game';
   questions: GuessingGameQuestion[];
+  /** 'auto' (the DEFAULT, also when the field is absent): the show records the closer
+   *  team per question (equidistant guesses count for both teams, the example question
+   *  never counts) and the award screen states the verdict — confirming it books the
+   *  positional game points (currentIndex + 1) for the team that won more questions, or
+   *  for both on an overall tie. 'standard' opts out: the host picks the winner on the
+   *  AwardPoints screen by hand, as in every other game. */
+  scoringMode?: 'standard' | 'auto';
 }
 
 export interface FinalQuizConfig extends BaseGameConfig {
@@ -363,6 +419,19 @@ export interface RandomFrameConfig extends BaseGameConfig {
   questions: RandomFrameQuestion[];
 }
 
+export interface CityCompassConfig extends BaseGameConfig {
+  type: 'city-compass';
+  questions: CityCompassQuestion[];
+  /** Append the distance to each neighbor's label. Off by default (and when the
+   *  field is absent): the bearing alone is the intended puzzle, and the distance is
+   *  an opt-in that makes it easier. */
+  showDistances?: boolean;
+  /** 'all' (the DEFAULT, also when the field is absent): the whole constellation is
+   *  visible at once. 'progressive': two neighbors to start with, one more per host
+   *  advance, then the answer. */
+  reveal?: 'all' | 'progressive';
+}
+
 export type GameConfig =
   | SimpleQuizConfig
   | BetQuizConfig
@@ -379,7 +448,8 @@ export type GameConfig =
   | ColorGuessConfig
   | RankingConfig
   | WerKenntMehrConfig
-  | RandomFrameConfig;
+  | RandomFrameConfig
+  | CityCompassConfig;
 
 // ── Game file types (files in games/ directory) ──
 
@@ -411,15 +481,67 @@ export type GameFile = SingleInstanceGameFile | MultiInstanceGameFile;
 
 export interface GameshowConfig {
   name: string;
+  /**
+   * Overrides the global `AppConfig.showTitle` for this gameshow — the landing
+   * page heading, the gamemaster's start/summary label, and the browser tab
+   * title. Blank/absent falls through to the global value and then to
+   * `DEFAULT_SHOW_TITLE`. Resolved by `resolveShowTitle()`.
+   * See specs/show-title.md.
+   */
+  showTitle?: string;
   gameOrder: string[];
   players?: string[];
   enabledJokers?: string[];
+  /**
+   * How many teams this gameshow is played with (0-4). Omitted means 2 — the
+   * historic behaviour, so every pre-existing gameshow is unchanged. `0` means
+   * no teams at all (a pure play-through), the same thing the global
+   * `pointSystemEnabled: false` does for every gameshow at once.
+   *
+   * A game type whose mechanic cannot be scored at this count still PLAYS, just
+   * without scoring: `GET /api/game/:index` serves it `pointSystemEnabled:
+   * false`. See specs/team-count.md.
+   */
+  teamCount?: 0 | 1 | 2 | 3 | 4;
+  /**
+   * How this gameshow turns a game result into points. Omitted means
+   * `positional` — the historic behaviour, so every pre-existing gameshow is
+   * unchanged. See specs/point-system.md.
+   */
+  pointMode?: PointMode;
 }
+
+/**
+ * How a gameshow converts a game result into points.
+ *
+ * - `positional` (default) — game N is worth N points (`currentIndex + 1`).
+ * - `flat` — every game is worth exactly 1 point.
+ * - `per-correct-answer` — each team receives one point per correct answer it
+ *   gave in that game, read off the gamemaster's tally.
+ *
+ * Resolved in a single place (`BaseGameWrapper`, via `gamePointValue()` in
+ * [src/utils/pointMode.ts](../utils/pointMode.ts)), so no game component can opt
+ * out of it. See specs/point-system.md.
+ */
+export type PointMode = 'positional' | 'flat' | 'per-correct-answer';
+
+/**
+ * Which wording of a preset a show gets. Presets are app-wide but their archetype
+ * lines are team-count-sensitive: at 3-4 teams "beide Teams" is wrong, and at 0-1
+ * teams the lines about the other team have no referent at all and are dropped
+ * rather than reworded. See specs/rules-presets.md.
+ */
+export type RulesTeamBand = 'solo' | 'pair' | 'multi';
 
 export interface RulesPreset {
   id: string;
   name: string;
+  /** Band `pair` (2 teams), and the fallback for any band left unauthored. */
   rules: string[];
+  /** Band `solo` — 0-1 teams. */
+  rulesSolo?: string[];
+  /** Band `multi` — 3-4 teams. */
+  rulesMulti?: string[];
 }
 
 /**
@@ -432,7 +554,28 @@ export interface RulesPreset {
  */
 export type JokerUsageScope = 'per-gameshow' | 'per-game';
 
+/**
+ * The operator's colour per team, as `#rrggbb`.
+ *
+ * Three states per team, and the middle one is the subtle one: an ABSENT key
+ * means the operator never touched it, so the default palette applies; a key
+ * present with an EMPTY string is an explicit "no colour", falling back to the
+ * active theme's `--teamN-house` and then to no accent at all. That is why the
+ * admin stores `''` on clear instead of deleting the key.
+ *
+ * Resolved in a single place — `resolveTeamColors()` in
+ * [src/utils/teamColors.ts](../utils/teamColors.ts). See specs/team-colors.md.
+ */
+export type TeamColors = Partial<Record<TeamKey, string>>;
+
 export interface AppConfig {
+  /**
+   * What the show calls itself, globally: the landing-page heading, the
+   * gamemaster's start/summary label, and the browser tab title. A gameshow can
+   * override it via `GameshowConfig.showTitle`; blank/absent at both levels
+   * means `DEFAULT_SHOW_TITLE` ("Game Show"). See specs/show-title.md.
+   */
+  showTitle?: string;
   pointSystemEnabled?: boolean;
   teamRandomizationEnabled?: boolean;
   /**
@@ -443,6 +586,19 @@ export interface AppConfig {
    * See specs/team-order-mirror.md.
    */
   teamMirrorEnabled?: boolean;
+  /**
+   * Master switch for per-team colours — opt-in, default false/unset. When true,
+   * every surface that renders a team marks it with that team's colour: an accent
+   * edge plus a dot next to the name. Text colour is never changed and no
+   * background is tinted. See specs/team-colors.md.
+   */
+  teamColorsEnabled?: boolean;
+  /**
+   * The four operator-picked team colours. Only consulted while
+   * `teamColorsEnabled` is true; see `TeamColors` for the absent/blank/hex
+   * semantics. See specs/team-colors.md.
+   */
+  teamColors?: TeamColors;
   /**
    * When true, jokers stay available in the last game just like any other
    * game. When false/undefined (default), the joker UI is hidden entirely
@@ -463,6 +619,15 @@ export interface AppConfig {
    * ([src/data/jokers.ts](./data/jokers.ts)). See specs/jokers.md.
    */
   jokerRules?: string[];
+  /**
+   * Operator-editable override for the `globalRules` scoring sentence, keyed by
+   * `PointMode`. A missing or blank entry falls back to the built-in default text
+   * (`POINT_MODE_RULE_DEFAULTS`, [src/utils/pointMode.ts](../utils/pointMode.ts)).
+   * Edited in the admin ConfigTab next to `globalRules`/`jokerRules`; resolved into
+   * `globalRules` by `GET /api/settings` from the active gameshow's `pointMode`.
+   * See specs/point-system.md.
+   */
+  pointModeRules?: Partial<Record<PointMode, string>>;
   rulesPresets?: RulesPreset[];
   activeGameshow: string;
   gameshows: Record<string, GameshowConfig>;
@@ -480,6 +645,15 @@ export interface GameFileSummary {
   questionCounts?: Record<string, number>; // questions per instance key; set for multi-instance games
   disabled?: boolean; // file-level disable: whole game hidden from add-to-gameshow pickers
   disabledInstances?: string[]; // instance keys (non-template) marked disabled; multi-instance only
+  /**
+   * Effective `scoringMode` per instance key (single-instance files use the key
+   * `''`), for the types that have one (`bet-quiz`, `guessing-game`,
+   * `wer-kennt-mehr`). Present only where the resolved config sets it. The admin
+   * needs it to tell a 2-only `transfer` / `count-penalty` row from a fully
+   * team-count-agnostic one without fetching every game file.
+   * See specs/team-count.md.
+   */
+  scoringModes?: Record<string, string>;
   parseError?: string; // set when the JSON file could not be parsed
 }
 
@@ -526,8 +700,45 @@ export interface AssetListResponse {
 
 // ── API response types ──
 
+/**
+ * A game in the active gameshow that cannot be scored at the configured team
+ * count. It still plays — just without scoring. See specs/team-count.md.
+ */
+export interface IncompatibleGameInfo {
+  /** Position in the active gameshow's `gameOrder` (0-based). */
+  index: number;
+  title: string;
+  type: GameType;
+}
+
 export interface SettingsResponse {
+  /**
+   * The resolved title of the running show (active gameshow's `showTitle` →
+   * global `showTitle` → "Game Show"). Optional so existing test fixtures don't
+   * need it — a client that gets no value falls back to the default.
+   * See specs/show-title.md.
+   */
+  showTitle?: string;
   pointSystemEnabled: boolean;
+  /**
+   * Teams the active gameshow runs with (0-4). `pointSystemEnabled` is exactly
+   * `teamCount > 0`; the global `pointSystemEnabled: false` forces 0. Optional
+   * so existing test fixtures don't need it — a client that gets no value falls
+   * back to 2 when scoring is on. See specs/team-count.md.
+   */
+  teamCount?: number;
+  /**
+   * How the active gameshow turns a game result into points
+   * (`GameshowConfig.pointMode`). Optional so existing test fixtures don't need
+   * it — a client that gets no value falls back to `positional`.
+   * See specs/point-system.md.
+   */
+  pointMode?: PointMode;
+  /**
+   * Games in the active gameshow that cannot be scored at `teamCount`. Empty or
+   * omitted when everything fits (and always empty at `teamCount: 0`).
+   */
+  incompatibleGames?: IncompatibleGameInfo[];
   teamRandomizationEnabled: boolean;
   /**
    * Master switch for the team-order/gamemaster-mirror feature — opt-in, false
@@ -535,6 +746,14 @@ export interface SettingsResponse {
    * false there is neither. See specs/team-order-mirror.md.
    */
   teamMirrorEnabled?: boolean;
+  /**
+   * The per-team accent colours, with the master switch ALREADY applied — an
+   * empty or omitted map means "mark nothing", so no client re-derives
+   * `AppConfig.teamColorsEnabled` (which is deliberately not on the wire). A team
+   * missing from the map is marked by the active theme's `--teamN-house`, if it
+   * has one. See specs/team-colors.md.
+   */
+  teamColors?: TeamColors;
   globalRules: string[];
   /**
    * True when the server is running with the built-in template fallback
@@ -571,6 +790,13 @@ export interface SettingsResponse {
    * test fixtures don't need it. See specs/team-management.md.
    */
   players?: string[];
+  /**
+   * How many games the active gameshow runs (`gameOrder.length`) — the "N" of
+   * the header counter "Spiel x von N", which the long-name check needs to size
+   * the counter its team pills share the row with. Optional so existing test
+   * fixtures don't need it. See specs/team-management.md.
+   */
+  totalGames?: number;
 }
 
 export interface GameDataResponse {
@@ -579,6 +805,31 @@ export interface GameDataResponse {
   currentIndex: number;
   totalGames: number;
   pointSystemEnabled: boolean;
+}
+
+/**
+ * One slot of the active gameshow's `gameOrder`, as served by
+ * `GET /api/run-of-show`. The gamemaster zone has no other way to learn the
+ * running order — it only ever mirrors the CURRENT game over WebSocket.
+ * See specs/gamemaster-run-of-show.md.
+ */
+export interface RunOfShowEntry {
+  /** Position in `gameOrder` (0-based) — what `goto:game-<index>` addresses. */
+  index: number;
+  /** The raw gameOrder ref, e.g. `"allgemeinwissen/v1"`. */
+  gameId: string;
+  title: string;
+  /** `null` when the ref could not be resolved (see `missing`). */
+  type: GameType | null;
+  /**
+   * The ref points at a game file/instance that no longer resolves. The entry is
+   * kept (not dropped) so every index still matches its `gameOrder` position.
+   */
+  missing?: boolean;
+}
+
+export interface RunOfShowResponse {
+  games: RunOfShowEntry[];
 }
 
 /**

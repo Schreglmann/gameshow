@@ -1,9 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import type { SimpleQuizQuestion } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
 import { AssetField } from '../AssetPicker';
 import { useCoverUrl } from '@/context/AudioCoverMetaContext';
+import { toMediaSrc } from '@/utils/assetUrl';
 import StatusMessage from '../StatusMessage';
+import ColorPickerField from '../ColorPickerField';
+import { isValidHex } from '@/utils/hexColor';
 import AudioTrimTimeline from '../AudioTrimTimeline';
 import MoveQuestionButton from './MoveQuestionButton';
 import SpellField from '../SpellField';
@@ -34,54 +37,6 @@ const isEmpty = (q: SimpleQuizQuestion) =>
   q.timer === undefined &&
   !q.replaceImage;
 
-const isValidHex = (v: string) => /^#[0-9a-fA-F]{6}$/.test(v);
-
-interface ColorEntryProps {
-  color: string;
-  onChange: (v: string) => void;
-  onRemove: () => void;
-  onError: (msg: string) => void;
-}
-
-function ColorEntry({ color, onChange, onRemove, onError }: ColorEntryProps) {
-  const [draft, setDraft] = useState(color);
-
-  // Sync when external value changes (e.g. from native color picker)
-  useEffect(() => { setDraft(color); }, [color]);
-
-  const valid = isValidHex(draft);
-
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-      <label style={{ cursor: 'pointer', flexShrink: 0 }} title="Farbe wählen">
-        <div style={{ width: 36, height: 36, borderRadius: 4, background: valid ? draft : '#888888', border: '1px solid rgba(255,255,255,0.2)' }} />
-        <input
-          type="color"
-          value={valid ? draft : '#888888'}
-          onChange={e => { setDraft(e.target.value); onChange(e.target.value); }}
-          style={{ display: 'none' }}
-        />
-      </label>
-      <input
-        className="be-input"
-        value={draft}
-        placeholder="#000000"
-        onChange={e => setDraft(e.target.value)}
-        onBlur={() => {
-          if (isValidHex(draft)) {
-            onChange(draft);
-          } else {
-            onError(`Ungültiger Hex-Code "${draft}" – bitte im Format #rrggbb eingeben.`);
-            setDraft(color);
-          }
-        }}
-        style={{ width: 90, borderColor: valid ? undefined : 'rgba(var(--error-deep-rgb),0.8)' }}
-      />
-      <button className="be-icon-btn" onClick={onRemove} title="Farbe entfernen">✕</button>
-    </div>
-  );
-}
-
 interface ColorListProps {
   colors: string[];
   onChange: (colors: string[]) => void;
@@ -102,8 +57,8 @@ function ColorList({ colors, onChange, onUpdate, onError }: ColorListProps) {
           onDragEnd={drag.onDragEnd}
           style={{ opacity: drag.overIdx === ci ? 0.5 : 1, cursor: 'grab' }}
         >
-          <ColorEntry
-            color={color}
+          <ColorPickerField
+            value={color}
             onChange={v => {
               const next = [...colors];
               next[ci] = v;
@@ -349,6 +304,9 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
                     value={q.questionAudio}
                     category="audio"
                     scope={`q-${i}-question`}
+                    audioStart={q.questionAudioStart}
+                    audioEnd={q.questionAudioEnd}
+                    audioLoop={q.questionAudioLoop}
                     onChange={v => {
                       update(i, { questionAudio: v, questionAudioStart: undefined, questionAudioEnd: undefined });
                       if (v === undefined) setTrimExpanded(prev => { const n = new Set(prev); n.delete(`${i}-question`); return n; });
@@ -364,7 +322,7 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
                   </button>
                   {q.questionAudio && trimExpanded.has(`${i}-question`) && (
                     <AudioTrimTimeline
-                      src={q.questionAudio}
+                      src={toMediaSrc(q.questionAudio) ?? q.questionAudio}
                       scope={`q-${i}-question`}
                       start={q.questionAudioStart}
                       end={q.questionAudioEnd}
@@ -410,6 +368,9 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
                     value={q.answerAudio}
                     category="audio"
                     scope={`q-${i}-answer`}
+                    audioStart={q.answerAudioStart}
+                    audioEnd={q.answerAudioEnd}
+                    audioLoop={q.answerAudioLoop}
                     onChange={v => {
                       update(i, { answerAudio: v, answerAudioStart: undefined, answerAudioEnd: undefined });
                       if (v === undefined) setTrimExpanded(prev => { const n = new Set(prev); n.delete(`${i}-answer`); return n; });
@@ -425,7 +386,7 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
                   </button>
                   {q.answerAudio && trimExpanded.has(`${i}-answer`) && (
                     <AudioTrimTimeline
-                      src={q.answerAudio}
+                      src={toMediaSrc(q.answerAudio) ?? q.answerAudio}
                       scope={`q-${i}-answer`}
                       start={q.answerAudioStart}
                       end={q.answerAudioEnd}

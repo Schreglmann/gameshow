@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { GameComponentProps } from './types';
 import type { FinalQuizConfig, FinalQuizQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
@@ -8,9 +8,11 @@ import { useLiveQuestionIndex } from '@/hooks/useLiveQuestionIndex';
 import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
 import { useGameContext } from '@/context/GameContext';
 import { teamName } from '@/utils/teamNames';
+import { ALL_TEAM_KEYS, teamKeys, teamPoints, isTeamKey, type TeamKey } from '@/utils/teams';
 import { teamDisplayOrder } from '@/utils/teamOrder';
 import BaseGameWrapper from './BaseGameWrapper';
 import { useFullscreen, useRegisterFullscreenMedia } from '@/context/FullscreenContext';
+import TeamDot from '@/components/common/TeamDot';
 
 export default function FinalQuiz(props: GameComponentProps) {
   const config = props.config as FinalQuizConfig;
@@ -25,7 +27,6 @@ export default function FinalQuiz(props: GameComponentProps) {
       rules={config.rules || ['Beide Teams setzen Punkte und beantworten die Frage.']}
       totalQuestions={questions.length - 1}
       pointSystemEnabled={props.pointSystemEnabled}
-      pointValue={props.currentIndex + 1}
       currentIndex={props.currentIndex}
       requiresPoints
       skipPointsScreen
@@ -61,7 +62,7 @@ interface InnerProps {
   pointSystemEnabled: boolean;
   onGameComplete: () => void;
   setNavHandler: (fn: (() => void) | null) => void;
-  onAwardPoints: (team: 'team1' | 'team2', points: number) => void;
+  onAwardPoints: (team: TeamKey, points: number) => void;
   setGamemasterData: (data: GamemasterAnswerData | null) => void;
   setGamemasterControls: (controls: GamemasterControl[]) => void;
   setCommandHandler: (fn: ((cmd: GamemasterCommand) => void) | null) => void;
@@ -73,12 +74,17 @@ function FinalQuizInner({ questions, order, gameTitle, pointSystemEnabled, onGam
   const [qIdx, setQIdx, qKey] = useLiveQuestionIndex(order);
   const [phase, setPhase] = useState<'question' | 'betting' | 'answer' | 'judging'>('question');
   const { state } = useGameContext();
-  const t1 = teamName(state.teams, 1);
-  const t2 = teamName(state.teams, 2);
-  const [team1Bet, setTeam1Bet] = useState('');
-  const [team2Bet, setTeam2Bet] = useState('');
-  const [team1Result, setTeam1Result] = useState<'correct' | 'incorrect' | null>(null);
-  const [team2Result, setTeam2Result] = useState<'correct' | 'incorrect' | null>(null);
+  // Every active team bets and is judged independently — there is no interaction
+  // between teams here, so the whole game is a loop over the active keys.
+  // See specs/team-count.md.
+  const activeTeams = useMemo(() => teamKeys(state.settings.teamCount), [state.settings.teamCount]);
+  const [bets, setBets] = useState<Partial<Record<TeamKey, string>>>({});
+  const [results, setResults] = useState<Partial<Record<TeamKey, 'correct' | 'incorrect'>>>({});
+  const labelOf = useCallback((team: TeamKey) => teamName(state.teams, team), [state.teams]);
+  // Serialized so the controls effect can depend on the VALUES, not on a fresh
+  // object each render (which would republish the GM panel every render).
+  const betsKey = ALL_TEAM_KEYS.map(k => bets[k] ?? '').join('|');
+  const resultsKey = ALL_TEAM_KEYS.map(k => results[k] ?? '').join('|');
 
   const q = questions[qIdx];
   const isExample = qIdx === 0;
@@ -118,10 +124,8 @@ function FinalQuizInner({ questions, order, gameTitle, pointSystemEnabled, onGam
       if (qIdx < questions.length - 1) {
         setQIdx(prev => prev + 1);
         setPhase('question');
-        setTeam1Bet('');
-        setTeam2Bet('');
-        setTeam1Result(null);
-        setTeam2Result(null);
+        setBets({});
+        setResults({});
       } else {
         onGameComplete();
       }
@@ -144,20 +148,20 @@ function FinalQuizInner({ questions, order, gameTitle, pointSystemEnabled, onGam
   // answering wrong only loses 3. Re-judging used to reverse the RAW bet (+10),
   // handing the team 7 points it never lost and inflating the final score. Track
   // the applied delta and reverse exactly that.
-  const appliedRef = useRef<{ team1: number; team2: number }>({ team1: 0, team2: 0 });
+  const appliedRef = useRef<Partial<Record<TeamKey, number>>>({});
 
-  const judgeTeam = useCallback((team: 'team1' | 'team2', correct: boolean) => {
+  const judgeTeam = useCallback((team: TeamKey, correct: boolean) => {
     // Defensive: with points off there is no scoring — never touch onAwardPoints.
     if (!pointSystemEnabled) return;
-    const bet = parseInt(team === 'team1' ? team1Bet : team2Bet, 10) || 0;
-    const prevResult = team === 'team1' ? team1Result : team2Result;
+    const bet = parseInt(bets[team] ?? '', 10) || 0;
+    const prevResult = results[team] ?? null;
 
     if (!isExample) {
-      let points = team === 'team1' ? state.teams.team1Points : state.teams.team2Points;
+      let points = teamPoints(state.teams, team);
       // Reverse previous judgment if changing answer — by the delta that landed,
       // not by the bet that was requested.
       if (prevResult !== null) {
-        const reversal = -appliedRef.current[team];
+        const reversal = -(appliedRef.current[team] ?? 0);
         onAwardPoints(team, reversal);
         points = Math.max(0, points + reversal);
       }
@@ -167,9 +171,8 @@ function FinalQuizInner({ questions, order, gameTitle, pointSystemEnabled, onGam
       onAwardPoints(team, desired);
     }
 
-    if (team === 'team1') setTeam1Result(correct ? 'correct' : 'incorrect');
-    else setTeam2Result(correct ? 'correct' : 'incorrect');
-  }, [team1Bet, team2Bet, team1Result, team2Result, isExample, onAwardPoints, pointSystemEnabled, state.teams.team1Points, state.teams.team2Points]);
+    setResults(prev => ({ ...prev, [team]: correct ? 'correct' : 'incorrect' }));
+  }, [bets, results, isExample, onAwardPoints, pointSystemEnabled, state.teams]);
 
   // Broadcast gamemaster controls
   useEffect(() => {
@@ -177,29 +180,31 @@ function FinalQuizInner({ questions, order, gameTitle, pointSystemEnabled, onGam
     // Betting: GM uses the input + submit button. handleNext does nothing here.
     // Judging before both teams are judged: handleNext would advance and bypass
     // the disabled-button gate — hide nav until both judgments are in.
-    const bothJudged = team1Result !== null && team2Result !== null;
+    const allJudged = activeTeams.every((t: TeamKey) => results[t] !== undefined);
     // Points off: no betting/judging gate — leave nav-forward visible so "Weiter" advances.
-    if (pointSystemEnabled && (phase === 'betting' || (phase === 'judging' && !bothJudged))) {
+    if (pointSystemEnabled && (phase === 'betting' || (phase === 'judging' && !allJudged))) {
       setNavState({ hideForward: true, hideBack: true });
     } else {
       setNavState({});
     }
     // GM control panel → mirror the frontend order (GM faces the crowd). Input/
     // button IDs stay team-keyed, so only display order changes.
-    const gmTeamOrder = teamDisplayOrder(state.teams.orderSwapped, true, state.settings.teamMirrorEnabled);
-    const labels = { team1: t1, team2: t2 } as const;
-    const bets = { team1: team1Bet, team2: team2Bet } as const;
-    const teamResults = { team1: team1Result, team2: team2Result } as const;
+    const gmTeamOrder = teamDisplayOrder(
+      state.teams.orderSwapped,
+      true,
+      state.settings.teamMirrorEnabled,
+      state.settings.teamCount,
+    );
     if (pointSystemEnabled && phase === 'betting') {
       controls.push({
         type: 'input-group',
         id: 'betting-submit',
         inputs: gmTeamOrder.map(teamKey => ({
           id: `${teamKey}Bet`,
-          label: labels[teamKey],
-          inputType: 'number',
-          placeholder: `Punkte ${labels[teamKey]}`,
-          value: bets[teamKey],
+          label: labelOf(teamKey),
+          inputType: 'number' as const,
+          placeholder: `Punkte ${labelOf(teamKey)}`,
+          value: bets[teamKey] ?? '',
           emitOnChange: true,
         })),
         submitLabel: 'Antwort anzeigen',
@@ -210,10 +215,10 @@ function FinalQuizInner({ questions, order, gameTitle, pointSystemEnabled, onGam
         controls.push({
           type: 'button-group',
           id: `${teamKey}-judgment`,
-          label: labels[teamKey],
+          label: labelOf(teamKey),
           buttons: [
-            { id: `${teamKey}-correct`, label: 'Richtig', variant: 'success', active: teamResults[teamKey] === 'correct' },
-            { id: `${teamKey}-incorrect`, label: 'Falsch', variant: 'danger', active: teamResults[teamKey] === 'incorrect' },
+            { id: `${teamKey}-correct`, label: 'Richtig', variant: 'success', active: results[teamKey] === 'correct' },
+            { id: `${teamKey}-incorrect`, label: 'Falsch', variant: 'danger', active: results[teamKey] === 'incorrect' },
           ],
         });
       });
@@ -222,32 +227,42 @@ function FinalQuizInner({ questions, order, gameTitle, pointSystemEnabled, onGam
         id: 'next-question',
         label: qIdx < questions.length - 1 ? 'Nächste Frage' : 'Weiter',
         variant: 'primary',
-        disabled: team1Result === null || team2Result === null,
+        disabled: !allJudged,
       });
     }
     setGamemasterControls(controls);
-  }, [phase, pointSystemEnabled, team1Bet, team2Bet, team1Result, team2Result, qIdx, questions.length, setGamemasterControls, setNavState, t1, t2, state.teams.orderSwapped, state.settings.teamMirrorEnabled]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, pointSystemEnabled, betsKey, resultsKey, qIdx, questions.length, setGamemasterControls, setNavState, labelOf, activeTeams, state.teams.orderSwapped, state.settings.teamMirrorEnabled, state.settings.teamCount]);
+
+  /** Mirror the GM's bet inputs (`<teamKey>Bet`) into local state. */
+  const applyBets = useCallback((vals: Record<string, string>) => {
+    setBets(prev => {
+      const next = { ...prev };
+      for (const team of ALL_TEAM_KEYS) {
+        const value = vals[`${team}Bet`];
+        if (value !== undefined) next[team] = value;
+      }
+      return next;
+    });
+  }, []);
 
   // Handle gamemaster commands
   const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
     if (cmd.controlId === 'betting-submit:change' && cmd.value && typeof cmd.value === 'object') {
       // Live mirror: every keystroke in the GM input is reflected in the
       // frontend's input fields so spectators can see the bets being typed.
-      const vals = cmd.value as Record<string, string>;
-      setTeam1Bet(vals.team1Bet ?? '');
-      setTeam2Bet(vals.team2Bet ?? '');
+      applyBets(cmd.value as Record<string, string>);
     } else if (cmd.controlId === 'betting-submit' && cmd.value && typeof cmd.value === 'object') {
-      const vals = cmd.value as Record<string, string>;
-      setTeam1Bet(vals.team1Bet ?? '');
-      setTeam2Bet(vals.team2Bet ?? '');
+      applyBets(cmd.value as Record<string, string>);
       // Use setTimeout to let state update before showing answer
       setTimeout(() => showAnswerFn(), 0);
-    } else if (cmd.controlId === 'team1-correct') judgeTeam('team1', true);
-    else if (cmd.controlId === 'team1-incorrect') judgeTeam('team1', false);
-    else if (cmd.controlId === 'team2-correct') judgeTeam('team2', true);
-    else if (cmd.controlId === 'team2-incorrect') judgeTeam('team2', false);
-    else if (cmd.controlId === 'next-question') handleNext();
-  }, [showAnswerFn, judgeTeam, handleNext]);
+    } else if (cmd.controlId.endsWith('-correct') || cmd.controlId.endsWith('-incorrect')) {
+      // `<teamKey>-correct` / `<teamKey>-incorrect`, one pair per active team.
+      const correct = cmd.controlId.endsWith('-correct');
+      const team = cmd.controlId.slice(0, cmd.controlId.lastIndexOf('-'));
+      if (isTeamKey(team)) judgeTeam(team, correct);
+    } else if (cmd.controlId === 'next-question') handleNext();
+  }, [applyBets, showAnswerFn, judgeTeam, handleNext]);
 
   useEffect(() => {
     setCommandHandler(commandHandlerFn);
@@ -260,21 +275,30 @@ function FinalQuizInner({ questions, order, gameTitle, pointSystemEnabled, onGam
 
   if (!q) return null;
 
+  // Crowd-facing surface → the frontend team order.
+  const showOrder = teamDisplayOrder(
+    state.teams.orderSwapped,
+    false,
+    state.settings.teamMirrorEnabled,
+    state.settings.teamCount,
+  );
+
   return (
     <>
       <h2 className="quiz-question-number">{questionLabel}</h2>
       <div className="quiz-question">{q.question}</div>
 
       {phase === 'betting' && pointSystemEnabled && (
-        <div id="bettingForm">
-          {teamDisplayOrder(state.teams.orderSwapped, false, state.settings.teamMirrorEnabled).map(teamKey => (
+        <div id="bettingForm" data-team-count={showOrder.length}>
+          {showOrder.map(teamKey => (
             <input
               key={teamKey}
               type="number"
-              placeholder={`Punkte ${teamKey === 'team1' ? t1 : t2}`}
+              placeholder={`Punkte ${labelOf(teamKey)}`}
               className="guess-input betting-input"
-              value={teamKey === 'team1' ? team1Bet : team2Bet}
-              onChange={e => (teamKey === 'team1' ? setTeam1Bet : setTeam2Bet)(e.target.value)}
+              data-team={teamKey}
+              value={bets[teamKey] ?? ''}
+              onChange={e => setBets(prev => ({ ...prev, [teamKey]: e.target.value }))}
             />
           ))}
           <button className="quiz-button button-centered" onClick={showAnswerFn}>
@@ -303,13 +327,13 @@ function FinalQuizInner({ questions, order, gameTitle, pointSystemEnabled, onGam
       {/* Points off: no judging and no "Nächste Frage" button — nav-forward
           (keyboard / gamemaster) advances to the next question. */}
       {phase === 'judging' && pointSystemEnabled && (
-        <div id="correctButtons">
-          {teamDisplayOrder(state.teams.orderSwapped, false, state.settings.teamMirrorEnabled).map(teamKey => {
-            const label = teamKey === 'team1' ? t1 : t2;
-            const result = teamKey === 'team1' ? team1Result : team2Result;
+        <div id="correctButtons" data-team-count={showOrder.length}>
+          {showOrder.map(teamKey => {
+            const label = labelOf(teamKey);
+            const result = results[teamKey] ?? null;
             return (
               <div className="judgment-group" key={teamKey}>
-                <h3>{label}:</h3>
+                <h3><TeamDot team={teamKey} />{label}:</h3>
                 <button
                   className={`quiz-button${result === 'correct' ? ' active' : ''}`}
                   onClick={() => judgeTeam(teamKey, true)}
@@ -329,7 +353,7 @@ function FinalQuizInner({ questions, order, gameTitle, pointSystemEnabled, onGam
             className="quiz-button button-centered"
             style={{ marginTop: 'clamp(12px, 2.5vw, 20px)' }}
             onClick={handleNext}
-            disabled={team1Result === null || team2Result === null}
+            disabled={!activeTeams.every(t => results[t] !== undefined)}
           >
             {qIdx < questions.length - 1 ? 'Nächste Frage' : 'Weiter'}
           </button>

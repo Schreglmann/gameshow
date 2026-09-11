@@ -1,6 +1,7 @@
 import type { CorrectAnswersByQuestion, ScoreLogEntry } from '@/types/game';
 import { NO_QUESTION_KEY } from '@/types/game';
 import { highestTalliedQuestion } from '@/utils/correctAnswers';
+import { ALL_TEAM_KEYS, type TeamKey } from '@/utils/teams';
 
 /**
  * Row model for the gamemaster's per-question breakdown ("Wertung pro Frage").
@@ -28,9 +29,9 @@ export interface BreakdownRow {
   label: string;
   /** Tally rows can be corrected in place; point rows are undone elsewhere. */
   editable: boolean;
-  team1: ScoreCell;
-  team2: ScoreCell;
-  /** False → nothing was recorded for either team ("keine Wertung"). */
+  /** One cell per team key — always fully populated, so the panel can index it. */
+  cells: Record<TeamKey, ScoreCell>;
+  /** False → nothing was recorded for any team ("keine Wertung"). */
   hasData: boolean;
 }
 
@@ -39,6 +40,12 @@ export const TOTAL_ROW_KEY = 'total';
 
 const EMPTY_CELL: ScoreCell = { value: 0, entries: 0 };
 
+function emptyCells(): Record<TeamKey, ScoreCell> {
+  const out = {} as Record<TeamKey, ScoreCell>;
+  for (const key of ALL_TEAM_KEYS) out[key] = { ...EMPTY_CELL };
+  return out;
+}
+
 export function questionLabel(key: string): string {
   if (key === NO_QUESTION_KEY) return 'ohne Frage';
   if (key === TOTAL_ROW_KEY) return 'Gesamt';
@@ -46,14 +53,13 @@ export function questionLabel(key: string): string {
   return `Frage ${key}`;
 }
 
-function makeRow(key: string, team1: ScoreCell, team2: ScoreCell, editable: boolean): BreakdownRow {
+function makeRow(key: string, cells: Record<TeamKey, ScoreCell>, editable: boolean): BreakdownRow {
   return {
     key,
     label: questionLabel(key),
     editable,
-    team1,
-    team2,
-    hasData: team1.entries > 0 || team2.entries > 0,
+    cells,
+    hasData: ALL_TEAM_KEYS.some(k => cells[k].entries > 0),
   };
 }
 
@@ -75,11 +81,14 @@ export function buildTallyRows(
   byQuestion: CorrectAnswersByQuestion | undefined,
   currentQuestion: number | null,
 ): BreakdownRow[] {
-  const cell = (key: string, team: 'team1' | 'team2'): ScoreCell => {
-    const value = byQuestion?.[key]?.[team] ?? 0;
-    return { value, entries: value > 0 ? 1 : 0 };
+  const rowFor = (key: string) => {
+    const cells = emptyCells();
+    for (const team of ALL_TEAM_KEYS) {
+      const value = byQuestion?.[key]?.[team] ?? 0;
+      cells[team] = { value, entries: value > 0 ? 1 : 0 };
+    }
+    return makeRow(key, cells, true);
   };
-  const rowFor = (key: string) => makeRow(key, cell(key, 'team1'), cell(key, 'team2'), true);
 
   const rows: BreakdownRow[] = [];
   const example = rowFor('0');
@@ -98,7 +107,7 @@ export function buildPointRows(
   gameIndex: number,
   currentQuestion: number | null,
 ): BreakdownRow[] {
-  const byKey = new Map<string, { team1: ScoreCell; team2: ScoreCell }>();
+  const byKey = new Map<string, Record<TeamKey, ScoreCell>>();
   let highestWithData = 0;
 
   for (const entry of history ?? []) {
@@ -109,17 +118,14 @@ export function buildPointRows(
     if (entry.questionNumber !== undefined && entry.questionNumber > highestWithData) {
       highestWithData = entry.questionNumber;
     }
-    const cells = byKey.get(key) ?? { team1: { ...EMPTY_CELL }, team2: { ...EMPTY_CELL } };
+    const cells = byKey.get(key) ?? emptyCells();
     const cell = cells[entry.team];
     cell.value += entry.delta;
     cell.entries += 1;
     byKey.set(key, cells);
   }
 
-  const rowFor = (key: string) => {
-    const cells = byKey.get(key);
-    return makeRow(key, cells?.team1 ?? EMPTY_CELL, cells?.team2 ?? EMPTY_CELL, false);
-  };
+  const rowFor = (key: string) => makeRow(key, byKey.get(key) ?? emptyCells(), false);
 
   const rows: BreakdownRow[] = [];
   const example = rowFor('0');

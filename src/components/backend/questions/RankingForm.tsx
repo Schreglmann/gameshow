@@ -4,6 +4,7 @@ import { useDragReorder } from '../useDragReorder';
 import SpellField from '../SpellField';
 import { AssetField } from '../AssetPicker';
 import AudioTrimTimeline from '../AudioTrimTimeline';
+import { toMediaSrc } from '@/utils/assetUrl';
 import MoveQuestionButton from './MoveQuestionButton';
 import { stripTrailingEmpty as stripTrailingEmptyQuestions } from './ghostRow';
 import { useConfirm } from '../ConfirmContext';
@@ -303,6 +304,9 @@ export default function RankingForm({ questions, onChange, otherInstances, onMov
                     value={q.answerAudio || undefined}
                     category="audio"
                     scope={`q-${i}-answer`}
+                    audioStart={q.answerAudioStart}
+                    audioEnd={q.answerAudioEnd}
+                    audioLoop={q.answerAudioLoop}
                     onChange={v => {
                       update(i, { answerAudio: v || undefined, answerAudioStart: undefined, answerAudioEnd: undefined, answerAudioLoop: undefined });
                       if (!v) setTrimExpanded(prev => { const n = new Set(prev); n.delete(i); return n; });
@@ -318,7 +322,7 @@ export default function RankingForm({ questions, onChange, otherInstances, onMov
                   </button>
                   {q.answerAudio && trimExpanded.has(i) && (
                     <AudioTrimTimeline
-                      src={q.answerAudio}
+                      src={toMediaSrc(q.answerAudio) ?? q.answerAudio}
                       scope={`q-${i}-answer`}
                       start={q.answerAudioStart}
                       end={q.answerAudioEnd}

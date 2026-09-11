@@ -125,6 +125,11 @@ export async function fetchBandleCatalog(): Promise<import('@/types/config').Ban
   return apiRequest<import('@/types/config').BandleCatalogEntry[]>(`${BASE}/bandle/catalog`);
 }
 
+export async function fetchBandleUsedSongs(): Promise<string[]> {
+  const data = await apiRequest<{ folders: string[] }>(`${BASE}/bandle/used-songs`);
+  return data.folders;
+}
+
 // ── Config ──
 
 export async function fetchConfig(): Promise<AppConfig> {
@@ -137,6 +142,38 @@ export async function saveConfig(config: AppConfig): Promise<void> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(config),
   });
+}
+
+// ── Unload beacons ──
+//
+// Last-gasp writes fired from `pagehide`, when an ordinary fetch would be aborted
+// with the document. `keepalive` lets the request outlive the page but caps the
+// body at ~64 KiB, and game files already exceed that, so oversized payloads fall
+// back to a plain fetch (may be killed — still better than guaranteed loss). The
+// primary path for those is the `visibilitychange` flush, which fires earlier and
+// has no size limit. `sendBeacon` is not usable here: it is POST-only and both
+// routes are PUT. See specs/admin-save-queue.md.
+
+const KEEPALIVE_MAX_BYTES = 60 * 1024;
+
+function beaconPut(url: string, payload: unknown): void {
+  const body = JSON.stringify(payload);
+  try {
+    void fetch(url, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+      keepalive: body.length <= KEEPALIVE_MAX_BYTES,
+    }).catch(() => { /* fire-and-forget: the page is going away */ });
+  } catch { /* ignore */ }
+}
+
+export function saveConfigBeacon(config: AppConfig): void {
+  beaconPut(`${BASE}/config`, config);
+}
+
+export function saveGameBeacon(fileName: string, gameFile: unknown): void {
+  beaconPut(`${BASE}/games/${encodeURIComponent(fileName)}`, gameFile);
 }
 
 // ── Assets ──

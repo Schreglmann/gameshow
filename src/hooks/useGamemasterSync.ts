@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterControlsData, GamemasterCommand } from '@/types/game';
 import { onWsOpen, sendWs, sendWsControl, useWsChannel } from '@/services/useBackendSocket';
 import { isInactiveShowTab, onBecameActive, onReemitRequest } from '@/services/showPresenceState';
+import { readCachedShowTitle } from '@/utils/showTitle';
 
 function emitIfActive(channel: 'gamemaster-answer' | 'gamemaster-controls', data: unknown): void {
   if (isInactiveShowTab()) return;
@@ -54,11 +55,14 @@ export function emitCachedGamemasterState(): void {
 
   const pathname = window.location.pathname; // BrowserRouter basename is /show
   const last = readLocalStorage<GamemasterAnswerData>(LS_ANSWER_KEY);
+  // Settings haven't loaded yet at this point, so the operator's show title
+  // comes from the cache the last settings load wrote. See specs/show-title.md.
+  const showTitle = readCachedShowTitle();
 
   let payload: GamemasterAnswerData | null = null;
   if (pathname === '/show/' || pathname === '/show') {
     payload = {
-      gameTitle: 'Game Show',
+      gameTitle: showTitle,
       questionNumber: 0,
       totalQuestions: 0,
       answer: '',
@@ -76,7 +80,7 @@ export function emitCachedGamemasterState(): void {
     // Preserve gameTitle / totalQuestions from the last emit; the
     // reload lands on the title screen of that game.
     payload = {
-      gameTitle: last?.gameTitle ?? 'Game Show',
+      gameTitle: last?.gameTitle ?? showTitle,
       questionNumber: 0,
       totalQuestions: last?.totalQuestions ?? 0,
       answer: '',
@@ -201,8 +205,10 @@ export function useGamemasterControlsSync(
   timerTotalSeconds?: number,
   timerKind?: GamemasterControlsData['timerKind'],
   timerMuted?: boolean,
+  tallyReadOnly?: boolean,
+  pointsDisabled?: boolean,
 ): void {
-  const payload = controls ? { controls, phase, gameIndex, totalGames, hideCorrectTracker, deadlineActive, timerActive, timerPaused, answerRevealed, scrollAnchors, fullscreenAvailable, fullscreenOpen, timerRemainingMs, timerTotalSeconds, timerKind, timerMuted } : null;
+  const payload = controls ? { controls, phase, gameIndex, totalGames, hideCorrectTracker, tallyReadOnly, pointsDisabled, deadlineActive, timerActive, timerPaused, answerRevealed, scrollAnchors, fullscreenAvailable, fullscreenOpen, timerRemainingMs, timerTotalSeconds, timerKind, timerMuted } : null;
   const serialized = JSON.stringify(payload);
   const latestRef = useRef<GamemasterControlsData | null>(payload);
   latestRef.current = payload;

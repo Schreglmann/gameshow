@@ -67,17 +67,48 @@ describe('validateQuizjagd', () => {
   // The hard-lock this check exists to prevent: pools run dry before both teams
   // finish, and the show sits on the difficulty screen with every button greyed
   // out and no forward path.
-  it('rejects pools that cannot supply questionsPerTeam × 2 questions', () => {
+  it('warns when the pools cannot supply questionsPerTeam × teamCount questions', () => {
+    // A WARNING, not an error: one game file can be referenced by gameshows with
+    // different team counts, so the shortfall is a property of the pairing, not of
+    // the file. See specs/team-count.md.
+    const warnings: string[] = [];
     const errors = validateQuizjagd('quizjagd', {
       questionsPerTeam: 10,
-      // 5 playable per pool = 15 playable, but 20 are needed.
+      // 5 playable per pool = 15 playable, but 20 are needed at 2 teams.
       questions: { easy: pool(5), medium: pool(5), hard: pool(5) },
-    });
-    expect(errors.some(e => e.includes('only 15 playable question(s)') && e.includes('needs 20'))).toBe(true);
+    }, 2, warnings);
+    expect(errors).toEqual([]);
+    expect(warnings.some(w => w.includes('only 15 playable question(s)') && w.includes('needs 20'))).toBe(true);
+  });
+
+  it('scales the needed supply with the team count', () => {
+    const at4: string[] = [];
+    validateQuizjagd('quizjagd', {
+      questionsPerTeam: 10,
+      questions: { easy: pool(11), medium: pool(11), hard: pool(11) }, // 30 playable
+    }, 4, at4);
+    expect(at4.some(w => w.includes('with 4 teams needs 40'))).toBe(true);
+
+    // The same file is fine for a three-team show (30 needed, 30 playable).
+    const at3: string[] = [];
+    validateQuizjagd('quizjagd', {
+      questionsPerTeam: 10,
+      questions: { easy: pool(11), medium: pool(11), hard: pool(11) },
+    }, 3, at3);
+    expect(at3).toEqual([]);
+  });
+
+  it('skips the supply check entirely when the show has no teams', () => {
+    const warnings: string[] = [];
+    validateQuizjagd('quizjagd', {
+      questionsPerTeam: 10,
+      questions: { easy: pool(2), medium: pool(2), hard: pool(2) },
+    }, 0, warnings);
+    expect(warnings).toEqual([]);
   });
 
   it('accounts for the per-pool Beispielfrage in the supply check', () => {
-    // Exactly 20 playable (7+7+6) for questionsPerTeam=10 → no error.
+    // Exactly 20 playable (7+7+6) for questionsPerTeam=10 → nothing reported.
     const errors = validateQuizjagd('quizjagd', {
       questionsPerTeam: 10,
       questions: { easy: pool(7), medium: pool(7), hard: pool(6) },
@@ -85,10 +116,11 @@ describe('validateQuizjagd', () => {
     expect(errors).toEqual([]);
   });
 
-  it('defaults questionsPerTeam to 10 when omitted', () => {
-    const errors = validateQuizjagd('quizjagd', {
+  it('defaults questionsPerTeam to 10 and the team count to 2 when omitted', () => {
+    const warnings: string[] = [];
+    validateQuizjagd('quizjagd', {
       questions: { easy: pool(2), medium: pool(2), hard: pool(2) },
-    });
-    expect(errors.some(e => e.includes('needs 20'))).toBe(true);
+    }, undefined, warnings);
+    expect(warnings.some(w => w.includes('needs 20'))).toBe(true);
   });
 });

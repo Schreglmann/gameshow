@@ -1,4 +1,5 @@
 import type { GameConfig } from '@/types/config';
+import type { TeamKey } from '@/utils/teams';
 
 export interface GameComponentProps {
   config: GameConfig;
@@ -12,5 +13,5 @@ export interface GameComponentProps {
   /** True when this game was entered via back-navigation — open it at its end
    * (last question, answer revealed) for review. See specs/game-back-review.md. */
   resumeAtEnd?: boolean;
-  onAwardPoints: (team: 'team1' | 'team2', points: number) => void;
+  onAwardPoints: (team: TeamKey, points: number) => void;
 }

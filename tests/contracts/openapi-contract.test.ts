@@ -169,6 +169,16 @@ describe('OpenAPI contract — admin backend', () => {
     expect(Array.isArray(data.missing)).toBe(true);
   });
 
+  skipIfNoServer('GET /api/backend/bandle/used-songs → { folders: string[] }', async () => {
+    const res = await fetch(`${BASE}/api/backend/bandle/used-songs`);
+    expect(res.ok).toBe(true);
+    const data = (await res.json()) as { folders: unknown };
+    expect(Array.isArray(data.folders)).toBe(true);
+    for (const folder of data.folders as unknown[]) {
+      expect(typeof folder).toBe('string');
+    }
+  });
+
   skipIfNoServer('GET /api/backend/bandle/catalog → BandleCatalogEntry[]', async () => {
     const res = await fetch(`${BASE}/api/backend/bandle/catalog`);
     expect(res.ok).toBe(true);

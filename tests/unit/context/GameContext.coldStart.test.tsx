@@ -70,7 +70,7 @@ describe('GameContext — cold-start gate', () => {
     render(<GameProvider><Probe onState={(t) => { seen = t; }} /></GameProvider>);
     await act(async () => { await Promise.resolve(); });
 
-    act(() => { __emitChannelForTests('gamemaster-team-state', liveTeams); });
+    act(() => { __emitChannelForTests('gamemaster-team-state-v2', liveTeams); });
     await act(async () => { await Promise.resolve(); });
 
     expect(seen!.team1Points).toBe(14);
@@ -86,7 +86,7 @@ describe('GameContext — cold-start gate', () => {
     render(<GameProvider><Probe onState={(t) => { seen = t; }} /></GameProvider>);
     await act(async () => { await Promise.resolve(); });
 
-    act(() => { __emitChannelForTests('gamemaster-team-state', liveTeams); });
+    act(() => { __emitChannelForTests('gamemaster-team-state-v2', liveTeams); });
     await act(async () => { await Promise.resolve(); });
 
     // Adopted verbatim (remote: true), so it cannot outrank the peer and force
@@ -102,7 +102,7 @@ describe('GameContext — cold-start gate', () => {
     render(<GameProvider><Probe onState={(t) => { seen = t; }} /></GameProvider>);
     await act(async () => { await Promise.resolve(); });
 
-    act(() => { __emitChannelForTests('gamemaster-team-state', liveTeams); });
+    act(() => { __emitChannelForTests('gamemaster-team-state-v2', liveTeams); });
     await act(async () => { await Promise.resolve(); });
 
     expect(seen!.team1Points).toBe(0);

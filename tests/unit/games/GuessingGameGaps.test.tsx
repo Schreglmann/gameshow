@@ -184,6 +184,48 @@ describe('GuessingGame - Gaps', () => {
     });
   });
 
+  it('opens the award screen unselected under scoringMode "standard"', async () => {
+    const user = userEvent.setup();
+    renderGame(makeConfig({ scoringMode: 'standard' }));
+    await waitFor(() => expect(screen.getByText('Test Guessing')).toBeInTheDocument());
+    advanceToGame();
+
+    await user.type(screen.getByLabelText('Tipp Team 1:'), '80');
+    await user.type(screen.getByLabelText('Tipp Team 2:'), '120');
+    await user.click(screen.getByText('Tipp Abgeben'));
+    await clickForward(user);
+
+    await user.type(screen.getByLabelText('Tipp Team 1:'), '45');
+    await user.type(screen.getByLabelText('Tipp Team 2:'), '90');
+    await user.click(screen.getByText('Tipp Abgeben'));
+    await clickForward(user);
+
+    // No verdict was recorded, so nothing is preselected and no points are stated yet.
+    await waitFor(() => expect(screen.getByText('Welches Team hat gewonnen?')).toBeInTheDocument());
+    expect(document.querySelector('.award-team-card.is-selected')).not.toBeInTheDocument();
+    expect(document.querySelector('.award-team-card-points')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Punkte vergeben & weiter' })).toBeDisabled();
+  });
+
+  it('preselects nothing when automatic scoring judged no real question', async () => {
+    const user = userEvent.setup();
+    // Only the example question — nothing counts, so there is no verdict to state.
+    const config = makeConfig({
+      questions: [{ question: 'Example only', answer: 100 }],
+    });
+    renderGame(config);
+    await waitFor(() => expect(screen.getByText('Test Guessing')).toBeInTheDocument());
+    advanceToGame();
+
+    await user.type(screen.getByLabelText('Tipp Team 1:'), '80');
+    await user.type(screen.getByLabelText('Tipp Team 2:'), '120');
+    await user.click(screen.getByText('Tipp Abgeben'));
+    await clickForward(user);
+
+    await waitFor(() => expect(screen.getByText('Welches Team hat gewonnen?')).toBeInTheDocument());
+    expect(document.querySelector('.award-team-card.is-selected')).not.toBeInTheDocument();
+  });
+
   it('handles zero guesses gracefully', async () => {
     const user = userEvent.setup();
     renderGame();
@@ -195,8 +237,9 @@ describe('GuessingGame - Gaps', () => {
     await user.type(screen.getByLabelText('Tipp Team 2:'), '0');
     await user.click(screen.getByText('Tipp Abgeben'));
 
+    // A tie badges both team cards
     await waitFor(() => {
-      expect(screen.getByText('Gleichstand!')).toBeInTheDocument();
+      expect(screen.getAllByText('Gleichstand!')).toHaveLength(2);
     });
   });
 });

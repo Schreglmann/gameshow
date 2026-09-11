@@ -1,16 +1,24 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useGameContext } from '@/context/GameContext';
-import { isTeamNameLong } from '@/utils/teamNames';
+import { teamNameLongHint } from '@/utils/teamNames';
+import { useTeamNameCheck } from '@/hooks/useTeamNameCheck';
+import { useTheme } from '@/context/ThemeContext';
+import { ALL_TEAM_KEYS, teamKeys, teamNumber, teamPoints, teamRoster, type TeamKey } from '@/utils/teams';
+import type { TeamState } from '@/types/game';
 import StatusMessage from './StatusMessage';
 import { useConfirm } from './ConfirmContext';
+import TeamDot from '@/components/common/TeamDot';
 
 interface StorageItem {
   key: string;
   value: string;
 }
 
-/** The six operator-editable fields, each mirroring one part of `TeamState`. */
-type FieldKey = 'team1' | 'team2' | 'team1Name' | 'team2Name' | 'team1Points' | 'team2Points';
+/**
+ * The operator-editable fields, three per team (roster, name, points), for
+ * however many teams the active gameshow runs with. See specs/team-count.md.
+ */
+type FieldKey = TeamKey | `${TeamKey}Name` | `${TeamKey}Points`;
 
 export default function SessionTab() {
   const { state, dispatch } = useGameContext();
@@ -18,20 +26,28 @@ export default function SessionTab() {
 
   // Each joker column in the header pill steals room from the team name, so the
   // long-name check depends on how MANY jokers are enabled (1 vs 3 differ). The
-  // name's actual rendered width is measured (not its char count).
+  // name's actual rendered width is measured (not its char count) — in the SHOW's
+  // theme, not the admin's: the two fonts differ, and the admin's <html> carries
+  // the admin theme.
+  const { theme } = useTheme();
   const jokerCount = (state.settings.enabledJokers ?? []).length;
-  const jokerNote = jokerCount > 0 ? ` (mit ${jokerCount} Joker${jokerCount === 1 ? '' : 'n'} weniger Platz)` : '';
+  const activeTeamCount = teamKeys(state.settings.teamCount).length;
+  const isNameLong = useTeamNameCheck({ jokerCount, teamCount: activeTeamCount, totalGames: state.settings.totalGames, theme });
 
   // The live values, straight from context. Points are strings so a field can be
   // cleared while editing (an empty string is a valid intermediate state).
-  const live = useMemo(() => ({
-    team1: state.teams.team1.join(', '),
-    team2: state.teams.team2.join(', '),
-    team1Name: state.teams.team1Name ?? '',
-    team2Name: state.teams.team2Name ?? '',
-    team1Points: String(state.teams.team1Points),
-    team2Points: String(state.teams.team2Points),
-  }), [state.teams]);
+  const live = useMemo(() => {
+    const values = {} as Record<FieldKey, string>;
+    for (const key of ALL_TEAM_KEYS) {
+      values[key] = teamRoster(state.teams, key).join(', ');
+      values[`${key}Name`] = state.teams[`${key}Name`] ?? '';
+      values[`${key}Points`] = String(teamPoints(state.teams, key));
+    }
+    return values;
+  }, [state.teams]);
+
+  // Only the teams this gameshow actually plays with get editors.
+  const activeTeams = useMemo(() => teamKeys(state.settings.teamCount), [state.settings.teamCount]);
 
   // Uncommitted keystrokes ONLY. Every field the operator is not currently
   // editing falls through to `live`, so the tab keeps showing the real score
@@ -62,22 +78,28 @@ export default function SessionTab() {
     if (Object.keys(edits).length === 0) return;
     const parseMembers = (v: string) => v.split(',').map(n => n.trim()).filter(Boolean);
     const teams = state.teams;
-    const next = {
-      ...teams,
-      ...(edits.team1 !== undefined ? { team1: parseMembers(edits.team1) } : {}),
-      ...(edits.team2 !== undefined ? { team2: parseMembers(edits.team2) } : {}),
-      ...(edits.team1Name !== undefined ? { team1Name: edits.team1Name.trim() || undefined } : {}),
-      ...(edits.team2Name !== undefined ? { team2Name: edits.team2Name.trim() || undefined } : {}),
-      ...(edits.team1Points !== undefined ? { team1Points: parseInt(edits.team1Points, 10) || 0 } : {}),
-      ...(edits.team2Points !== undefined ? { team2Points: parseInt(edits.team2Points, 10) || 0 } : {}),
-    };
-    const changed =
-      next.team1.join(', ') !== teams.team1.join(', ') ||
-      next.team2.join(', ') !== teams.team2.join(', ') ||
-      next.team1Name !== teams.team1Name ||
-      next.team2Name !== teams.team2Name ||
-      next.team1Points !== teams.team1Points ||
-      next.team2Points !== teams.team2Points;
+    const next: TeamState = { ...teams };
+    let changed = false;
+    for (const key of ALL_TEAM_KEYS) {
+      const roster = edits[key];
+      if (roster !== undefined) {
+        const parsed = parseMembers(roster);
+        if (parsed.join(', ') !== teamRoster(teams, key).join(', ')) changed = true;
+        next[key] = parsed;
+      }
+      const name = edits[`${key}Name`];
+      if (name !== undefined) {
+        const trimmed = name.trim() || undefined;
+        if (trimmed !== teams[`${key}Name`]) changed = true;
+        next[`${key}Name`] = trimmed;
+      }
+      const points = edits[`${key}Points`];
+      if (points !== undefined) {
+        const parsed = parseInt(points, 10) || 0;
+        if (parsed !== teamPoints(teams, key)) changed = true;
+        next[`${key}Points`] = parsed;
+      }
+    }
     if (changed) {
       dispatch({ type: 'SET_TEAM_STATE', payload: next });
       showMsg('success', 'Gespeichert');
@@ -89,7 +111,7 @@ export default function SessionTab() {
 
   const resetPoints = async () => {
     if (await confirmDialog({
-      title: 'Möchten Sie wirklich die Punkte beider Teams auf 0 zurücksetzen?',
+      title: 'Möchten Sie wirklich die Punkte aller Teams auf 0 zurücksetzen?',
       confirmLabel: 'Zurücksetzen',
     })) {
       dispatch({ type: 'RESET_POINTS' });
@@ -131,69 +153,41 @@ export default function SessionTab() {
 
       <div className="backend-card">
         <h3>Team Verwaltung</h3>
-        <div className="session-team-grid">
-          <div>
-            <label className="be-label">Team 1 Name (optional)</label>
-            <input
-              className="be-input"
-              placeholder="Team 1"
-              value={valueOf('team1Name')}
-              onChange={e => editField('team1Name')(e.target.value)}
-              onBlur={saveSession}
-            />
-            {isTeamNameLong(valueOf('team1Name'), jokerCount) && (
-              <p className="be-field-hint" role="status">
-                Name ist zu lang – wird im Header auf kleineren Bildschirmen abgekürzt{jokerNote}.
-              </p>
-            )}
-            <label className="be-label">Team 1 Mitglieder</label>
-            <input
-              className="be-input"
-              placeholder="Alice, Bob, ..."
-              value={valueOf('team1')}
-              onChange={e => editField('team1')(e.target.value)}
-              onBlur={saveSession}
-            />
-            <label className="be-label">Team 1 Punkte</label>
-            <input
-              className="be-input"
-              type="number"
-              value={valueOf('team1Points')}
-              onChange={e => editField('team1Points')(e.target.value)}
-              onBlur={saveSession}
-            />
-          </div>
-          <div>
-            <label className="be-label">Team 2 Name (optional)</label>
-            <input
-              className="be-input"
-              placeholder="Team 2"
-              value={valueOf('team2Name')}
-              onChange={e => editField('team2Name')(e.target.value)}
-              onBlur={saveSession}
-            />
-            {isTeamNameLong(valueOf('team2Name'), jokerCount) && (
-              <p className="be-field-hint" role="status">
-                Name ist zu lang – wird im Header auf kleineren Bildschirmen abgekürzt{jokerNote}.
-              </p>
-            )}
-            <label className="be-label">Team 2 Mitglieder</label>
-            <input
-              className="be-input"
-              placeholder="Clara, Dave, ..."
-              value={valueOf('team2')}
-              onChange={e => editField('team2')(e.target.value)}
-              onBlur={saveSession}
-            />
-            <label className="be-label">Team 2 Punkte</label>
-            <input
-              className="be-input"
-              type="number"
-              value={valueOf('team2Points')}
-              onChange={e => editField('team2Points')(e.target.value)}
-              onBlur={saveSession}
-            />
-          </div>
+        <div className="session-team-grid" data-team-count={activeTeams.length}>
+          {activeTeams.map(key => {
+            const n = teamNumber(key);
+            return (
+              <div key={key} className="session-team-block" data-team={key}>
+                <label className="be-label"><TeamDot team={key} />Team {n} Name (optional)</label>
+                <input
+                  className="be-input"
+                  placeholder={`Team ${n}`}
+                  value={valueOf(`${key}Name`)}
+                  onChange={e => editField(`${key}Name`)(e.target.value)}
+                  onBlur={saveSession}
+                />
+                {isNameLong(valueOf(`${key}Name`)) && (
+                  <p className="be-field-hint" role="status">{teamNameLongHint(jokerCount)}</p>
+                )}
+                <label className="be-label">Team {n} Mitglieder</label>
+                <input
+                  className="be-input"
+                  placeholder={n === 1 ? 'Alice, Bob, ...' : 'Clara, Dave, ...'}
+                  value={valueOf(key)}
+                  onChange={e => editField(key)(e.target.value)}
+                  onBlur={saveSession}
+                />
+                <label className="be-label">Team {n} Punkte</label>
+                <input
+                  className="be-input"
+                  type="number"
+                  value={valueOf(`${key}Points`)}
+                  onChange={e => editField(`${key}Points`)(e.target.value)}
+                  onBlur={saveSession}
+                />
+              </div>
+            );
+          })}
         </div>
         <div className="be-actions">
           <button className="admin-button secondary" onClick={resetPoints}>🔄 Punkte zurücksetzen</button>

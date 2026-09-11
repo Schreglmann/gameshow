@@ -61,6 +61,24 @@ describe('HomeScreen', () => {
     expect(screen.getByText('Game Show')).toBeInTheDocument();
   });
 
+  // The operator-configurable landing-page title — see specs/show-title.md. The
+  // whole assertion waits, because the heading only changes once the async
+  // settings load has landed.
+  it('renders the operator-configured show title instead of the default', async () => {
+    mockedFetchSettings.mockResolvedValue({
+      showTitle: 'Sommerfest Quiz 2026',
+      pointSystemEnabled: true,
+      teamRandomizationEnabled: true,
+      teamMirrorEnabled: true,
+      globalRules: ['Rule 1'],
+    });
+    renderHomeScreen();
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Sommerfest Quiz 2026');
+    });
+    expect(screen.queryByText('Game Show')).not.toBeInTheDocument();
+  });
+
   it('swaps the on-show team-card order when orderSwapped is set', async () => {
     localStorage.setItem('team1', JSON.stringify(['Anna']));
     localStorage.setItem('team2', JSON.stringify(['Ben']));

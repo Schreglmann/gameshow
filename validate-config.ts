@@ -8,8 +8,12 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import type { GameType, AppConfig, GameConfig } from './src/types/config.js';
+import type { GameType, AppConfig, GameConfig, PointMode } from './src/types/config.js';
 import { JOKER_CATALOG } from './src/data/jokers.js';
+import { gameSupportsTeamCount, gameUsesCorrectAnswerTally, teamCountSupportLabel } from './src/data/gameTypeInfo.js';
+import { ALL_POINT_MODES, DEFAULT_POINT_MODE } from './src/utils/pointMode.js';
+import { isTeamKey } from './src/utils/teams.js';
+import { isValidHex } from './src/utils/hexColor.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -32,7 +36,7 @@ function isGitCryptBlob(filePath: string): boolean {
   }
 }
 
-const VALID_THEMES = ['galaxia', 'harry-potter', 'dnd', 'deepsea', 'enterprise', 'retro', 'minecraft', 'classical-music', 'modern-music', 'movie-quiz', 'atlas', 'atlas-light'];
+const VALID_THEMES = ['galaxia', 'harry-potter', 'dnd', 'deepsea', 'enterprise', 'retro', 'minecraft', 'classical-music', 'modern-music', 'movie-quiz', 'atlas', 'atlas-light', 'pub-quiz'];
 
 const VALID_GAME_TYPES: GameType[] = [
   'simple-quiz',
@@ -51,6 +55,7 @@ const VALID_GAME_TYPES: GameType[] = [
   'ranking',
   'wer-kennt-mehr',
   'random-frame',
+  'city-compass',
 ];
 
 function parseGameRef(ref: string): { gameName: string; instanceName: string | null } {
@@ -158,6 +163,17 @@ function validateConfig(): void {
         } else if (preset.rules.some(r => typeof r !== 'string')) {
           errors.push(`rulesPresets[${idx}]: every entry in "rules" must be a string`);
         }
+        // Team-count bands. Optional — an absent band falls back to `rules` at
+        // runtime, so only a malformed one is an error. See specs/rules-presets.md.
+        for (const band of ['rulesSolo', 'rulesMulti'] as const) {
+          const value = (preset as Record<string, unknown>)[band];
+          if (value === undefined) continue;
+          if (!Array.isArray(value)) {
+            errors.push(`rulesPresets[${idx}]: "${band}" must be an array of strings`);
+          } else if (value.some(r => typeof r !== 'string')) {
+            errors.push(`rulesPresets[${idx}]: every entry in "${band}" must be a string`);
+          }
+        }
       });
     }
   }
@@ -174,6 +190,45 @@ function validateConfig(): void {
   // Validate jokerUsageScope (optional) — whether jokers refresh per game
   if (config.jokerUsageScope !== undefined && config.jokerUsageScope !== 'per-gameshow' && config.jokerUsageScope !== 'per-game') {
     errors.push('"jokerUsageScope" must be "per-gameshow" or "per-game"');
+  }
+
+  // Show title (optional, both levels). A blank value silently falls through to
+  // the next level, which is easy to mistake for a broken field — warn.
+  // See specs/show-title.md.
+  if (config.showTitle !== undefined) {
+    if (typeof config.showTitle !== 'string') {
+      errors.push('"showTitle" must be a string');
+    } else if (config.showTitle.trim() === '') {
+      warnings.push('"showTitle" is empty — the default title "Game Show" is used');
+    }
+  }
+
+  // Per-team colours (optional). Two things are worth a warning rather than an
+  // error, because both are silently ineffective rather than broken: a blank
+  // value (that team falls back to the theme) and a palette with the master
+  // switch off (nothing is marked at all). See specs/team-colors.md.
+  if (config.teamColorsEnabled !== undefined && typeof config.teamColorsEnabled !== 'boolean') {
+    errors.push('"teamColorsEnabled" must be a boolean');
+  }
+  if (config.teamColors !== undefined) {
+    if (typeof config.teamColors !== 'object' || config.teamColors === null || Array.isArray(config.teamColors)) {
+      errors.push('"teamColors" must be an object keyed by team1…team4');
+    } else {
+      for (const [key, value] of Object.entries(config.teamColors)) {
+        if (!isTeamKey(key)) {
+          errors.push(`"teamColors": unknown key "${key}" (expected team1…team4)`);
+        } else if (typeof value !== 'string') {
+          errors.push(`"teamColors.${key}" must be a string`);
+        } else if (value.trim() === '') {
+          warnings.push(`"teamColors.${key}" is empty — that team falls back to the theme colour`);
+        } else if (!isValidHex(value)) {
+          errors.push(`"teamColors.${key}": "${value}" is not a #rrggbb colour`);
+        }
+      }
+      if (config.teamColorsEnabled !== true) {
+        warnings.push('"teamColors" is set but "teamColorsEnabled" is not true — no team is marked');
+      }
+    }
   }
 
   // Validate gameshows & activeGameshow
@@ -193,6 +248,45 @@ function validateConfig(): void {
       if (!show.name) {
         warnings.push(`Gameshow "${showKey}": missing "name" field`);
       }
+      if (show.showTitle !== undefined) {
+        if (typeof show.showTitle !== 'string') {
+          errors.push(`Gameshow "${showKey}": "showTitle" must be a string`);
+        } else if (show.showTitle.trim() === '') {
+          warnings.push(
+            `Gameshow "${showKey}": "showTitle" is empty — the global title is used instead`,
+          );
+        }
+      }
+      // Team count (0-4). Absent means the historic 2. See specs/team-count.md.
+      let teamCount = 2;
+      if (show.teamCount !== undefined) {
+        if (typeof show.teamCount !== 'number' || !Number.isInteger(show.teamCount)
+          || show.teamCount < 0 || show.teamCount > 4) {
+          errors.push(`Gameshow "${showKey}": "teamCount" must be an integer between 0 and 4`);
+        } else {
+          teamCount = show.teamCount;
+        }
+      }
+      // Point mode (optional). Absent means the historic positional scoring.
+      // See specs/point-system.md.
+      let pointMode = DEFAULT_POINT_MODE;
+      if (show.pointMode !== undefined) {
+        if (!ALL_POINT_MODES.includes(show.pointMode)) {
+          errors.push(
+            `Gameshow "${showKey}": "pointMode" must be one of ${ALL_POINT_MODES.map(m => `"${m}"`).join(', ')}`,
+          );
+        } else {
+          pointMode = show.pointMode;
+        }
+      }
+
+      if (config.pointSystemEnabled === false && teamCount > 0) {
+        warnings.push(
+          `Gameshow "${showKey}": teamCount=${teamCount} is overridden by the global ` +
+          `"pointSystemEnabled": false — the show runs with no teams at all`,
+        );
+      }
+
       if (show.enabledJokers !== undefined) {
         if (!Array.isArray(show.enabledJokers)) {
           errors.push(`Gameshow "${showKey}": "enabledJokers" must be an array`);
@@ -228,7 +322,7 @@ function validateConfig(): void {
             return;
           }
 
-          const { errors: gameErrors, warnings: gameWarnings } = validateGame(gameRef, gameConfig, validPresetIds);
+          const { errors: gameErrors, warnings: gameWarnings } = validateGame(gameRef, gameConfig, validPresetIds, teamCount, pointMode);
           errors.push(...gameErrors);
           warnings.push(...gameWarnings);
         });
@@ -260,7 +354,15 @@ function validateConfig(): void {
   process.exit(errors.length > 0 ? 1 : 0);
 }
 
-function validateGame(gameRef: string, game: GameConfig, validPresetIds: Set<string>): { errors: string[]; warnings: string[] } {
+function validateGame(
+  gameRef: string,
+  game: GameConfig,
+  validPresetIds: Set<string>,
+  /** Teams the referencing gameshow plays with (0-4). See specs/team-count.md. */
+  teamCount = 2,
+  /** How the referencing gameshow scores. See specs/point-system.md. */
+  pointMode: PointMode = DEFAULT_POINT_MODE,
+): { errors: string[]; warnings: string[] } {
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -317,7 +419,8 @@ function validateGame(gameRef: string, game: GameConfig, validPresetIds: Set<str
     errors.push(`Game "${gameRef}": "disabled" must be a boolean`);
   }
 
-  // `scoringMode` is only valid on wer-kennt-mehr and bet-quiz, each with its own allowed values.
+  // `scoringMode` is only valid on wer-kennt-mehr, bet-quiz and guessing-game, each with
+  // its own allowed values.
   if ('scoringMode' in gameRaw) {
     if (game.type === 'wer-kennt-mehr') {
       if (!['count', 'standard', 'count-penalty'].includes(gameRaw.scoringMode)) {
@@ -327,8 +430,28 @@ function validateGame(gameRef: string, game: GameConfig, validPresetIds: Set<str
       if (!['standard', 'transfer'].includes(gameRaw.scoringMode)) {
         errors.push(`Game "${gameRef}": "scoringMode" must be "standard" or "transfer"`);
       }
+    } else if (game.type === 'guessing-game') {
+      if (!['standard', 'auto'].includes(gameRaw.scoringMode)) {
+        errors.push(`Game "${gameRef}": "scoringMode" must be "standard" or "auto"`);
+      }
     } else {
-      errors.push(`Game "${gameRef}": "scoringMode" is only supported on wer-kennt-mehr and bet-quiz games`);
+      errors.push(`Game "${gameRef}": "scoringMode" is only supported on wer-kennt-mehr, bet-quiz and guessing-game games`);
+    }
+  }
+
+  if ('reveal' in gameRaw) {
+    if (game.type !== 'city-compass') {
+      errors.push(`Game "${gameRef}": "reveal" is only supported on city-compass games`);
+    } else if (!['all', 'progressive'].includes(gameRaw.reveal)) {
+      errors.push(`Game "${gameRef}": "reveal" must be "all" or "progressive"`);
+    }
+  }
+
+  if ('showDistances' in gameRaw) {
+    if (game.type !== 'city-compass') {
+      errors.push(`Game "${gameRef}": "showDistances" is only supported on city-compass games`);
+    } else if (typeof gameRaw.showDistances !== 'boolean') {
+      errors.push(`Game "${gameRef}": "showDistances" must be a boolean`);
     }
   }
 
@@ -347,6 +470,7 @@ function validateGame(gameRef: string, game: GameConfig, validPresetIds: Set<str
     'ranking',
     'wer-kennt-mehr',
     'random-frame',
+    'city-compass',
     // video-guess was missing: its questions array was never validated at all,
     // so a game with no `video` or no `answer` passed `npm run validate` and
     // only failed in front of the audience.
@@ -357,7 +481,33 @@ function validateGame(gameRef: string, game: GameConfig, validPresetIds: Set<str
   // array, so it needs its own branch. Without one the whole file went
   // unchecked and a malformed pool white-screened the show at that round.
   if (game.type === 'quizjagd') {
-    errors.push(...validateQuizjagd(gameRef, gameRaw));
+    errors.push(...validateQuizjagd(gameRef, gameRaw, teamCount, warnings));
+  }
+
+  // A game whose mechanic can't be scored at this gameshow's team count still
+  // plays — the server serves it `pointSystemEnabled: false` — so this is a
+  // warning, never an error. See specs/team-count.md.
+  if (game.type && VALID_GAME_TYPES.includes(game.type) && teamCount > 0) {
+    const scoringMode = (game as { scoringMode?: string }).scoringMode;
+    if (!gameSupportsTeamCount(game.type, teamCount, scoringMode)) {
+      warnings.push(
+        `Game "${gameRef}": type "${game.type}"${scoringMode ? ` (scoringMode "${scoringMode}")` : ''} ` +
+        `cannot be scored with ${teamCount} team(s) — supports ${teamCountSupportLabel(game.type, scoringMode)}. ` +
+        `It will be played WITHOUT scoring.`,
+      );
+    }
+  }
+
+  // `per-correct-answer` pays out the gamemaster's correct-answer tally, which the
+  // inline-scored types never fill. They still play and still score — just by their
+  // own mechanic — so this is a warning about the mismatch, not an error. Like the
+  // team-count check above, it is a property of the pairing, not of the game file.
+  if (game.type && VALID_GAME_TYPES.includes(game.type) && teamCount > 0
+    && pointMode === 'per-correct-answer' && !gameUsesCorrectAnswerTally(game.type)) {
+    warnings.push(
+      `Game "${gameRef}": type "${game.type}" has no correct-answer tally, so the ` +
+      `"per-correct-answer" point mode does not apply — it keeps its own scoring.`,
+    );
   }
 
   if (game.type && typesNeedingQuestions.includes(game.type)) {
@@ -391,7 +541,12 @@ function validateGame(gameRef: string, game: GameConfig, validPresetIds: Set<str
  * and the game needs `questionsPerTeam × 2` of them. Falling short used to hard-
  * lock the show on the difficulty screen with every button greyed out.
  */
-export function validateQuizjagd(gameRef: string, gameRaw: Record<string, any>): string[] {
+export function validateQuizjagd(
+  gameRef: string,
+  gameRaw: Record<string, any>,
+  teamCount = 2,
+  supplyWarnings: string[] = [],
+): string[] {
   const errors: string[] = [];
   const qs = gameRaw.questions;
   if (!qs) {
@@ -444,13 +599,18 @@ export function validateQuizjagd(gameRef: string, gameRaw: Record<string, any>):
   }
 
   // Supply check. Each pool's first entry is the Beispielfrage and is not played.
+  // How many questions are needed depends on the TEAM COUNT of the gameshow being
+  // played (`questionsPerTeam × teamCount`), and one game file may be referenced
+  // by gameshows with different counts — so this is reported by the caller as a
+  // warning per referencing gameshow, not as a hard error here.
+  // See specs/team-count.md.
   const questionsPerTeam = typeof gameRaw.questionsPerTeam === 'number' ? gameRaw.questionsPerTeam : 10;
   const playable = Object.values(pools).reduce((sum, pool) => sum + Math.max(0, pool.length - 1), 0);
-  const needed = questionsPerTeam * 2;
-  if (playable < needed) {
-    errors.push(
+  const needed = questionsPerTeam * teamCount;
+  if (teamCount > 0 && playable < needed) {
+    supplyWarnings.push(
       `Game "${gameRef}": only ${playable} playable question(s) across all difficulty pools, ` +
-      `but questionsPerTeam=${questionsPerTeam} needs ${needed} ` +
+      `but questionsPerTeam=${questionsPerTeam} with ${teamCount} teams needs ${needed} ` +
       `(the first entry of each pool is its Beispielfrage and is not played)`,
     );
   }
@@ -581,6 +741,34 @@ function validateQuestion(
       }
       if (question.items !== undefined && (!Array.isArray(question.items) || (question.items as unknown[]).some(a => typeof a !== 'string'))) {
         errors.push(`Game "${gameRef}", question ${index}: "items" must be an array of strings`);
+      }
+      break;
+    }
+
+    case 'city-compass': {
+      const checkCity = (city: unknown, label: string): void => {
+        if (!city || typeof city !== 'object' || Array.isArray(city)) {
+          errors.push(`Game "${gameRef}", question ${index}: ${label} must be an object with "name", "lat" and "lon"`);
+          return;
+        }
+        const c = city as Record<string, unknown>;
+        if (typeof c.name !== 'string' || !(c.name as string).trim())
+          errors.push(`Game "${gameRef}", question ${index}: ${label} needs a non-empty "name"`);
+        if (typeof c.lat !== 'number' || (c.lat as number) < -90 || (c.lat as number) > 90)
+          errors.push(`Game "${gameRef}", question ${index}: ${label} needs a "lat" between -90 and 90`);
+        if (typeof c.lon !== 'number' || (c.lon as number) < -180 || (c.lon as number) > 180)
+          errors.push(`Game "${gameRef}", question ${index}: ${label} needs a "lon" between -180 and 180`);
+      };
+
+      checkCity(question.center, '"center"');
+      if (!Array.isArray(question.neighbors)) {
+        errors.push(`Game "${gameRef}", question ${index}: "neighbors" must be an array`);
+      } else {
+        // Two cities already pin a point down; three is the floor at which the
+        // constellation reads as a shape rather than as a pair of directions.
+        if ((question.neighbors as unknown[]).length < 3)
+          errors.push(`Game "${gameRef}", question ${index}: needs at least 3 "neighbors"`);
+        (question.neighbors as unknown[]).forEach((neighbor, i) => checkCity(neighbor, `neighbor ${i}`));
       }
       break;
     }

@@ -17,10 +17,10 @@ vi.mock('@/services/api', () => ({
 const STORAGE_KEY = 'correctAnswersByQuestion';
 
 /** The tally is stored per question, so a render needs the live question too. */
-function renderTracker(gameIndex: number, question = '1') {
+function renderTracker(gameIndex: number, question = '1', readOnly = false) {
   return render(
     <GameProvider>
-      <CorrectAnswersTracker gameIndex={gameIndex} question={question} />
+      <CorrectAnswersTracker gameIndex={gameIndex} question={question} readOnly={readOnly} />
     </GameProvider>,
   );
 }
@@ -49,6 +49,14 @@ describe('CorrectAnswersTracker', () => {
     expect(counts.length).toBeGreaterThanOrEqual(2);
   });
 
+  // See specs/team-colors.md — the attribute is how the colour reaches the card.
+  it('marks each team card with data-team and a colour dot', () => {
+    renderTracker(0);
+    expect(document.querySelector('.gm-correct-team[data-team="team1"]')).toBeInTheDocument();
+    expect(document.querySelector('.gm-correct-team[data-team="team2"]')).toBeInTheDocument();
+    expect(document.querySelectorAll('.team-dot[data-team]')).toHaveLength(2);
+  });
+
   it('increments Team 1 and persists under the live question', async () => {
     const user = userEvent.setup();
     renderTracker(2, '3');
@@ -56,7 +64,7 @@ describe('CorrectAnswersTracker', () => {
     await user.click(screen.getByLabelText('Team 1 plus'));
 
     expect(countFor('Team 1')).toBe('1');
-    expect(stored()['2']).toEqual({ '3': { team1: 1, team2: 0 } });
+    expect(stored()['2']).toEqual({ '3': { team1: 1 } });
   });
 
   it('files a tap under the reserved bucket when no question is attributable', async () => {
@@ -71,7 +79,7 @@ describe('CorrectAnswersTracker', () => {
 
     await user.click(screen.getByLabelText('Team 1 plus'));
 
-    expect(stored()['0']).toEqual({ none: { team1: 1, team2: 0 } });
+    expect(stored()['0']).toEqual({ none: { team1: 1 } });
     expect(screen.getAllByText(/ohne Frage · 1/).length).toBe(1);
   });
 
@@ -88,7 +96,7 @@ describe('CorrectAnswersTracker', () => {
     await user.click(screen.getByLabelText('Team 1 minus'));
     await user.click(screen.getByLabelText('Team 1 minus')); // clamp
 
-    expect(stored()['0']).toEqual({ '1': { team1: 0, team2: 0 } });
+    expect(stored()['0']).toEqual({ '1': { team1: 0 } });
   });
 
   it('shows the DERIVED game total, summed across questions', () => {
@@ -194,9 +202,9 @@ describe('CorrectAnswersTracker', () => {
       expect(document.querySelectorAll('.gm-correct-team')[0]?.textContent).toContain('Carla');
     });
 
-    // The show pressed "Teams tauschen" — the flag rides `gamemaster-team-state`.
+    // The show pressed "Teams tauschen" — the flag rides `gamemaster-team-state-v2`.
     act(() => {
-      __emitChannelForTests('gamemaster-team-state', {
+      __emitChannelForTests('gamemaster-team-state-v2', {
         team1: ['Anna'],
         team2: ['Carla'],
         team1Points: 0,
@@ -246,5 +254,17 @@ describe('CorrectAnswersTracker', () => {
     });
 
     expect(screen.queryByText('9')).not.toBeInTheDocument();
+  });
+
+  it('leaves out both buttons when the playing game scores itself', () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ '2': { '1': { team1: 1, team2: 0 } } }));
+    renderTracker(2, '1', true);
+
+    // Not disabled — gone, so the host never wonders who awards a question.
+    expect(screen.queryByLabelText('Team 1 plus')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Team 1 minus')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Team 2 plus')).not.toBeInTheDocument();
+    // The counts stay: they are the running standing.
+    expect(document.querySelectorAll('.gm-correct-count')[0].textContent).toBe('1');
   });
 });

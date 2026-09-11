@@ -94,11 +94,14 @@ describe('GameScreen - Gaps', () => {
     });
 
     mockNavigate.mockClear();
-    act(() => {
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
+    // The keydown listener attaches in a passive effect that may still be
+    // pending when the error screen commits — retry the press until it lands.
+    await waitFor(() => {
+      act(() => {
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
+      });
+      expect(mockNavigate).toHaveBeenCalledWith('/game?index=2');
     });
-
-    expect(mockNavigate).toHaveBeenCalledWith('/game?index=2');
   });
 
   it('back on a later game\'s landing screen navigates to the previous game', async () => {
@@ -113,9 +116,13 @@ describe('GameScreen - Gaps', () => {
     await waitFor(() => expect(screen.getByText('Second Game')).toBeInTheDocument());
 
     mockNavigate.mockClear();
-    act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' })); });
     // Back into the previous game opens it at its end for review (resumeAtEnd).
-    expect(mockNavigate).toHaveBeenCalledWith('/game?index=1', { state: { resumeAtEnd: true } });
+    // Retried: the keydown listener attaches in a passive effect that may still
+    // be pending when the title commits.
+    await waitFor(() => {
+      act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' })); });
+      expect(mockNavigate).toHaveBeenCalledWith('/game?index=1', { state: { resumeAtEnd: true } });
+    });
   });
 
   it('back on the first game\'s landing screen navigates to the start page when there are no global rules', async () => {
@@ -124,8 +131,11 @@ describe('GameScreen - Gaps', () => {
     await waitFor(() => expect(screen.getByText('Test Quiz')).toBeInTheDocument());
 
     mockNavigate.mockClear();
-    act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' })); });
-    expect(mockNavigate).toHaveBeenCalledWith('/');
+    // Retried: see the resumeAtEnd test above.
+    await waitFor(() => {
+      act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' })); });
+      expect(mockNavigate).toHaveBeenCalledWith('/');
+    });
   });
 
   it('back on the first game\'s landing screen navigates to the global rules when global rules exist', async () => {
@@ -138,8 +148,12 @@ describe('GameScreen - Gaps', () => {
     await waitFor(() => expect(screen.getByText('Test Quiz')).toBeInTheDocument());
 
     mockNavigate.mockClear();
-    act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' })); });
-    expect(mockNavigate).toHaveBeenCalledWith('/rules');
+    // The '/rules' target depends on the async-loaded global settings, which may
+    // commit after the game data renders — retry the keypress until they have.
+    await waitFor(() => {
+      act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' })); });
+      expect(mockNavigate).toHaveBeenCalledWith('/rules');
+    });
   });
 
   it('navigates to previous game on ArrowLeft from error screen', async () => {
@@ -151,11 +165,13 @@ describe('GameScreen - Gaps', () => {
     });
 
     mockNavigate.mockClear();
-    act(() => {
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' }));
+    // Retried: see the ArrowRight error-screen test above.
+    await waitFor(() => {
+      act(() => {
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' }));
+      });
+      expect(mockNavigate).toHaveBeenCalledWith('/game?index=1');
     });
-
-    expect(mockNavigate).toHaveBeenCalledWith('/game?index=1');
   });
 
   it('fetches game data with correct index', async () => {
@@ -191,8 +207,12 @@ describe('GameScreen - Gaps', () => {
     renderGameScreen(0);
     await waitFor(() => expect(screen.getByText('First Game')).toBeInTheDocument());
 
-    // Advance to game → complete → next
-    act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); }); // landing → rules
+    // Advance to game → complete → next. First press retried: the keydown
+    // listener attaches in a passive effect that may still be pending.
+    await waitFor(() => {
+      act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); }); // landing → rules
+      expect(document.querySelector('#landingScreen')).toBeNull();
+    });
     act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); }); // rules → game
 
     // Click to advance through question → answer → complete → next
@@ -233,8 +253,11 @@ describe('GameScreen - Gaps', () => {
     renderGameScreen(2);
     await waitFor(() => expect(screen.getByText('Last Game')).toBeInTheDocument());
 
-    // Advance through game
-    act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
+    // Advance through game. First press retried: see the previous test.
+    await waitFor(() => {
+      act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
+      expect(document.querySelector('#landingScreen')).toBeNull();
+    });
     act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' })); });
 
     const div = document.createElement('div');

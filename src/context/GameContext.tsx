@@ -20,10 +20,31 @@ import { NO_QUESTION_KEY } from '@/types/game';
 import type { ContentChangedPayload } from '@/types/config';
 import { COMEBACK_JOKER_ID } from '@/data/jokers';
 import { fetchSettings } from '@/services/api';
+import { DEFAULT_SHOW_TITLE, cacheShowTitle, normalizeShowTitle } from '@/utils/showTitle';
+import { normalizeTeamColors } from '@/utils/teamColors';
+import { useTeamColorVars } from '@/hooks/useTeamColorVars';
 import { onWsOpen, sendWs, useWsChannel } from '@/services/useBackendSocket';
 import { isInactiveShowTab, onBecameActive, onReemitRequest } from '@/services/showPresenceState';
+import {
+  ALL_TEAM_KEYS,
+  DEFAULT_TEAM_COUNT,
+  isTeamKey,
+  normalizeTeamCount,
+  teamKeys,
+  type TeamKey,
+} from '@/utils/teams';
+import { DEFAULT_POINT_MODE, normalizePointMode } from '@/utils/pointMode';
 
-type JokerTeam = 'team1' | 'team2';
+type JokerTeam = TeamKey;
+
+/**
+ * Was this key actually present in a patch payload? The team-patch actions
+ * distinguish "set this team to nothing" from "leave this team alone", and an
+ * explicit `undefined` (clearing a name) must read as present.
+ */
+function hasField(payload: object, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(payload, key);
+}
 
 function readJokerArray(key: string): string[] {
   try {
@@ -142,11 +163,12 @@ function normalizeCorrectAnswersMap(value: unknown): CorrectAnswersMap {
     const questions: CorrectAnswersByQuestion = {};
     for (const [qKey, tally] of Object.entries(byQuestion as Record<string, unknown>)) {
       if (!tally || typeof tally !== 'object') continue;
-      const entry = tally as { team1?: unknown; team2?: unknown };
-      questions[qKey] = {
-        team1: typeof entry.team1 === 'number' ? entry.team1 : 0,
-        team2: typeof entry.team2 === 'number' ? entry.team2 : 0,
-      };
+      const entry = tally as Record<string, unknown>;
+      const normalized: QuestionTally = {};
+      for (const team of ALL_TEAM_KEYS) {
+        if (typeof entry[team] === 'number') normalized[team] = entry[team] as number;
+      }
+      questions[qKey] = normalized;
     }
     out[gameKey] = questions;
   }
@@ -210,7 +232,7 @@ function withTallyRev(map: CorrectAnswersMap, rev: number): Record<string, unkno
 // ── Score history (audit log for scoring-undo) ──
 // Every team-points mutation funnels through applyPointDelta, which appends an
 // entry here so the gamemaster can undo a mis-award. The list is capped (oldest
-// dropped) to bound localStorage growth and rides the cached gamemaster-team-state
+// dropped) to bound localStorage growth and rides the cached gamemaster-team-state-v2
 // channel as part of TeamState. See specs/gamemaster-cockpit.md.
 
 const SCORE_HISTORY_KEY = 'scoreHistory';
@@ -254,7 +276,7 @@ function isValidScoreEntry(v: unknown): v is ScoreLogEntry {
   const e = v as Record<string, unknown>;
   return (
     typeof e.id === 'string' &&
-    (e.team === 'team1' || e.team === 'team2') &&
+    isTeamKey(e.team) &&
     typeof e.delta === 'number' &&
     typeof e.pointsAfter === 'number' &&
     typeof e.ts === 'number'
@@ -288,12 +310,12 @@ function writeScoreHistory(history: ScoreLogEntry[]): void {
 // ── Comeback-joker armed multiplier ──
 // `doubleNextGame` is the team whose next awarded game doubles its points (the
 // Aufholjoker). Transient pending state — persisted so it survives a reload and
-// rides the cached gamemaster-team-state channel. See specs/comeback-joker.md.
+// rides the cached gamemaster-team-state-v2 channel. See specs/comeback-joker.md.
 
 const DOUBLE_NEXT_GAME_KEY = 'doubleNextGame';
 
 function normalizeDoubleNextGame(value: unknown): JokerTeam | null {
-  return value === 'team1' || value === 'team2' ? value : null;
+  return isTeamKey(value) ? value : null;
 }
 
 function readDoubleNextGame(): JokerTeam | null {
@@ -360,7 +382,7 @@ export function nextTeamStateRev(
 }
 
 /**
- * Canonical serialization of the fields that ride the `gamemaster-team-state`
+ * Canonical serialization of the fields that ride the `gamemaster-team-state-v2`
  * channel, used for the value-based echo guard in GameProvider.
  *
  * An ARRAY, not the raw object: `JSON.stringify(teams)` compares key ORDER too,
@@ -369,17 +391,18 @@ export function nextTeamStateRev(
  * invariant nothing enforced, and whose breach costs an echo per client per
  * update. Listing the fields positionally makes the comparison immune to key
  * order and to a field being added to TeamState in the wrong place.
+ *
+ * The per-team groups are emitted by looping ALL_TEAM_KEYS, so a team added to
+ * TeamState can never be forgotten here (which would silently disable the echo
+ * guard for that field). Absent optional teams normalize to []/null/0, so a
+ * two-team show serializes identically no matter how the state was built.
  */
 function serializeTeams(t: TeamState): string {
   return JSON.stringify([
-    t.team1,
-    t.team2,
-    t.team1Name ?? null,
-    t.team2Name ?? null,
-    t.team1Points,
-    t.team2Points,
-    t.team1JokersUsed,
-    t.team2JokersUsed,
+    ...ALL_TEAM_KEYS.map(k => t[k] ?? []),
+    ...ALL_TEAM_KEYS.map(k => t[`${k}Name`] ?? null),
+    ...ALL_TEAM_KEYS.map(k => t[`${k}Points`] ?? 0),
+    ...ALL_TEAM_KEYS.map(k => t[`${k}JokersUsed`] ?? []),
     t.scoreHistory ?? [],
     t.doubleNextGame ?? null,
     t.orderSwapped === true,
@@ -409,9 +432,10 @@ function applyPointDelta(
   meta?: ScoreMeta,
   isUndo = false,
 ): TeamState {
-  const key = team === 'team1' ? 'team1Points' : 'team2Points';
-  const newPoints = Math.max(0, teams[key] + delta);
-  const actualDelta = newPoints - teams[key];
+  const key = `${team}Points` as const;
+  const current = teams[key] ?? 0;
+  const newPoints = Math.max(0, current + delta);
+  const actualDelta = newPoints - current;
   localStorage.setItem(key, String(newPoints));
 
   let scoreHistory = teams.scoreHistory ?? [];
@@ -451,13 +475,11 @@ function captureColdStartFlags(): void {
   coldStartFlagsCaptured = true;
   try {
     coldStartEmptyTeams =
-      localStorage.getItem('team1') === null &&
-      localStorage.getItem('team2') === null &&
       // Points must count too: a show run with team rosters disabled has no
-      // team1/team2 keys at all, so without these it looked "cold" on EVERY
+      // teamN keys at all, so without these it looked "cold" on EVERY
       // load and dropped the first inbound carrying the live score.
-      localStorage.getItem('team1Points') === null &&
-      localStorage.getItem('team2Points') === null &&
+      ALL_TEAM_KEYS.every(k =>
+        localStorage.getItem(k) === null && localStorage.getItem(`${k}Points`) === null) &&
       localStorage.getItem(SCORE_HISTORY_KEY) === null &&
       localStorage.getItem(DOUBLE_NEXT_GAME_KEY) === null;
     coldStartEmptyCorrect = localStorage.getItem(CORRECT_ANSWERS_KEY) === null;
@@ -488,13 +510,52 @@ interface AppState {
   correctAnswersByGame: CorrectAnswersMap;
 }
 
+/** A blank slate for every team — the base both a cold read and CLEAR_ALL build on. */
+function emptyTeams(): TeamState {
+  const teams = {} as TeamState;
+  for (const key of ALL_TEAM_KEYS) {
+    teams[key] = [];
+    teams[`${key}Name`] = undefined;
+    teams[`${key}Points`] = 0;
+    teams[`${key}JokersUsed`] = [];
+  }
+  return teams;
+}
+
+/**
+ * Restore every team's persisted fields. Loops ALL_TEAM_KEYS so team 3/4 are
+ * picked up without a second code path; a show that never had them simply reads
+ * empty rosters and 0 points, exactly as before.
+ */
+function readTeams(): TeamState {
+  const teams: TeamState = {
+    ...emptyTeams(),
+    scoreHistory: readScoreHistory(),
+    doubleNextGame: readDoubleNextGame(),
+    orderSwapped: localStorage.getItem('teamOrderSwapped') === 'true',
+    rev: readTeamStateRev(),
+  };
+  for (const key of ALL_TEAM_KEYS) {
+    teams[key] = readRoster(key);
+    teams[`${key}Name`] = readTeamName(`${key}Name`);
+    teams[`${key}Points`] = readPoints(`${key}Points`);
+    teams[`${key}JokersUsed`] = readJokerArray(`${key}JokersUsed`);
+  }
+  return teams;
+}
+
 function getInitialState(): AppState {
   captureColdStartFlags();
   return {
     settings: {
+      showTitle: DEFAULT_SHOW_TITLE,
       pointSystemEnabled: true,
+      teamCount: DEFAULT_TEAM_COUNT,
+      pointMode: DEFAULT_POINT_MODE,
+      incompatibleGames: [],
       teamRandomizationEnabled: true,
       teamMirrorEnabled: false,
+      teamColors: {},
       globalRules: [],
       isCleanInstall: false,
       enabledJokers: [],
@@ -502,21 +563,9 @@ function getInitialState(): AppState {
       jokersInLastGame: false,
       jokerUsageScope: 'per-gameshow',
       players: [],
+      totalGames: 0,
     },
-    teams: {
-      team1: readRoster('team1'),
-      team2: readRoster('team2'),
-      team1Name: readTeamName('team1Name'),
-      team2Name: readTeamName('team2Name'),
-      team1Points: readPoints('team1Points'),
-      team2Points: readPoints('team2Points'),
-      team1JokersUsed: readJokerArray('team1JokersUsed'),
-      team2JokersUsed: readJokerArray('team2JokersUsed'),
-      scoreHistory: readScoreHistory(),
-      doubleNextGame: readDoubleNextGame(),
-      orderSwapped: localStorage.getItem('teamOrderSwapped') === 'true',
-      rev: readTeamStateRev(),
-    },
+    teams: readTeams(),
     settingsLoaded: false,
     currentGame: readCurrentGame(),
     currentQuestion: null,
@@ -526,12 +575,17 @@ function getInitialState(): AppState {
 
 // ── Actions ──
 
+/** Rosters for some or all teams; an omitted team keeps its current roster. */
+export type TeamRosterPatch = Partial<Record<TeamKey, string[]>>;
+/** Names for some or all teams; an omitted team keeps its current name. */
+export type TeamNamePatch = Partial<Record<`${TeamKey}Name`, string | undefined>>;
+
 type Action =
   | { type: 'SET_SETTINGS'; payload: GlobalSettings }
-  | { type: 'SET_TEAMS'; payload: { team1: string[]; team2: string[] } }
-  | { type: 'SET_TEAM_NAMES'; payload: { team1Name?: string; team2Name?: string } }
+  | { type: 'SET_TEAMS'; payload: TeamRosterPatch }
+  | { type: 'SET_TEAM_NAMES'; payload: TeamNamePatch }
   | { type: 'SET_TEAM_ORDER'; payload: { swapped: boolean } }
-  | { type: 'AWARD_POINTS'; payload: { team: 'team1' | 'team2'; points: number } }
+  | { type: 'AWARD_POINTS'; payload: { team: TeamKey; points: number } }
   | { type: 'UNDO_LAST_SCORE' }
   | { type: 'UNDO_SCORE_ENTRY'; payload: { id: string } }
   | { type: 'ARM_DOUBLE_NEXT_GAME'; payload: { team: JokerTeam } }
@@ -546,13 +600,14 @@ type Action =
   | { type: 'USE_JOKER'; payload: { team: JokerTeam; jokerId: string } }
   | { type: 'SET_JOKER_USED'; payload: { team: JokerTeam; jokerId: string; used: boolean } }
   | { type: 'RESET_JOKERS' }
-  | { type: 'SET_JOKERS_STATE'; payload: { team1JokersUsed: string[]; team2JokersUsed: string[] } }
+  | { type: 'SET_JOKERS_STATE'; payload: Partial<Record<`${TeamKey}JokersUsed`, string[]>> }
   | {
       type: 'UPDATE_CORRECT_ANSWER';
-      payload: { gameIndex: number; question: string; team: 'team1' | 'team2'; delta: number };
+      payload: { gameIndex: number; question: string; team: TeamKey; delta: number };
     }
   | { type: 'SET_CORRECT_ANSWERS'; payload: CorrectAnswersMap }
   | { type: 'REMAP_QUESTION_TALLY'; payload: { gameIndex: number; moved: readonly (number | null)[] } }
+  | { type: 'RESET_GAME_TALLY'; payload: { gameIndex: number } }
   | { type: 'CLEAR_ALL' };
 
 /**
@@ -574,21 +629,30 @@ function baseReducer(state: AppState, action: Action): AppState {
     case 'SET_SETTINGS':
       return { ...state, settings: action.payload, settingsLoaded: true };
     case 'SET_TEAMS': {
-      const teams = {
-        ...state.teams,
-        team1: action.payload.team1,
-        team2: action.payload.team2,
-      };
-      localStorage.setItem('team1', JSON.stringify(teams.team1));
-      localStorage.setItem('team2', JSON.stringify(teams.team2));
+      // A PATCH: only the teams named in the payload move. A key that is present
+      // is applied (even as an empty roster); a key that is absent keeps its
+      // current value, so a caller editing one team can't wipe the others.
+      const teams = { ...state.teams };
+      for (const key of ALL_TEAM_KEYS) {
+        if (!hasField(action.payload, key)) continue;
+        const roster = action.payload[key] ?? [];
+        teams[key] = roster;
+        localStorage.setItem(key, JSON.stringify(roster));
+      }
       return { ...state, teams };
     }
     case 'SET_TEAM_NAMES': {
-      const team1Name = action.payload.team1Name?.trim() || undefined;
-      const team2Name = action.payload.team2Name?.trim() || undefined;
-      writeTeamName('team1Name', team1Name);
-      writeTeamName('team2Name', team2Name);
-      return { ...state, teams: { ...state.teams, team1Name, team2Name } };
+      // Same patch semantics: a present key is applied (blank/undefined clears
+      // the name back to the positional fallback), an absent key is untouched.
+      const teams = { ...state.teams };
+      for (const key of ALL_TEAM_KEYS) {
+        const field = `${key}Name` as const;
+        if (!hasField(action.payload, field)) continue;
+        const name = action.payload[field]?.trim() || undefined;
+        teams[field] = name;
+        writeTeamName(field, name);
+      }
+      return { ...state, teams };
     }
     case 'SET_TEAM_ORDER': {
       // Presentation-only flip of which team sits on the frontend's left; team
@@ -641,38 +705,28 @@ function baseReducer(state: AppState, action: Action): AppState {
       return { ...state, teams: { ...state.teams, doubleNextGame: null } };
     }
     case 'RESET_POINTS': {
-      const teams = {
-        ...state.teams,
-        team1Name: undefined,
-        team2Name: undefined,
-        team1Points: 0,
-        team2Points: 0,
-        team1JokersUsed: [],
-        team2JokersUsed: [],
-        scoreHistory: [],
-        doubleNextGame: null,
-      };
-      localStorage.setItem('team1Points', '0');
-      localStorage.setItem('team2Points', '0');
-      localStorage.removeItem('team1Name');
-      localStorage.removeItem('team2Name');
+      const teams: TeamState = { ...state.teams, scoreHistory: [], doubleNextGame: null };
+      for (const key of ALL_TEAM_KEYS) {
+        teams[`${key}Name`] = undefined;
+        teams[`${key}Points`] = 0;
+        teams[`${key}JokersUsed`] = [];
+        localStorage.setItem(`${key}Points`, '0');
+        localStorage.removeItem(`${key}Name`);
+        localStorage.removeItem(`${key}JokersUsed`);
+      }
       localStorage.removeItem(CORRECT_ANSWERS_KEY);
-      localStorage.removeItem('team1JokersUsed');
-      localStorage.removeItem('team2JokersUsed');
       localStorage.removeItem(SCORE_HISTORY_KEY);
       localStorage.removeItem(DOUBLE_NEXT_GAME_KEY);
       return { ...state, teams, correctAnswersByGame: {} };
     }
     case 'SET_TEAM_STATE': {
       const ts = action.payload;
-      localStorage.setItem('team1', JSON.stringify(ts.team1));
-      localStorage.setItem('team2', JSON.stringify(ts.team2));
-      writeTeamName('team1Name', ts.team1Name);
-      writeTeamName('team2Name', ts.team2Name);
-      localStorage.setItem('team1Points', String(ts.team1Points));
-      localStorage.setItem('team2Points', String(ts.team2Points));
-      localStorage.setItem('team1JokersUsed', JSON.stringify(ts.team1JokersUsed));
-      localStorage.setItem('team2JokersUsed', JSON.stringify(ts.team2JokersUsed));
+      for (const key of ALL_TEAM_KEYS) {
+        localStorage.setItem(key, JSON.stringify(ts[key] ?? []));
+        writeTeamName(`${key}Name`, ts[`${key}Name`]);
+        localStorage.setItem(`${key}Points`, String(ts[`${key}Points`] ?? 0));
+        localStorage.setItem(`${key}JokersUsed`, JSON.stringify(ts[`${key}JokersUsed`] ?? []));
+      }
       // Seating order survives a partial payload (SessionTab omits it) — only an
       // explicit boolean moves the furniture. The inbound WS path always supplies
       // it, so a remote `false` still clears a local swap.
@@ -728,22 +782,18 @@ function baseReducer(state: AppState, action: Action): AppState {
       // of an award made right after it.
       const currentQuestion = indexChanged ? null : state.currentQuestion;
       if (state.settings.jokerUsageScope === 'per-game' && indexChanged) {
-        const stripNonComeback = (arr: string[]) => arr.filter(id => id === COMEBACK_JOKER_ID);
-        const team1JokersUsed = stripNonComeback(state.teams.team1JokersUsed);
-        const team2JokersUsed = stripNonComeback(state.teams.team2JokersUsed);
-        const changed =
-          team1JokersUsed.length !== state.teams.team1JokersUsed.length ||
-          team2JokersUsed.length !== state.teams.team2JokersUsed.length;
-        if (changed) {
-          localStorage.setItem('team1JokersUsed', JSON.stringify(team1JokersUsed));
-          localStorage.setItem('team2JokersUsed', JSON.stringify(team2JokersUsed));
-          return {
-            ...state,
-            currentGame: next,
-            currentQuestion,
-            teams: { ...state.teams, team1JokersUsed, team2JokersUsed },
-          };
+        const teams: TeamState = { ...state.teams };
+        let changed = false;
+        for (const key of ALL_TEAM_KEYS) {
+          const field = `${key}JokersUsed` as const;
+          const current = state.teams[field] ?? [];
+          const stripped = current.filter(id => id === COMEBACK_JOKER_ID);
+          if (stripped.length === current.length) continue;
+          changed = true;
+          teams[field] = stripped;
+          localStorage.setItem(field, JSON.stringify(stripped));
         }
+        if (changed) return { ...state, currentGame: next, currentQuestion, teams };
       }
 
       return { ...state, currentGame: next, currentQuestion };
@@ -754,16 +804,17 @@ function baseReducer(state: AppState, action: Action): AppState {
     }
     case 'USE_JOKER': {
       const { team, jokerId } = action.payload;
-      const key = team === 'team1' ? 'team1JokersUsed' : 'team2JokersUsed';
-      if (state.teams[key].includes(jokerId)) return state;
-      const next = [...state.teams[key], jokerId];
+      const key = `${team}JokersUsed` as const;
+      const current = state.teams[key] ?? [];
+      if (current.includes(jokerId)) return state;
+      const next = [...current, jokerId];
       localStorage.setItem(key, JSON.stringify(next));
       return { ...state, teams: { ...state.teams, [key]: next } };
     }
     case 'SET_JOKER_USED': {
       const { team, jokerId, used } = action.payload;
-      const key = team === 'team1' ? 'team1JokersUsed' : 'team2JokersUsed';
-      const current = state.teams[key];
+      const key = `${team}JokersUsed` as const;
+      const current = state.teams[key] ?? [];
       const already = current.includes(jokerId);
       if (used === already) return state;
       const next = used ? [...current, jokerId] : current.filter(id => id !== jokerId);
@@ -771,31 +822,30 @@ function baseReducer(state: AppState, action: Action): AppState {
       return { ...state, teams: { ...state.teams, [key]: next } };
     }
     case 'RESET_JOKERS': {
-      localStorage.removeItem('team1JokersUsed');
-      localStorage.removeItem('team2JokersUsed');
+      const teams: TeamState = { ...state.teams, doubleNextGame: null };
+      for (const key of ALL_TEAM_KEYS) {
+        teams[`${key}JokersUsed`] = [];
+        localStorage.removeItem(`${key}JokersUsed`);
+      }
       localStorage.removeItem(DOUBLE_NEXT_GAME_KEY);
-      return {
-        ...state,
-        teams: { ...state.teams, team1JokersUsed: [], team2JokersUsed: [], doubleNextGame: null },
-      };
+      return { ...state, teams };
     }
     case 'SET_JOKERS_STATE': {
-      return {
-        ...state,
-        teams: {
-          ...state.teams,
-          team1JokersUsed: action.payload.team1JokersUsed,
-          team2JokersUsed: action.payload.team2JokersUsed,
-        },
-      };
+      // A patch, like SET_TEAMS — an omitted team keeps its used-joker list.
+      const teams: TeamState = { ...state.teams };
+      for (const key of ALL_TEAM_KEYS) {
+        const field = `${key}JokersUsed` as const;
+        if (hasField(action.payload, field)) teams[field] = action.payload[field] ?? [];
+      }
+      return { ...state, teams };
     }
     case 'UPDATE_CORRECT_ANSWER': {
       const { gameIndex, question, team, delta } = action.payload;
       const key = String(gameIndex);
       const byQuestion: CorrectAnswersByQuestion = state.correctAnswersByGame[key] ?? {};
-      const current = byQuestion[question] ?? { team1: 0, team2: 0 };
-      const nextCount = Math.max(0, current[team] + delta);
-      if (nextCount === current[team]) return state;
+      const current = byQuestion[question] ?? {};
+      const nextCount = Math.max(0, (current[team] ?? 0) + delta);
+      if (nextCount === (current[team] ?? 0)) return state;
       const nextMap: CorrectAnswersMap = {
         ...state.correctAnswersByGame,
         [key]: { ...byQuestion, [question]: { ...current, [team]: nextCount } },
@@ -806,6 +856,18 @@ function baseReducer(state: AppState, action: Action): AppState {
     case 'SET_CORRECT_ANSWERS': {
       writeCorrectAnswersMap(action.payload);
       return { ...state, correctAnswersByGame: action.payload };
+    }
+    case 'RESET_GAME_TALLY': {
+      // Starting a self-scoring game from its title screen wipes that game's slate, so a
+      // replay (or a second run of the same show) doesn't open with the previous round's
+      // standing. Only this game's bucket goes — team points and the score log are
+      // untouched; those are what admin's "Punkte zurücksetzen" is for.
+      const key = String(action.payload.gameIndex);
+      if (!state.correctAnswersByGame[key]) return state;
+      const nextMap: CorrectAnswersMap = { ...state.correctAnswersByGame };
+      delete nextMap[key];
+      writeCorrectAnswersMap(nextMap);
+      return { ...state, correctAnswersByGame: nextMap };
     }
     case 'REMAP_QUESTION_TALLY': {
       // A live question add/remove shifted the playing game's question indices.
@@ -822,9 +884,13 @@ function baseReducer(state: AppState, action: Action): AppState {
       let changed = false;
       const add = (bucket: string, tally: QuestionTally) => {
         const current = next[bucket];
-        next[bucket] = current
-          ? { team1: current.team1 + tally.team1, team2: current.team2 + tally.team2 }
-          : tally;
+        if (!current) { next[bucket] = tally; return; }
+        const merged: QuestionTally = { ...current };
+        for (const team of ALL_TEAM_KEYS) {
+          const sum = (current[team] ?? 0) + (tally[team] ?? 0);
+          if (sum !== 0) merged[team] = sum;
+        }
+        next[bucket] = merged;
       };
       for (const [question, tally] of Object.entries(byQuestion)) {
         const from = Number(question);
@@ -845,23 +911,8 @@ function baseReducer(state: AppState, action: Action): AppState {
     }
     case 'CLEAR_ALL': {
       localStorage.clear();
-      return {
-        ...state,
-        teams: {
-          team1: [],
-          team2: [],
-          team1Name: undefined,
-          team2Name: undefined,
-          team1Points: 0,
-          team2Points: 0,
-          team1JokersUsed: [],
-          team2JokersUsed: [],
-          scoreHistory: [],
-          doubleNextGame: null,
-          orderSwapped: false,
-        },
-        correctAnswersByGame: {},
-      };
+      const teams: TeamState = { ...emptyTeams(), scoreHistory: [], doubleNextGame: null, orderSwapped: false };
+      return { ...state, teams, correctAnswersByGame: {} };
     }
     default:
       return state;
@@ -874,7 +925,7 @@ interface GameContextValue {
   state: AppState;
   dispatch: React.Dispatch<Action>;
   loadSettings: () => Promise<void>;
-  awardPoints: (team: 'team1' | 'team2', points: number) => void;
+  awardPoints: (team: TeamKey, points: number) => void;
   assignTeams: (names: string[]) => void;
 }
 
@@ -915,12 +966,30 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const loadSettingsAction = useCallback(async () => {
     try {
       const data = await fetchSettings();
+      // `teamCount` is the authority; `pointSystemEnabled` is exactly
+      // `teamCount > 0`. A server that predates the field (or a fixture) still
+      // works: fall back to the historic two teams when scoring is on.
+      const teamCount = typeof data.teamCount === 'number'
+        ? normalizeTeamCount(data.teamCount)
+        : (data.pointSystemEnabled !== false ? DEFAULT_TEAM_COUNT : 0);
+      // Cache the resolved title for `emitCachedGamemasterState()`, which runs
+      // before React mounts and so cannot read state. Show tabs only — the
+      // admin/gamemaster zones never emit it, and writing there would only
+      // clutter their localStorage. See specs/show-title.md.
+      const showTitle = normalizeShowTitle(data.showTitle);
+      if (isShowTab()) cacheShowTitle(showTitle);
       dispatch({
         type: 'SET_SETTINGS',
         payload: {
-          pointSystemEnabled: data.pointSystemEnabled !== false,
+          showTitle,
+          pointSystemEnabled: teamCount > 0,
+          teamCount,
+          pointMode: normalizePointMode(data.pointMode),
+          incompatibleGames: data.incompatibleGames ?? [],
           teamRandomizationEnabled: data.teamRandomizationEnabled !== false,
           teamMirrorEnabled: data.teamMirrorEnabled === true,
+          // Already gated server-side — an empty map means "mark nothing".
+          teamColors: normalizeTeamColors(data.teamColors),
           globalRules: data.globalRules || [],
           isCleanInstall: data.isCleanInstall === true,
           enabledJokers: data.enabledJokers || [],
@@ -928,6 +997,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
           jokersInLastGame: data.jokersInLastGame === true,
           jokerUsageScope: data.jokerUsageScope === 'per-game' ? 'per-game' : 'per-gameshow',
           players: data.players || [],
+          totalGames: typeof data.totalGames === 'number' && data.totalGames > 0 ? data.totalGames : 0,
         },
       });
     } catch (err) {
@@ -936,11 +1006,17 @@ export function GameProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const awardPoints = useCallback(
-    (team: 'team1' | 'team2', points: number) => {
+    (team: TeamKey, points: number) => {
       dispatch({ type: 'AWARD_POINTS', payload: { team, points } });
     },
     []
   );
+
+  // Read at call time via a ref so `assignTeams` keeps its stable identity — it
+  // is a dependency of HomeScreen's gamemaster command listener, which would
+  // otherwise re-register on every settings change.
+  const teamCountRef = useRef(state.settings.teamCount);
+  teamCountRef.current = state.settings.teamCount;
 
   const assignTeams = useCallback((names: string[]) => {
     // Capitalize EVERY word (e.g. "john smith" → "John Smith"), not just the
@@ -958,13 +1034,17 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const j = Math.floor(Math.random() * (i + 1));
       [shuffled[i], shuffled[j]] = [shuffled[j]!, shuffled[i]!];
     }
-    const team1: string[] = [];
-    const team2: string[] = [];
+    // Round-robin over however many teams the gameshow runs with (0-4): player 1
+    // to team 1, player 2 to team 2, … wrapping around. With two teams this is
+    // the historic alternation. A count of 0 has no teams to deal into.
+    const keys = teamKeys(teamCountRef.current);
+    if (keys.length === 0) return;
+    const rosters: TeamRosterPatch = {};
+    for (const key of keys) rosters[key] = [];
     shuffled.forEach((name, i) => {
-      if (i % 2 === 0) team1.push(name);
-      else team2.push(name);
+      rosters[keys[i % keys.length]!]!.push(name);
     });
-    dispatch({ type: 'SET_TEAMS', payload: { team1, team2 } });
+    dispatch({ type: 'SET_TEAMS', payload: rosters });
   }, []);
 
   // Broadcast team state on local mutations. Skip when the serialized value is
@@ -977,7 +1057,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     // Record only what actually went out: sendWs is a no-op while the socket is
     // reconnecting, and marking a dropped payload as "sent" left the peers on
     // the old value until something else changed. Re-sent on the next open.
-    if (!sendWs('gamemaster-team-state', state.teams)) {
+    if (!sendWs('gamemaster-team-state-v2', state.teams)) {
       pendingTeamsRef.current = state.teams;
       return;
     }
@@ -991,7 +1071,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   useEffect(() => onWsOpen(() => {
     const pending = pendingTeamsRef.current;
     if (!pending || isInactiveShowTab()) return;
-    if (sendWs('gamemaster-team-state', pending)) {
+    if (sendWs('gamemaster-team-state-v2', pending)) {
       pendingTeamsRef.current = null;
       lastSentTeamsJsonRef.current = serializeTeams(pending);
     }
@@ -1031,17 +1111,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
   }), []);
 
   // Apply remote team-state updates.
-  useWsChannel<TeamState | null>('gamemaster-team-state', (payload) => {
+  useWsChannel<TeamState | null>('gamemaster-team-state-v2', (payload) => {
     if (!payload) return;
     const next: TeamState = {
-      team1: Array.isArray(payload.team1) ? payload.team1 : [],
-      team2: Array.isArray(payload.team2) ? payload.team2 : [],
-      team1Name: typeof payload.team1Name === 'string' && payload.team1Name.trim() ? payload.team1Name : undefined,
-      team2Name: typeof payload.team2Name === 'string' && payload.team2Name.trim() ? payload.team2Name : undefined,
-      team1Points: typeof payload.team1Points === 'number' ? payload.team1Points : 0,
-      team2Points: typeof payload.team2Points === 'number' ? payload.team2Points : 0,
-      team1JokersUsed: Array.isArray(payload.team1JokersUsed) ? payload.team1JokersUsed : [],
-      team2JokersUsed: Array.isArray(payload.team2JokersUsed) ? payload.team2JokersUsed : [],
       scoreHistory: normalizeScoreHistory(payload.scoreHistory),
       doubleNextGame: normalizeDoubleNextGame(payload.doubleNextGame),
       // Seating order rides this channel — it MUST be copied through. Dropping
@@ -1052,13 +1124,28 @@ export function GameProvider({ children }: { children: ReactNode }) {
       // SET_TEAM_STATE and resurrect the local value instead of clearing it.
       orderSwapped: payload.orderSwapped === true,
       rev: typeof payload.rev === 'number' ? payload.rev : 0,
+      ...emptyTeams(),
     };
+    // Every team's fields are rebuilt explicitly (never spread from the payload)
+    // so an untrusted peer cannot inject extra keys, and so a team the sender
+    // omitted lands as empty rather than `undefined` — SET_TEAM_STATE would read
+    // `undefined` as "omitted" and resurrect the local value.
+    for (const key of ALL_TEAM_KEYS) {
+      const roster = payload[key];
+      const name = payload[`${key}Name`];
+      const points = payload[`${key}Points`];
+      const jokers = payload[`${key}JokersUsed`];
+      next[key] = Array.isArray(roster) ? roster : [];
+      next[`${key}Name`] = typeof name === 'string' && name.trim() ? name : undefined;
+      next[`${key}Points`] = typeof points === 'number' ? points : 0;
+      next[`${key}JokersUsed`] = Array.isArray(jokers) ? jokers : [];
+    }
     // Stale-write guard: a peer that has fallen behind — a show re-seeding on
     // reconnect, a background tab taking over, a cache replay from an earlier
     // session — must not roll our score back. Re-assert ours so the sender
     // converges on the newer value instead of the two of us diverging.
     if ((next.rev ?? 0) < (state.teams.rev ?? 0)) {
-      sendWs('gamemaster-team-state', state.teams);
+      sendWs('gamemaster-team-state-v2', state.teams);
       return;
     }
     if (teamsColdGateRef.current) {
@@ -1078,14 +1165,11 @@ export function GameProvider({ children }: { children: ReactNode }) {
         return;
       }
       const hasData =
-        next.team1.length > 0 ||
-        next.team2.length > 0 ||
-        !!next.team1Name ||
-        !!next.team2Name ||
-        next.team1Points > 0 ||
-        next.team2Points > 0 ||
-        next.team1JokersUsed.length > 0 ||
-        next.team2JokersUsed.length > 0 ||
+        ALL_TEAM_KEYS.some(k =>
+          (next[k]?.length ?? 0) > 0 ||
+          !!next[`${k}Name`] ||
+          (next[`${k}Points`] ?? 0) > 0 ||
+          (next[`${k}JokersUsed`]?.length ?? 0) > 0) ||
         (next.scoreHistory?.length ?? 0) > 0 ||
         !!next.doubleNextGame;
       if (hasData) {
@@ -1159,7 +1243,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     if (!isShowTab()) return;
     return onWsOpen(() => {
       if (isInactiveShowTab()) return;
-      sendWs('gamemaster-team-state', latestTeamsRef.current);
+      sendWs('gamemaster-team-state-v2', latestTeamsRef.current);
       sendWs('gamemaster-question-tally', withTallyRev(latestCorrectRef.current, tallyRevRef.current));
     });
   }, []);
@@ -1170,7 +1254,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!isShowTab()) return;
     return onBecameActive(() => {
-      sendWs('gamemaster-team-state', latestTeamsRef.current);
+      sendWs('gamemaster-team-state-v2', latestTeamsRef.current);
       sendWs('gamemaster-question-tally', withTallyRev(latestCorrectRef.current, tallyRevRef.current));
     });
   }, []);
@@ -1180,7 +1264,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     if (!isShowTab()) return;
     return onReemitRequest(() => {
       if (isInactiveShowTab()) return;
-      sendWs('gamemaster-team-state', latestTeamsRef.current);
+      sendWs('gamemaster-team-state-v2', latestTeamsRef.current);
       sendWs('gamemaster-question-tally', withTallyRev(latestCorrectRef.current, tallyRevRef.current));
     });
   }, []);
@@ -1188,6 +1272,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     loadSettingsAction();
   }, [loadSettingsAction]);
+
+  // Publish the operator's team colours to CSS for every zone at once — the show,
+  // the gamemaster and the admin all mount this provider. See specs/team-colors.md.
+  useTeamColorVars(state.settings.teamColors);
 
   // Cross-tab sync of currentGame: when the show tab dispatches
   // SET_CURRENT_GAME and writes to localStorage, the storage event fires in

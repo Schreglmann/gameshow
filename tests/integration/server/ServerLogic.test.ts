@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
-import { isGitCryptBlob } from '../../../server/clean-install.js';
+import { isGitCryptBlob, DEFAULT_GLOBAL_RULES } from '../../../server/clean-install.js';
+import { normalizePointMode, pointModeRule } from '../../../src/utils/pointMode.js';
+import { resolveShowTitle } from '../../../src/utils/showTitle.js';
 
 /**
  * Server logic integration tests.
@@ -50,6 +52,7 @@ describe('Server Config Loading', () => {
       'ranking',
       'wer-kennt-mehr',
       'random-frame',
+      'city-compass',
     ];
 
     for (const file of files) {
@@ -173,22 +176,26 @@ describe('Server Image Game Question Building', () => {
 });
 
 describe('Server Settings Response Shape', () => {
+  // Mirrors the exact expression `GET /api/settings` uses to build `globalRules`
+  // (server/index.ts) — kept here as a single line so this test can't silently
+  // drift into re-copying business logic like the old hardcoded array did.
+  function resolveGlobalRules(config: { globalRules?: string[]; pointModeRules?: Partial<Record<string, string>> }, pointSystemEnabled: boolean, pointMode: ReturnType<typeof normalizePointMode>) {
+    const baseRules = config.globalRules && config.globalRules.length > 0 ? config.globalRules : DEFAULT_GLOBAL_RULES;
+    return pointSystemEnabled ? [...baseRules, pointModeRule(pointMode, config.pointModeRules)] : baseRules;
+  }
+
   it('produces correct defaults when config values are missing', () => {
     const config = {} as any;
     const response = {
       pointSystemEnabled: config.pointSystemEnabled !== false,
       teamRandomizationEnabled: config.teamRandomizationEnabled !== false,
-      globalRules: config.globalRules || [
-        'Es gibt mehrere Spiele.',
-        'Bei jedem Spiel wird am Ende entschieden welches Team das Spiel gewonnen hat.',
-        'Das erste Spiel ist 1 Punkt wert, das zweite 2 Punkte, etc.',
-        'Das Team mit den meisten Punkten gewinnt am Ende.',
-      ],
+      globalRules: resolveGlobalRules(config, true, normalizePointMode(undefined)),
     };
 
     expect(response.pointSystemEnabled).toBe(true);
     expect(response.teamRandomizationEnabled).toBe(true);
-    expect(response.globalRules).toHaveLength(4);
+    expect(response.globalRules).toHaveLength(DEFAULT_GLOBAL_RULES.length + 1);
+    expect(response.globalRules.at(-1)).toBe('Das erste Spiel ist 1 Punkt wert, das zweite 2 Punkte, etc.');
   });
 
   it('respects explicit false for pointSystemEnabled', () => {
@@ -207,12 +214,44 @@ describe('Server Settings Response Shape', () => {
     expect(response.teamRandomizationEnabled).toBe(false);
   });
 
-  it('uses provided globalRules', () => {
+  it('appends the scoring line after custom globalRules rather than replacing them', () => {
     const config = { globalRules: ['Custom Rule'] } as any;
-    const response = {
-      globalRules: config.globalRules || [],
-    };
+    const response = { globalRules: resolveGlobalRules(config, true, normalizePointMode(undefined)) };
+    expect(response.globalRules).toEqual(['Custom Rule', 'Das erste Spiel ist 1 Punkt wert, das zweite 2 Punkte, etc.']);
+  });
+
+  it('reflects the active gameshow pointMode in the appended scoring line', () => {
+    const config = { globalRules: ['Custom Rule'] } as any;
+    const flat = resolveGlobalRules(config, true, normalizePointMode('flat'));
+    const perCorrect = resolveGlobalRules(config, true, normalizePointMode('per-correct-answer'));
+    expect(flat.at(-1)).toBe('Jedes Spiel ist 1 Punkt wert.');
+    expect(perCorrect.at(-1)).toBe('Jede richtige Antwort ist 1 Punkt wert.');
+  });
+
+  it('omits the scoring line entirely when the point system is off', () => {
+    const config = { globalRules: ['Custom Rule'] } as any;
+    const response = { globalRules: resolveGlobalRules(config, false, normalizePointMode(undefined)) };
     expect(response.globalRules).toEqual(['Custom Rule']);
+  });
+
+  it('uses the operator-authored wording (config.pointModeRules) instead of the built-in default', () => {
+    const config = { globalRules: ['Custom Rule'], pointModeRules: { flat: 'Eigener Punkte-Text.' } } as any;
+    const response = { globalRules: resolveGlobalRules(config, true, normalizePointMode('flat')) };
+    expect(response.globalRules).toEqual(['Custom Rule', 'Eigener Punkte-Text.']);
+  });
+
+  // `showTitle` on the wire — the exact expression the route uses. See specs/show-title.md.
+  it('serves the active gameshow showTitle over the global one, and the default over neither', () => {
+    const config = {
+      showTitle: 'Sommerfest Quiz',
+      activeGameshow: 'winter',
+      gameshows: { winter: { showTitle: 'Weihnachtsshow' }, sommer: {} },
+    } as any;
+    expect(resolveShowTitle(config.showTitle, config.gameshows[config.activeGameshow]?.showTitle))
+      .toBe('Weihnachtsshow');
+    expect(resolveShowTitle(config.showTitle, config.gameshows.sommer?.showTitle))
+      .toBe('Sommerfest Quiz');
+    expect(resolveShowTitle(undefined, undefined)).toBe('Game Show');
   });
 });
 

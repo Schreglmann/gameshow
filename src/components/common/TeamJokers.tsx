@@ -3,6 +3,7 @@ import { useSendGamemasterCommand } from '@/hooks/useGamemasterSync';
 import { getJoker } from '@/data/jokers';
 import JokerIcon from '@/components/common/JokerIcon';
 import type { JokerTeam } from '@/types/jokers';
+import { teamJokersUsed, teamKeys, teamNumber, trailingTeams } from '@/utils/teams';
 
 interface TeamJokersProps {
   /** Which team's jokers to show (data + used state). */
@@ -35,13 +36,14 @@ export default function TeamJokers({ team, side }: TeamJokersProps) {
   const hideInLastGame = isLastGame && state.settings.jokersInLastGame !== true;
   if (enabled.length === 0 || hideInLastGame) return null;
 
-  const used = team === 'team1' ? state.teams.team1JokersUsed : state.teams.team2JokersUsed;
+  const used = teamJokersUsed(state.teams, team);
 
-  // The comeback joker (Aufholjoker) may only be spent by the strictly-trailing
-  // team; on a tie neither team may use it. Computed at read time — never stored.
-  const { team1Points, team2Points } = state.teams;
-  const trailingTeam: JokerTeam | null =
-    team1Points < team2Points ? 'team1' : team2Points < team1Points ? 'team2' : null;
+  // The comeback joker (Aufholjoker) may only be spent by a team that is
+  // strictly behind the leader; on an all-way tie nobody may use it. With two
+  // teams that is exactly the old rule. Computed at read time — never stored.
+  // See specs/comeback-joker.md.
+  const activeTeams = teamKeys(state.settings.teamCount);
+  const canUseComeback = trailingTeams(state.teams, activeTeams).includes(team);
 
   const handleClick = (jokerId: string, alreadyUsed: boolean) => {
     const nextUsed = !alreadyUsed;
@@ -60,7 +62,9 @@ export default function TeamJokers({ team, side }: TeamJokersProps) {
   // balanced — 1→1×1, 2→2×1, 3→3×1, 4→2×2, 5→3×2 (one empty), 6→3×2 full.
   const count = enabled.length;
   const cols = count <= 3 ? count : Math.ceil(count / 2);
-  const cellSide = side ?? (team === 'team1' ? 'left' : 'right');
+  // Fallback side when the caller doesn't pass one: the team's natural half of
+  // the header (teams 1..ceil(N/2) sit left of the game counter).
+  const cellSide = side ?? (teamNumber(team) <= Math.ceil(activeTeams.length / 2) ? 'left' : 'right');
 
   return (
     <div
@@ -75,7 +79,7 @@ export default function TeamJokers({ team, side }: TeamJokersProps) {
         const isUsed = used.includes(id);
         // Comeback joker is locked for the leading team / on a tie (unless
         // already used, so it can still be toggled off to disarm).
-        const locked = id === 'comeback' && !isUsed && team !== trailingTeam;
+        const locked = id === 'comeback' && !isUsed && !canUseComeback;
         const tooltip = locked
           ? `${def.name} — nur das zurückliegende Team kann ihn einsetzen`
           : `${def.name} — ${def.description}`;

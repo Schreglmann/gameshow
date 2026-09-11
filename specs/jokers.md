@@ -25,7 +25,7 @@ Give each team a set of jokers they can spend during a gameshow; admin selects w
 - [ ] Theme showcase has a joker header preview with available and used states, plus a "last game without release — fully hidden" empty-state preview.
 - [ ] Global `jokersInLastGame: boolean` flag (top-level `AppConfig`, default `false`) controls whether jokers stay available in the last game; toggled via an admin checkbox in "Globale Einstellungen".
 - [ ] Global `jokerUsageScope: 'per-gameshow' | 'per-game'` (top-level `AppConfig`, default `'per-gameshow'`) selects the joker lifecycle: `per-gameshow` = each joker single-use for the whole show (cleared only on a full session reset); `per-game` = every joker EXCEPT the Aufholjoker (`comeback`) becomes available again at the start of each game. Set via a **toggle** ("Joker pro Spiel zurücksetzen", `title` tooltip on hover) in the admin ConfigTab "Globale Einstellungen" card — checked maps to `per-game`, unchecked to `per-gameshow`. `validate-config.ts` rejects any other value.
-- [ ] In `per-game` mode, the `SET_CURRENT_GAME` reducer strips all non-`comeback` ids from both teams' `...JokersUsed` arrays when — and only when — the game **index** changes (a live gameOrder edit that changes only `totalGames` must not reset). The `comeback` used-mark and the armed `doubleNextGame` multiplier are preserved. The reset is deterministic so cross-tab (storage listener) and cross-device (WS `gamemaster-team-state`) copies converge. `per-gameshow` mode never resets on game change (behaviour unchanged).
+- [ ] In `per-game` mode, the `SET_CURRENT_GAME` reducer strips all non-`comeback` ids from both teams' `...JokersUsed` arrays when — and only when — the game **index** changes (a live gameOrder edit that changes only `totalGames` must not reset). The `comeback` used-mark and the armed `doubleNextGame` multiplier are preserved. The reset is deterministic so cross-tab (storage listener) and cross-device (WS `gamemaster-team-state-v2`) copies converge. `per-gameshow` mode never resets on game change (behaviour unchanged).
 
 ## State / data changes
 - New file [src/types/jokers.ts](../src/types/jokers.ts): `JokerDef { id; name; description }`, `JokerTeam`.
@@ -60,8 +60,17 @@ Give each team a set of jokers they can spend during a gameshow; admin selects w
 > next awarded game's positional points. See [comeback-joker.md](comeback-joker.md). All other jokers
 > remain GM-resolved with no effect logic.
 
+The gamemaster's joker card per team carries `data-team` and a `<TeamDot>`, and in
+the show the joker grid sits inside the header cell that is already marked with the
+team's colour. See [team-colors.md](team-colors.md).
+
 ## Out of scope
 - Automatic enforcement of joker effects (sit-outs, solo answers, double-answer scoring, AI integration) — except the `comeback` joker's point doubling (see above).
 - `countPerTeam` or multi-use jokers.
 - Undo history beyond the GM's toggle.
 - CRUD of catalog entries from admin — adding a joker is a code change via the `add-joker` skill.
+
+## Team count
+Jokers are per-team, so each active team (0–4, see [team-count.md](team-count.md)) gets its own set;
+`GET /api/settings` still force-empties `enabledJokers` when the show has no teams. The Aufholjoker's
+"trailing team" rule generalizes to *any team below the leader* — see [comeback-joker.md](comeback-joker.md).

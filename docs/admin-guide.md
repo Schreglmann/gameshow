@@ -28,6 +28,7 @@ This guide explains how to **set up the app** and **create your own gameshow** u
    - [Ranking](#ranking)
    - [Wer kennt mehr?](#wer-kennt-mehr)
    - [Random Frame (Zufallsbild)](#random-frame-zufallsbild)
+   - [City Compass (Städte-Kompass)](#city-compass-städte-kompass)
 5. [Uploading Media (Images & Audio)](#5-uploading-media-images--audio)
 6. [Global Settings](#6-global-settings)
 7. [Jokers](#7-jokers)
@@ -111,6 +112,66 @@ A **gameshow** is a named collection of games played in order.
 
 Each gameshow is shown as a collapsible card. On load, only the **active** gameshow is expanded; the rest are collapsed. Click a card's chevron (▶) to expand or collapse it. Activating a different gameshow while you're on the page doesn't change which cards are open.
 
+### Setting the number of teams
+
+Each gameshow card has a **Teams** dropdown next to the player roster: **0 – ohne Wertung**,
+**1 – Publikum gegen die Show**, or **2**–**4 Teams** (default 2). It decides how many teams the
+show is played with — the start screen, the header, the award screen and the gamemaster all follow it.
+
+The two lowest settings both run *without any team assignment* — there is no roster to fill in and
+no random split, the host just starts the show. They differ only in whether points exist:
+
+- **0 – ohne Wertung**: identical to switching the point system off. The show runs purely to present
+  the questions — no score anywhere, no jokers, no award screen at the end of a game.
+- **1 – Publikum gegen die Show**: points *are* awarded exactly as usual (one card on the award
+  screen, the running score in the header), but there is only one side — the audience plays against
+  the show rather than against another team. Rename that side in the admin if you'd rather it read
+  "Publikum" than "Team 1".
+
+Some games can only be scored with certain team counts (for example the Einsatzquiz in *transfer*
+mode needs exactly two). If your gameshow contains such a game, the card shows a warning and the
+affected rows get an **"Ohne Wertung"** badge. Those games still play in full — they simply don't
+award points, and the same warning appears on the show's start screen so the host knows in advance.
+
+### Giving each team its own colour
+
+Turn on **Team-Farben** in the *Konfiguration* tab, then pick a colour per team in the
+**Team-Farben** card just below it. Once it is on, every place a team appears is marked with
+that colour — the start screen's team cards, the score header, the guess and award screens,
+the gamemaster's panels and the admin's own team fields. It is always an accent: a coloured
+edge plus a small dot next to the team's name, never coloured text or a tinted background,
+so the colours cannot make anything harder to read on a projector.
+
+All four colour fields stay editable no matter how many teams the active gameshow uses, so
+you can set them up before you decide on the team count. Clear a field (the ✕ next to it) to
+let the *theme* decide that team's colour instead — Harry Potter, for instance, brings its own
+house colours. With **Team-Farben** switched off, nothing is marked and the show looks exactly
+as it did before.
+
+Colours are global: every gameshow on this installation uses the same four. Changing one
+reaches a running show within a second, without reloading anything.
+
+### Choosing how points are awarded
+
+Next to the **Teams** dropdown sits a **Punkte** dropdown deciding how each game's result becomes
+points. It applies to the whole gameshow:
+
+- **Nach Spielreihenfolge** (default): the classic rule — the first game is worth 1 point, the second
+  2, and so on. Later games matter more, so the show stays open until the end.
+- **Jedes Spiel 1 Punkt**: every game is worth exactly one point, whatever its position. Use it when
+  all rounds should count equally.
+- **1 Punkt pro richtiger Antwort**: each team collects one point per correct answer. The count comes
+  from the **+ / −** buttons the gamemaster presses during the game, so it only works if someone is
+  keeping score there. At the end of a game the award screen no longer asks who won — it lists each
+  team's correct answers and the points that follow from them, and the host just confirms. Correct a
+  miscount on the gamemaster before confirming; the screen follows along live.
+
+Four game types bring their own scoring and ignore the last setting: the **Einsatzquiz** and the
+**Finalrunde** (which pay out the teams' own stakes), the **Quizjagd** (3/5/7 per question) and
+**Wer kennt mehr** in its counting modes. If your gameshow contains one of these while
+*1 Punkt pro richtiger Antwort* is selected, the card shows a note and the affected rows get an
+**"Eigene Wertung"** badge. They still play and still score — just by their own rule.
+
 ### Step 2 — Add a new gameshow
 
 Click **"+ Neue Gameshow"**. A new card appears, already expanded for editing.
@@ -119,6 +180,8 @@ Click **"+ Neue Gameshow"**. A new card appears, already expanded for editing.
 > *Add screenshot: `docs/screenshots/admin-config-new-gameshow.png` — a new gameshow card being edited*
 
 - Enter a **name** for your gameshow (e.g. *"Weihnachtsparty 2024"*)
+- Optionally fill in **Titel** to give this gameshow its own start-screen heading (empty = the global
+  title from the Config tab — see [Global Settings](#6-global-settings))
 - Click **"Set as active"** to make it the one that runs when players open the app
 
 ### Step 3 — Add games to the gameshow
@@ -132,7 +195,10 @@ In the **Game Order** section of your gameshow card:
 ![Game Order](./screenshots/admin-config-game-order.png)
 > *Add screenshot: `docs/screenshots/admin-config-game-order.png` — the game order list with add/remove/reorder controls*
 
-Changes save automatically.
+Changes save automatically, and the save survives leaving the page: switch tabs or close the
+editor right after an edit and it is still written. The usual **"Gespeichert"** box in the
+bottom-right corner reports it, from whichever tab you are on. If the server is unreachable that
+box counts down and keeps retrying on its own — or press **Jetzt versuchen**.
 
 ---
 
@@ -205,6 +271,10 @@ Teams guess a number. The closest team wins.
 - **Question text** — e.g. *"How tall is the Eiffel Tower in meters?"*
 - **Answer** — the correct number (e.g. `330`)
 - **Answer Image** *(optional)*
+
+**Punktevergabe** (game-wide dropdown next to "Fragen zufällig anordnen"):
+- **Automatisch** *(default)* — the show counts who was closer per question (equidistant guesses count for both teams; the **Beispiel** question never counts). The award screen then names the winner with both teams' counts, and one press awards the points. On the gamemaster you no longer count anything yourself: the score boxes and **Wertung pro Frage** fill in automatically as you reveal each question, and their `+`/`−` buttons are gone, so it is never unclear whether you or the show awarded a question. Starting the game again from its title screen resets that count (the teams' points stay — undo those under **Letzte Wertungen** if you replay a game you already scored). To fix a mistyped guess, submit that question again; after the points are booked, use the undo under **Letzte Wertungen**.
+- **Manuell** — you pick the winning team on the award screen yourself, as in every other game.
 
 ---
 
@@ -393,6 +463,30 @@ See [GAME_TYPES.md](../GAME_TYPES.md) for the full field reference and [specs/ga
 
 ---
 
+### City Compass (Städte-Kompass)
+
+A compass rose with a `?` in the middle and named cities around it, each at the true bearing it has from the hidden city. Teams name the city in the middle.
+
+**Each question has:**
+- **Gesuchte Stadt (Zentrum)** — search for the city teams have to name. Picking it fills in its coordinates
+- **Nachbarstädte** — the cities drawn around it, 3 to 8 of them. Use ↑/↓ to reorder; the order is the reveal order. Each row shows how far away and in which direction the city lies. A city further than 2000 km is marked in red
+- In every city field you can type a few letters and then use ↑/↓ and Enter — with only one match, Enter takes it straight away. Escape closes the list
+- **Fragetext** *(optional)* — a custom prompt (defaults to *"Welche Stadt liegt im Zentrum?"*)
+- **Zusatzinfo** *(optional)* — a subtitle above the question. Do not put anything in it that gives the answer away
+- **Bild zur Auflösung** *(optional)* — shown with the answer on reveal
+
+**The Auto button.** Pick the center city, then press **Auto** and the neighbor list fills itself: mostly capitals and large cities, plus one regional town, spread around the compass and across near and far distances. **Neu würfeln** gives a genuinely different set — city size counts only weakly, so the same handful of big capitals does not come back every time. The dropdowns next to it set how many cities to use (3–8) and how hard the question should be — *Leicht* leans on nearer, better-known cities, *Schwer* on distant ones and drops the regional town. You can always add or remove cities by hand afterwards, and the preview below shows exactly what the audience will see.
+
+**Two settings apply to the whole instance:**
+- **Entfernungen anzeigen** — off by default, which leaves the angles as the only clue. Switch it on to print the km next to every city, which makes the question noticeably easier
+- **Aufdecken** — *Alle auf einmal* (the default) shows the full constellation; *Schrittweise* starts with two cities and adds one on each host advance
+
+Editing a question while the show is running is safe: swap a city and the rose redraws on the stage screen within a second, without jumping to a different question.
+
+See [GAME_TYPES.md](../GAME_TYPES.md) for the full field reference and [specs/games/city-compass.md](../specs/games/city-compass.md) for behaviour details.
+
+---
+
 ### Multi-Instance Games
 
 Any game type can have **multiple instances** — separate question sets that share one game file. This is useful when you want to reuse the same game format across different gameshows.
@@ -479,8 +573,19 @@ Go to the **Config tab** and scroll to the top.
 
 | Setting | What it does |
 |---------|-------------|
+| **Titel der Show** | The heading on the start screen (also the gamemaster's label and the browser tab title). Leave it empty for the built-in *"Game Show"*. A single gameshow can override it — see below. |
 | **Point system enabled** | Show/hide team scores in the header and the points-awarding screen |
 | **Team randomization enabled** | Show/hide the home screen where players enter their names |
+
+### Naming the show
+
+The **Titel der Show** field replaces the *"Game Show"* heading players see on the start screen —
+enter *"Sommerfest Quiz 2026"* and that is what goes on the projector.
+
+If your gameshows each need their own title, leave the global field as the fallback and fill in the
+**Titel** field on the gameshow card in the **Gameshows tab** instead: it applies whenever that
+gameshow is the active one, and its placeholder shows the global title it would otherwise inherit.
+Clearing it goes back to inheriting. The change reaches a running show immediately — no reload.
 
 ### Global rules
 

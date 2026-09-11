@@ -11,6 +11,10 @@ export interface TimelineMarker {
 }
 
 interface Props {
+  /** DOM-ready URL — already run through `toMediaSrc()` / `assetUrl()`, never a raw
+   * config path. It is both fetched for the waveform and used as the audio-pool key,
+   * so a raw path here means the sibling MiniAudioPlayer (which encodes) lands in a
+   * different pool entry and the two players drift apart. */
   src: string;
   start?: number;
   end?: number;

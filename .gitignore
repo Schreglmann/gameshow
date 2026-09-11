@@ -71,3 +71,7 @@ scheduled_tasks.lock
 .spellcheck-cache.json.tmp
 
 .gitignored-notes
+
+# Persistent Chromium profile for `npm run bandle-sync` — holds a logged-in
+# bandle.app session (auth tokens), never committed
+.bandle-browser-data

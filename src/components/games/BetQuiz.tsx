@@ -9,10 +9,12 @@ import { fadeAudio } from '@/utils/fadeAudio';
 import { useMusicPlayer } from '@/context/MusicContext';
 import { useGameContext } from '@/context/GameContext';
 import { teamName } from '@/utils/teamNames';
+import { ALL_TEAM_KEYS, teamKeys, teamPoints, isTeamKey, type TeamKey } from '@/utils/teams';
 import { teamDisplayOrder } from '@/utils/teamOrder';
 import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
 import BaseGameWrapper from './BaseGameWrapper';
 import QuizQuestionView from './QuizQuestionView';
+import TeamDot from '@/components/common/TeamDot';
 
 export default function BetQuiz(props: GameComponentProps) {
   const config = props.config as BetQuizConfig;
@@ -68,7 +70,6 @@ export default function BetQuiz(props: GameComponentProps) {
       rules={rules}
       totalQuestions={totalQuestions}
       pointSystemEnabled={props.pointSystemEnabled}
-      pointValue={props.currentIndex + 1}
       currentIndex={props.currentIndex}
       requiresPoints
       skipPointsScreen
@@ -122,7 +123,7 @@ interface InnerProps {
   questionAudioRef: React.RefObject<HTMLAudioElement | null>;
   skipAudioCleanupRef: React.RefObject<boolean>;
   onGameComplete: () => void;
-  onAwardPoints: (team: 'team1' | 'team2', points: number) => void;
+  onAwardPoints: (team: TeamKey, points: number) => void;
   setNavHandler: (fn: (() => void) | null) => void;
   setBackNavHandler: (fn: (() => boolean) | null) => void;
   setGamemasterData: (data: GamemasterAnswerData | null) => void;
@@ -162,7 +163,7 @@ function BetQuizInner({
   // review (see specs/game-back-review.md).
   const [qIdx, setQIdx, qKey] = useLiveQuestionIndex(order, resumeAtEnd);
   const [phase, setPhase] = useState<Phase>(resumeAtEnd ? 'answer' : 'category');
-  const [bettingTeam, setBettingTeam] = useState<'team1' | 'team2' | null>(null);
+  const [bettingTeam, setBettingTeam] = useState<TeamKey | null>(null);
   const [bet, setBet] = useState('');
   const [result, setResult] = useState<'correct' | 'incorrect' | null>(null);
   const [audioCurrentTime, setAudioCurrentTime] = useState(0);
@@ -174,23 +175,28 @@ function BetQuizInner({
   const questionLabel = isExample ? 'Beispiel Frage' : `Frage ${qIdx} von ${questions.length - 1}`;
   const showAnswer = phase === 'answer';
 
-  const teamLabels: Record<'team1' | 'team2', string> = useMemo(
-    () => ({ team1: teamName(state.teams, 1), team2: teamName(state.teams, 2) }),
-    [state.teams.team1Name, state.teams.team2Name]
-  );
-  const team1Points = state.teams.team1Points;
-  const team2Points = state.teams.team2Points;
-  const team1Members = state.teams.team1;
-  const team2Members = state.teams.team2;
-  const currentTeamPoints = bettingTeam === 'team1' ? team1Points : bettingTeam === 'team2' ? team2Points : 0;
+  // The betting team is a pick from however many teams are in play. `transfer`
+  // mode is the exception — its zero-sum move needs exactly one opponent, so it
+  // is declared 2-teams-only and never reaches this component with 3+.
+  // See specs/team-count.md.
+  const activeTeams = useMemo(() => teamKeys(state.settings.teamCount), [state.settings.teamCount]);
+  const teamLabels = useMemo(() => {
+    const labels = {} as Record<TeamKey, string>;
+    for (const key of ALL_TEAM_KEYS) labels[key] = teamName(state.teams, key);
+    return labels;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.teams.team1Name, state.teams.team2Name, state.teams.team3Name, state.teams.team4Name]);
+  const currentTeamPoints = bettingTeam ? teamPoints(state.teams, bettingTeam) : 0;
+  // Serialized so the controls effect depends on the point VALUES, not on the
+  // whole teams object (which changes identity on every unrelated mutation).
+  const pointsKey = ALL_TEAM_KEYS.map(k => teamPoints(state.teams, k)).join(',');
+  const membersKey = ALL_TEAM_KEYS.map(k => (state.teams[k] ?? []).join(' ')).join('|');
 
   // Keep latest values readable from the command handler without re-registering on every change.
   const bettingTeamRef = useRef(bettingTeam);
   bettingTeamRef.current = bettingTeam;
-  const team1PointsRef = useRef(team1Points);
-  team1PointsRef.current = team1Points;
-  const team2PointsRef = useRef(team2Points);
-  team2PointsRef.current = team2Points;
+  const teamsRef = useRef(state.teams);
+  teamsRef.current = state.teams;
 
   const betNum = bet === '' ? NaN : parseInt(bet, 10);
   const betValid =
@@ -248,7 +254,7 @@ function BetQuizInner({
   //
   // Keyed by qKey (identity), not qIdx (position), per AGENTS.md — a live
   // question edit must not re-point these records at a different question.
-  type Round = { bettingTeam: 'team1' | 'team2' | null; bet: string; result: 'correct' | 'incorrect' | null };
+  type Round = { bettingTeam: TeamKey | null; bet: string; result: 'correct' | 'incorrect' | null };
   const roundsRef = useRef<Map<number, Round>>(new Map());
 
   const advanceToNext = useCallback((played?: Round) => {
@@ -275,7 +281,9 @@ function BetQuizInner({
     // (correct → opponent −bet, wrong → opponent +bet). Standard mode leaves the
     // opponent untouched.
     const isTransfer = scoringMode === 'transfer';
-    const otherTeam = bettingTeam === 'team1' ? 'team2' : 'team1';
+    // Zero-sum only exists with exactly one opponent; the type's declared
+    // supportedTeamCounts keeps transfer to 2 teams, so this always resolves.
+    const otherTeam = activeTeams.find(t => t !== bettingTeam) ?? bettingTeam;
     if (!isExample) {
       if (result !== null) {
         // Reverse the prior award before re-judging (mirrors FinalQuiz's judgeTeam).
@@ -292,7 +300,7 @@ function BetQuizInner({
     // round explicitly: `advanceToNext` would otherwise read the pre-setState
     // `result` and record a stale verdict.
     advanceToNext({ bettingTeam, bet, result: nextResult });
-  }, [bettingTeam, bet, betNum, result, isExample, scoringMode, onAwardPoints, advanceToNext]);
+  }, [bettingTeam, bet, betNum, result, isExample, scoringMode, onAwardPoints, advanceToNext, activeTeams]);
 
   const submitBet = useCallback(() => {
     if (!betValid) return;
@@ -395,10 +403,13 @@ function BetQuizInner({
       setNavState({});
     }
     if (phase === 'category' && pointSystemEnabled) {
-      const team1Sub = team1Members.length > 0 ? team1Members.join(', ') : undefined;
-      const team2Sub = team2Members.length > 0 ? team2Members.join(', ') : undefined;
+
       // GM control panel → mirror the frontend order (GM faces the crowd).
-      const teamSubs = { team1: team1Sub, team2: team2Sub };
+      const teamSubs = {} as Record<TeamKey, string | undefined>;
+      for (const key of ALL_TEAM_KEYS) {
+        const members = state.teams[key] ?? [];
+        teamSubs[key] = members.length > 0 ? members.join(', ') : undefined;
+      }
       controls.push({
         type: 'button-group',
         id: 'team-selection',
@@ -452,12 +463,15 @@ function BetQuizInner({
       }
     }
     setGamemasterControls(controls);
-  }, [phase, pointSystemEnabled, bettingTeam, bet, betValid, betCapExceeded, betNum, result, qIdx, questions.length, isExample, q?.questionAudio, audioDuration, audioPlaying, team1Members, team2Members, team1Points, team2Points, currentTeamPoints, teamLabels, state.teams.orderSwapped, state.settings.teamMirrorEnabled, setGamemasterControls, setNavState]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, pointSystemEnabled, bettingTeam, bet, betValid, betCapExceeded, betNum, result, qIdx, questions.length, isExample, q?.questionAudio, audioDuration, audioPlaying, membersKey, pointsKey, currentTeamPoints, teamLabels, state.teams.orderSwapped, state.settings.teamMirrorEnabled, state.settings.teamCount, setGamemasterControls, setNavState]);
 
   // Gamemaster command routing
   const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
-    if (cmd.controlId === 'select-team1') setBettingTeam('team1');
-    else if (cmd.controlId === 'select-team2') setBettingTeam('team2');
+    if (cmd.controlId.startsWith('select-team')) {
+      const team = cmd.controlId.slice('select-'.length);
+      if (isTeamKey(team)) setBettingTeam(team);
+    }
     else if (cmd.controlId === 'betting-submit:change' && cmd.value && typeof cmd.value === 'object') {
       const vals = cmd.value as Record<string, string>;
       const next = Object.values(vals)[0] ?? '';
@@ -469,7 +483,7 @@ function BetQuizInner({
       const next = Object.values(vals)[0] ?? '';
       const n = next === '' ? NaN : parseInt(next, 10);
       const bt = bettingTeamRef.current;
-      const pts = bt === 'team1' ? team1PointsRef.current : bt === 'team2' ? team2PointsRef.current : 0;
+      const pts = bt ? teamPoints(teamsRef.current, bt) : 0;
       setBet(next);
       if (bt !== null && Number.isFinite(n) && n >= 0 && n <= pts) {
         setPhase('question');
@@ -619,6 +633,14 @@ function BetQuizInner({
 
   if (!q) return null;
 
+  // Crowd-facing surface → the frontend team order.
+  const showOrder = teamDisplayOrder(
+    state.teams.orderSwapped,
+    false,
+    state.settings.teamMirrorEnabled,
+    state.settings.teamCount,
+  );
+
   if (phase === 'category') {
     return (
       <>
@@ -628,11 +650,11 @@ function BetQuizInner({
             (keyboard / gamemaster) reveals the question. */}
         {pointSystemEnabled && (
           <div className="bet-quiz-host-panel">
-            <div className="bet-quiz-host-row">
-              {teamDisplayOrder(state.teams.orderSwapped, false, state.settings.teamMirrorEnabled).map(teamKey => {
-                const members = teamKey === 'team1' ? team1Members : team2Members;
+            <div className="bet-quiz-host-row" data-team-count={showOrder.length}>
+              {showOrder.map(teamKey => {
+                const members = state.teams[teamKey] ?? [];
                 return (
-                  <div className="bet-quiz-team-choice" key={teamKey}>
+                  <div className="bet-quiz-team-choice" data-team={teamKey} key={teamKey}>
                     {members.length > 0 && (
                       <div className="bet-quiz-team-members">{members.join(', ')}</div>
                     )}
@@ -641,7 +663,7 @@ function BetQuizInner({
                       className={`quiz-button${bettingTeam === teamKey ? ' active' : ''}`}
                       onClick={() => setBettingTeam(teamKey)}
                     >
-                      {teamLabels[teamKey]}
+                      <TeamDot team={teamKey} />{teamLabels[teamKey]}
                     </button>
                   </div>
                 );
@@ -679,11 +701,7 @@ function BetQuizInner({
 
   const betNumber = Number.isFinite(betNum) ? betNum : 0;
   const bannerTeamLabel = bettingTeam ? teamLabels[bettingTeam] : '';
-  const bannerMembers = bettingTeam === 'team1'
-    ? team1Members.join(', ')
-    : bettingTeam === 'team2'
-      ? team2Members.join(', ')
-      : '';
+  const bannerMembers = bettingTeam ? (state.teams[bettingTeam] ?? []).join(', ') : '';
 
   return (
     <>

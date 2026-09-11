@@ -3,7 +3,7 @@ import { openShowHomeForm, isolateShowWsState } from '../_helpers/setup';
 
 // Spec: specs/team-management.md
 test.describe('Team management', () => {
-  // The shared backend caches gamemaster-team-state as last-value and re-emits
+  // The shared backend caches gamemaster-team-state-v2 as last-value and re-emits
   // it to late-joining clients, which would unmount the "Teams zuweisen" form
   // mid-interaction. Isolate the page's WS so only this test drives team state
   // (see isolateShowWsState).
