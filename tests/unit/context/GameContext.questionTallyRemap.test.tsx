@@ -33,6 +33,8 @@ async function setup(initial: CorrectAnswersMap) {
   return {
     remap: (gameIndex: number, moved: (number | null)[]) =>
       act(() => { ctx!.dispatch({ type: 'REMAP_QUESTION_TALLY', payload: { gameIndex, moved } }); }),
+    resetGame: (gameIndex: number) =>
+      act(() => { ctx!.dispatch({ type: 'RESET_GAME_TALLY', payload: { gameIndex } }); }),
     tally: () => ctx!.state.correctAnswersByGame,
     stored: () => JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'),
   };
@@ -104,5 +106,33 @@ describe('REMAP_QUESTION_TALLY', () => {
     const { remap, tally } = await setup({ '0': { '9': { team1: 1, team2: 0 } } });
     remap(0, [0, 1]);
     expect(tally()['0']).toEqual({ '9': { team1: 1, team2: 0 } });
+  });
+});
+
+describe('RESET_GAME_TALLY', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    __clearWsCacheForTests();
+  });
+
+  it('drops only the named game and persists the rest', async () => {
+    const { resetGame, tally, stored } = await setup({
+      '0': { '1': { team1: 1, team2: 0 } },
+      '3': { '1': { team1: 0, team2: 1 }, '2': { team1: 1, team2: 1 } },
+    });
+    resetGame(3);
+
+    expect(tally()['3']).toBeUndefined();
+    expect(tally()['0']).toEqual({ '1': { team1: 1, team2: 0 } });
+    expect(stored()['3']).toBeUndefined();
+    expect(stored()['0']).toEqual({ '1': { team1: 1, team2: 0 } });
+  });
+
+  it('is a no-op for a game that never recorded anything', async () => {
+    const { resetGame, tally } = await setup({ '0': { '1': { team1: 1, team2: 0 } } });
+    const before = tally();
+    resetGame(7);
+    // Same object identity — nothing to broadcast either.
+    expect(tally()).toBe(before);
   });
 });

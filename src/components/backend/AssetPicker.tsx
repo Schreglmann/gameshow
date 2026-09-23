@@ -645,7 +645,7 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
                       title={isDisabled ? `${file} — Quelle der Zusammenführung` : file}
                     >
                       <div className="picker-thumb-wrap">
-                        <img src={toMediaSrc(coverUrl(url) ?? url)} alt={file} className="picker-thumbnail" />
+                        <img src={coverUrl(url)} alt={file} className="picker-thumbnail" />
                         {folderPath && <span className="picker-thumb-folder">{folderPath}</span>}
                       </div>
                       <span className="picker-file-name">{fileName}</span>
@@ -763,6 +763,12 @@ interface FieldProps {
    * for sibling audio fields that point at the same file but should play
    * independently (e.g. question/answer audio). */
   scope?: string;
+  /** Trim of this audio field (seconds), forwarded to the inner MiniAudioPlayer so
+   * the preview plays the same clip the show does. Pass the values the sibling
+   * AudioTrimTimeline gets — the preview honours them while it is collapsed too. */
+  audioStart?: number;
+  audioEnd?: number;
+  audioLoop?: boolean;
   /**
    * Forwarded to <PickerModal> as the low-resolution filter render box for the
    * online image-search mode. Only relevant when `category === 'images'`.
@@ -806,7 +812,7 @@ function VideoInfo({ src }: { src: string }) {
   );
 }
 
-export function AssetField({ label, value, category, onChange, readOnly = false, extras, scope, renderBox }: FieldProps) {
+export function AssetField({ label, value, category, onChange, readOnly = false, extras, scope, audioStart, audioEnd, audioLoop, renderBox }: FieldProps) {
   const [open, setOpen] = useState(false);
   const [preview, setPreview] = useState(false);
   const isImage = isImageCategory(category);
@@ -814,9 +820,9 @@ export function AssetField({ label, value, category, onChange, readOnly = false,
   const coverUrl = useCoverUrl();
   // Encoded ONLY at the DOM boundary — `value` itself stays the raw logical
   // path, because rename/move rewrites config refs by matching raw disk paths.
-  // Without this, filenames containing '#', '?' or '&' silently failed to load
-  // and the picker showed a broken preview for a file that is perfectly fine.
-  const displaySrc = value ? toMediaSrc(coverUrl(value) ?? value) : value;
+  // `coverUrl` already runs `toMediaSrc` internally; encoding a second time
+  // turns `%20` into `%2520` and breaks every path containing spaces.
+  const displaySrc = coverUrl(value);
 
   useEffect(() => {
     if (!preview) return;
@@ -854,7 +860,14 @@ export function AssetField({ label, value, category, onChange, readOnly = false,
             {isImage ? (
               <img src={displaySrc} alt="" className="asset-field-thumb" />
             ) : isVideo ? null : (
-              <MiniAudioPlayer src={toMediaSrc(value) ?? value} className="asset-field-audio" scope={scope} />
+              <MiniAudioPlayer
+                src={toMediaSrc(value) ?? value}
+                className="asset-field-audio"
+                scope={scope}
+                start={audioStart}
+                end={audioEnd}
+                loop={audioLoop}
+              />
             )}
             <div className="asset-field-info">
               <span className="asset-field-name">{value.split('/').pop()}</span>

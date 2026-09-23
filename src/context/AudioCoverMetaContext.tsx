@@ -93,7 +93,9 @@ export function AudioCoverMetaProvider({ children }: { children: ReactNode }) {
 /** Returns a coverUrl helper. Safe to call outside the provider — falls back to identity. */
 export function useCoverUrl(): (src: string | undefined) => string | undefined {
   const ctx = useContext(AudioCoverMetaContext);
-  return ctx ? ctx.coverUrl : (src => src);
+  // The provider-less fallback must still encode: callers use the returned
+  // src directly as a DOM `src`, so it has to be URL-safe either way.
+  return ctx ? ctx.coverUrl : toMediaSrc;
 }
 
 export function useAudioCoverMeta(): AudioCoverMetaContextValue | null {

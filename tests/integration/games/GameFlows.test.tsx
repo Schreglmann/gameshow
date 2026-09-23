@@ -30,6 +30,20 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
+/**
+ * First keypress after mount: the keydown listener is attached in a passive
+ * effect that may still be pending when the title commits (the game data
+ * resolves outside act) — retry the press until the landing screen is left.
+ */
+async function leaveLanding() {
+  await waitFor(() => {
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
+    });
+    expect(document.querySelector('#landingScreen')).toBeNull();
+  });
+}
+
 function renderGameScreen(initialEntries = ['/game?index=0']) {
   return render(
     <MemoryRouter initialEntries={initialEntries}>
@@ -75,9 +89,7 @@ describe('SimpleQuiz game flow', () => {
     });
 
     // Landing -> Rules
-    act(() => {
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
-    });
+    await leaveLanding();
     expect(screen.getByText('Regeln:')).toBeInTheDocument();
     expect(screen.getByText('Answer questions')).toBeInTheDocument();
 
@@ -154,9 +166,7 @@ describe('GuessingGame game flow', () => {
     });
 
     // Landing -> Rules -> Game
-    act(() => {
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
-    });
+    await leaveLanding();
     act(() => {
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
     });
@@ -212,9 +222,7 @@ describe('FactOrFake game flow', () => {
     });
 
     // Landing -> Rules -> Game
-    act(() => {
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
-    });
+    await leaveLanding();
     act(() => {
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
     });

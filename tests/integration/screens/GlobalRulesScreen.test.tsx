@@ -6,6 +6,7 @@ import { GameProvider } from '@/context/GameContext';
 import GlobalRulesScreen from '@/components/screens/GlobalRulesScreen';
 import { GENERIC_JOKER_RULES } from '@/data/jokers';
 import { __emitChannelForTests } from '@/services/useBackendSocket';
+import { pointModeRule } from '@/utils/pointMode';
 import type { SettingsResponse } from '@/types/config';
 
 // Mutable settings the mocked fetchSettings resolves to. Reset per test.
@@ -55,6 +56,18 @@ describe('GlobalRulesScreen', () => {
       expect(screen.getByText('Rule Beta')).toBeInTheDocument();
       expect(screen.getByText('Rule Gamma')).toBeInTheDocument();
     });
+  });
+
+  it('renders the scoring line served for the active gameshow\'s pointMode, not a stale positional one', async () => {
+    // GET /api/settings appends the pointMode-derived scoring line server-side
+    // (see specs/point-system.md); this settings fixture stands in for a
+    // gameshow configured with pointMode: 'flat'.
+    mockSettings.globalRules = ['Rule Alpha', pointModeRule('flat')];
+    renderGlobalRulesScreen();
+    await waitFor(() => {
+      expect(screen.getByText(pointModeRule('flat'))).toBeInTheDocument();
+    });
+    expect(screen.queryByText(pointModeRule('positional'))).not.toBeInTheDocument();
   });
 
   it('navigates to /game?index=0 on click', async () => {

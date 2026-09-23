@@ -67,9 +67,10 @@ All question forms support Add, Delete, Move Up, Move Down.
 ### Config
 Global app configuration only — gameshow management lives in its own **Gameshows** tab (see below).
 - Themes: Gameshow theme + Admin theme selectors (gradient previews)
-- Global settings: `pointSystemEnabled`, `teamRandomizationEnabled`, `jokersInLastGame`, `jokerUsageScope` ("Joker pro Spiel zurücksetzen" toggle: on = `per-game`, off = `per-gameshow`) — all rendered as toggles
+- Global settings: `pointSystemEnabled`, `teamRandomizationEnabled`, `teamMirrorEnabled`, `teamColorsEnabled` ("Team-Farben"), `jokersInLastGame`, `jokerUsageScope` ("Joker pro Spiel zurücksetzen" toggle: on = `per-game`, off = `per-gameshow`) — all rendered as toggles
+- **Team-Farben** card: four `ColorPickerField`s (swatch opening the native picker + a validated `#rrggbb` text field + a ✕ that clears to `''`), one per team, prefilled with the default palette. All four stay editable whatever the active gameshow's team count is — picking in advance is the point — with an italic hint on the ones above it. An invalid hex is rejected with a German message and never reaches `config.json`. See [team-colors.md](team-colors.md)
 - Global rules: add/remove/reorder string list
-- Save writes `config.json` atomically via `PUT /api/backend/config` (800 ms debounced autosave)
+- Save writes `config.json` atomically via `PUT /api/backend/config`, debounced 800 ms through the module-scope save queue — it survives the pane unmounting on a tab switch and retries a failed write with backoff. See [admin-save-queue.md](admin-save-queue.md)
 
 ### Gameshows
 Dedicated tab (sidebar position: between **Config** and **Spiele**) for creating and editing gameshows. Reads/writes the same `config.json` as the Config tab via the shared `useEditableConfig` hook. See [admin-gameshows-tab.md](admin-gameshows-tab.md).
@@ -83,7 +84,7 @@ Dedicated tab (sidebar position: between **Config** and **Spiele**) for creating
   - "Verfügbare Joker" checklist — one checkbox per catalog entry from [src/data/jokers.ts](../src/data/jokers.ts); toggling updates `enabledJokers` and is persisted via the same autosave flow. See [jokers.md](jokers.md).
 - **Collapse behavior:** on page load only the **active** gameshow is expanded; all others collapsed. Activating a different gameshow while on the page does **not** change which cards are expanded (the expand-active rule runs once on mount). Creating a gameshow ("+ Neue Gameshow") opens it expanded.
 - Add new gameshow button
-- Save writes `config.json` atomically via `PUT /api/backend/config`
+- Save writes `config.json` atomically via `PUT /api/backend/config`, through the same save queue as the Config tab — see [admin-save-queue.md](admin-save-queue.md)
 
 ### Assets (DAM)
 Category tabs: **Bilder** (`/images/`), **Audio** (`/audio/`), **Hintergrundmusik** (`/background-music/`), **Videos** (`/videos/`)
@@ -234,7 +235,7 @@ Each category tab exposes its own `.trash/` directory as a pseudo-folder named *
 
 #### Progress overlays
 
-The bottom-center overlay shows live progress for asset uploads, YouTube single/playlist downloads, and audio-cover fetches. Each panel has a `▬` minimize button in its header that collapses it into a thin clickable bar showing `{done} / {total}` (or `{percent}%` for single-file work) with a progress fill that mirrors the full panel's phase colour; clicking the bar expands it again. Minimize/maximize state is independent per panel — any combination can be expanded or minimized at the same time, and only user clicks ever change that state (new jobs do not displace the state of existing panels). Minimize state is persisted to `localStorage` under `admin-minimized-progress-keys` and keyed by the stable server-assigned job id, so reloading the admin page keeps in-flight YouTube/audio-cover jobs minimized once the WebSocket reconnects them. The pending-cover-confirm dialog cannot be minimized because it requires explicit user input.
+The bottom-center overlay shows live progress for asset uploads, YouTube single/playlist downloads, and audio-cover fetches. Every job — whatever its kind — is one compact **row** inside a single shared panel, so concurrent downloads no longer stack one full-height box each. A row shows its label (`Upload: {file}`, `YouTube: {title}`, `YouTube Playlist: {title}`, `Audio Covers`), its status (`{percent} %`, `{done} / {total}`, `✓`, `✕`) and a thin bar in the job's phase colour, plus a `✕` that cancels a running job or dismisses a finished one. Clicking the row toggles a detail block underneath it: the phase text, upload speed/ETA, the per-track list of a playlist or cover fetch, and the error message. A job that starts while it is the only one opens expanded; jobs started alongside others stay compact, and a new job never changes an existing row's state. A failed job always opens its row so the error is never hidden behind a click. With two or more rows the panel gains a header — `Aktivität · {n}`, a summary (`{n} aktiv · {percent} %`, `✓ {n} fertig`, `✕ {n} fehlgeschlagen`) and a `▬` that collapses the whole panel into one thin clickable bar; with a single row the `▬` sits in that row. The row list scrolls at ~6 rows and the whole stack is capped at `100vh - 64px`, so the overlay can never outgrow the viewport. Which rows are open is persisted to `localStorage` under `admin-expanded-progress-rows`, keyed by the stable server-assigned job id so a reload restores them once the WebSocket reconnects the jobs; the collapsed-panel flag lives under `admin-progress-group-collapsed`. The pending-cover-confirm dialog stays a separate panel below the group because it requires explicit user input.
 
 #### Static-asset HTTP cache
 

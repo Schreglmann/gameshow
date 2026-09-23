@@ -152,16 +152,20 @@ describe('BaseGameWrapper', () => {
     await user.click(screen.getByTestId('complete-game'));
     expect(screen.getByText('Punkte vergeben')).toBeInTheDocument();
 
-    type Ctrl = { id: string; buttons?: { id: string }[] };
+    type Ctrl = { id: string; buttons?: { id: string }[]; disabled?: boolean };
     type Payload = { controls?: Ctrl[] } | null;
-    const awardGroups = sendWsSpy.mock.calls
+    const payloads = sendWsSpy.mock.calls
       .filter(([ch]) => ch === 'gamemaster-controls')
-      .map(([, data]) => (data as Payload)?.controls?.find(c => c.id === 'award'))
-      .filter((c): c is Ctrl => Boolean(c));
+      .map(([, data]) => (data as Payload)?.controls)
+      .filter((c): c is Ctrl[] => Boolean(c));
+    const awardGroups = payloads.map(cs => cs.find(c => c.id === 'award-selection')).filter((c): c is Ctrl => Boolean(c));
     expect(awardGroups.length).toBeGreaterThan(0);
     // GM faces the crowd → mirror of the frontend order: team 2 first with no swap.
     expect(awardGroups[awardGroups.length - 1]!.buttons!.map(b => b.id))
-      .toEqual(['award-team2', 'award-team1', 'award-draw']);
+      .toEqual(['award-toggle-team2', 'award-toggle-team1']);
+    // Nothing selected yet, so the confirm button rides along disabled.
+    const confirms = payloads.map(cs => cs.find(c => c.id === 'award-confirm')).filter((c): c is Ctrl => Boolean(c));
+    expect(confirms[confirms.length - 1]!.disabled).toBe(true);
     sendWsSpy.mockRestore();
   });
 

@@ -1,8 +1,9 @@
-import { useMemo, useCallback, useEffect } from 'react';
+import { useMemo, useEffect } from 'react';
 import type { SimpleQuizQuestion } from '@/types/config';
 import { useCoverUrl } from '@/context/AudioCoverMetaContext';
 import RetryImage from '@/components/common/RetryImage';
 import { useFullscreen, useRegisterFullscreenMedia } from '@/context/FullscreenContext';
+import { scrollToCardBottom } from '@/utils/scrollToCardAnchor';
 
 interface Props {
   question: SimpleQuizQuestion;
@@ -55,15 +56,11 @@ export default function QuizQuestionView({
     return emojiRegex.test(stripped);
   }, [q.question]);
 
-  const scrollToBottom = useCallback(() => {
-    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-  }, []);
-
   useEffect(() => {
     if (!showAnswer) return;
-    const id = setTimeout(scrollToBottom, 100);
+    const id = setTimeout(scrollToCardBottom, 100);
     return () => clearTimeout(id);
-  }, [showAnswer, scrollToBottom]);
+  }, [showAnswer]);
 
   return (
     <>
@@ -172,7 +169,7 @@ export default function QuizQuestionView({
                   alt=""
                   className="quiz-image"
                   onClick={() => openLightbox({ type: 'image', src: q.answerImage! })}
-                  onLoad={scrollToBottom}
+                  onLoad={scrollToCardBottom}
                   onFinalFailure={onAssetFailure}
                 />
               )}
@@ -185,7 +182,7 @@ export default function QuizQuestionView({
               alt=""
               className="quiz-image"
               onClick={() => openLightbox({ type: 'image', src: q.answerImage! })}
-              onLoad={scrollToBottom}
+              onLoad={scrollToCardBottom}
               onFinalFailure={onAssetFailure}
             />
           )}

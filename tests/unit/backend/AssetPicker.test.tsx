@@ -45,6 +45,12 @@ describe('AssetField', () => {
     expect(img).toHaveAttribute('src', '/images/test.jpg');
   });
 
+  it('encodes paths with spaces exactly once in the preview src', () => {
+    render(<AssetField label="Antwort-Bild" value="/images/Eras Quiz/Taylor Swift.jpg" category="images" onChange={vi.fn()} />);
+    const img = document.querySelector('img');
+    expect(img).toHaveAttribute('src', '/images/Eras%20Quiz/Taylor%20Swift.jpg');
+  });
+
   it('renders audio player when value is set (audio category)', () => {
     render(<AssetField label="Audio" value="/audio/test.mp3" category="audio" onChange={vi.fn()} />);
     expect(document.querySelector('.mini-player')).not.toBeNull();

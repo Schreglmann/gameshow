@@ -10,7 +10,7 @@
  *   node scripts/verify-changed.cjs               # working tree (npm run verify)
  *   node scripts/verify-changed.cjs --stop-hook   # working tree, blocking (Claude Stop hook)
  *   node scripts/verify-changed.cjs --staged       # staged only (.githooks/pre-commit)
- *   node scripts/verify-changed.cjs --full         # every gate (.githooks/pre-push, pre-show)
+ *   node scripts/verify-changed.cjs --full         # every gate (npm run verify:full, pre-show)
  *
  * Debug/testing affordances:
  *   --dry-run              print the selected gates, run nothing

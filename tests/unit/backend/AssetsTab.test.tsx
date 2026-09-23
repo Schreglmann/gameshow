@@ -552,12 +552,28 @@ describe('AssetsTab', () => {
       render(<UploadProvider><AssetsTab /></UploadProvider>);
       await waitFor(() => expect(screen.getByText(/Dateien hier ablegen/)).toBeInTheDocument());
 
-      const zone = document.querySelector('.upload-zone')!;
-      fireEvent.dragEnter(zone);
-      await waitFor(() => expect(zone).toHaveClass('dragover'));
+      // AssetsTab kicks off several independent loads on mount and the root DropZone
+      // is mounted behind `!loading`, so one of them settling late remounts it: that
+      // resets isDragActive AND swaps in a fresh DOM node. Holding a node captured
+      // before the drag then asserts against a detached element that can never gain
+      // the class. Flush the pending loads first, and re-query the zone on every
+      // attempt so a late remount re-drags instead of failing (only raced on CI).
+      await act(async () => {});
 
-      await dropFiles(zone, [new File(['img'], 'photo.jpg', { type: 'image/jpeg' })]);
-      expect(zone).not.toHaveClass('dragover');
+      await waitFor(() => {
+        const zone = document.querySelector('.upload-zone')!;
+        fireEvent.dragEnter(zone);
+        expect(zone).toHaveClass('dragover');
+      });
+
+      await dropFiles(document.querySelector('.upload-zone')!, [
+        new File(['img'], 'photo.jpg', { type: 'image/jpeg' }),
+      ]);
+      await waitFor(() => {
+        const zone = document.querySelector('.upload-zone');
+        expect(zone).toBeTruthy();
+        expect(zone).not.toHaveClass('dragover');
+      });
     });
 
     it('does nothing when empty drop (no files) on upload zone', async () => {

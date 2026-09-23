@@ -23,7 +23,7 @@ change, and a "Führungswechsel!" banner appears when the lead flips between the
       `useRef` — **never stored in AppState / localStorage** (honours the no-derived-state rule).
 - [x] Purely presentational: NO new AppState field, Action, reducer case, WS channel, or HTTP route.
       The animation never dispatches and never delays the `AWARD_POINTS` flow or the
-      `gamemaster-team-state` broadcast (the GM keeps driving instantly).
+      `gamemaster-team-state-v2` broadcast (the GM keeps driving instantly).
 - [x] On `prefers-reduced-motion` or on an inactive show tab (`isInactiveShowTab()`), the number
       snaps instantly.
 
@@ -45,3 +45,8 @@ change, and a "Führungswechsel!" banner appears when the lead flips between the
 - A scoreboard on the gamemaster PWA (it has none).
 - Persisted or derived lead state.
 - Per-game or cumulative reveal effects beyond the header.
+
+## Team count
+The hook takes a points record plus the active team keys. A "lead change" is a change in the **set of
+leading teams** — moving out of, or into, an all-way tie is not a flip. With two teams this is
+exactly the previous rule (the sign of `team1 - team2` flipped). See [team-count.md](team-count.md).

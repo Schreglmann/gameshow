@@ -1,0 +1,118 @@
+/* ── Per-team colour accents ──
+   The operator picks a colour per team in the admin; when the feature is on, every
+   surface that renders a team marks it with an accent edge plus a dot beside the
+   name. Nothing here changes text colour or fills a background — that is what keeps
+   all 13 themes legible without per-theme tuning. See specs/team-colors.md. */
+
+/* The colour marking ONE team, resolved once per team key. Precedence:
+   the operator's configured colour (published on <html> as --teamN-color by
+   useTeamColorVars) → the active theme's house colour (--teamN-house, e.g. Harry
+   Potter's Gryffindor crimson) → nothing. Every accent below reads only
+   --team-color, so a surface never needs to know which team it is showing.
+
+   `initial` on a custom property is the guaranteed-invalid value, which is why the
+   existing `--teamN-house: initial` isolation chains in themes.css keep working:
+   they make the inner var() fall through to `transparent`, exactly as before. */
+[data-team="team1"] { --team-color: var(--team1-color, var(--team1-house, transparent)); }
+[data-team="team2"] { --team-color: var(--team2-color, var(--team2-house, transparent)); }
+[data-team="team3"] { --team-color: var(--team3-color, var(--team3-house, transparent)); }
+[data-team="team4"] { --team-color: var(--team4-color, var(--team4-house, transparent)); }
+
+/* Accent tokens — three edge shapes, each appended by a surface to its OWN
+   box-shadow list. A shared utility CLASS would not work: several targets
+   (.team, .award-team-card.is-selected, .gm-joker-team) already own a box-shadow
+   that the class would replace, and `outline` would collide with the
+   :focus-visible rings on the award cards. An inset shadow also never
+   participates in layout, so switching the feature off cannot shift a pixel.
+
+   A token holds the GEOMETRY ONLY and every use site appends the colour:
+
+       box-shadow: <its own shadows>, var(--team-edge-left) var(--team-color);
+
+   It cannot carry `var(--team-color)` itself. A var() nested inside a custom
+   property is substituted when that property is computed — on the element that
+   DECLARES it, i.e. <html>, where `--team-color` does not exist. The token then
+   becomes the guaranteed-invalid value and every `box-shadow` reading it
+   computes to `none`, which is exactly how this silently rendered nothing at
+   all while the dots (which read `--team-color` directly) worked.
+
+   Switched off, the geometry is a zero-size inset, so the shadow is present but
+   invisible — no gate needed at the use sites. */
+:root {
+    --team-ring: inset 0 0 0 0;
+    --team-edge-left: inset 0 0 0 0;
+    --team-edge-bottom: inset 0 0 0 0;
+}
+
+/* `html[…]` rather than the bare attribute selector (0,1,1 vs 0,1,0), so no
+   stylesheet order can let the :root no-ops above win. Gating the GEOMETRY here
+   is also what keeps a theme's house colours off these surfaces while the
+   operator has team colours off — `--team-color` alone would still resolve to
+   the house colour on Harry Potter / D&D / Atlas. `.team-colors-on` is the
+   escape hatch ThemeShowcase uses to demo the accent regardless of the live
+   config. */
+html[data-team-colors="on"],
+.team-colors-on {
+    --team-ring: inset 0 0 0 2px;
+    --team-edge-left: inset 3px 0 0 0;
+    --team-edge-bottom: inset 0 -2px 0 0;
+}
+
+/* The dot beside a team's name. Hidden entirely (no box at all) while the feature
+   is off, so it cannot leave a gap in a header cell that is already tight. */
+.team-dot {
+    display: none;
+    flex: none;
+    width: 0.62em;
+    height: 0.62em;
+    /* Sized and spaced in `em` so the gap tracks the text it precedes — the same
+       component sits in a small header pill and in the summary's huge <h1>.
+       The margin only applies once the dot renders, so an off show has no gap. */
+    margin-right: 0.42em;
+    vertical-align: baseline;
+    border-radius: 50%;
+    background: var(--team-color);
+    /* Keeps the dot legible on a light card too: a hairline in the surrounding
+       text colour, so a pale colour on ivory (atlas-light, classical-music,
+       pub-quiz, the HP/D&D parchment cards) still reads as a disc rather than
+       dissolving into the surface. The colour itself is never adjusted — the
+       operator picked it. */
+    box-shadow: inset 0 0 0 1px rgba(var(--card-text-rgb, var(--text-rgb)), 0.35);
+}
+
+html[data-team-colors="on"] .team-dot,
+.team-colors-on .team-dot {
+    display: inline-block;
+}
+
+/* Surfaces that own no box-shadow of their own get their token here; the ones
+   that do (the team cards, award cards, guess results, GM panels, header cells)
+   append it in the stylesheet that already defines them, so their shadow list
+   stays in one place.
+
+   The rule of thumb for which token a surface gets: a CONTAINER (card, panel,
+   cell, input) gets an edge, an inline LABEL gets only the dot — an inset edge
+   on a bare inline span sits under its own text. */
+.gm-qscore-team[data-team] {
+    box-shadow: var(--team-edge-bottom) var(--team-color);
+}
+
+/* The final-quiz bet fields: one per team, and the placeholder is the only thing
+   naming the team — which cannot hold a dot, so the edge does the whole job. */
+.betting-input[data-team] {
+    box-shadow: var(--team-edge-left) var(--team-color);
+}
+
+/* The guessing-game entry cards ("Tipp Team 1:"), one per team — the same left
+   edge as the result rows those turn into. */
+.guess-field[data-team] {
+    box-shadow: var(--team-edge-left) var(--team-color);
+}
+
+/* bet-quiz / wer-kennt-mehr host panel: one column per team. The column has no
+   padding of its own, so it gets some — unconditionally, so toggling team
+   colours on or off never reflows the row. */
+.bet-quiz-team-choice[data-team] {
+    padding-left: 10px;
+    box-shadow: var(--team-edge-left) var(--team-color);
+}

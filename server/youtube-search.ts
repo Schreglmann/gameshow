@@ -117,6 +117,12 @@ const defaultRunner: YtSearchRunner = async (query, count, signal) => {
     '--dump-json',
     '--no-warnings',
     '--ignore-errors',
+    // All player-facing content is German — without this yt-dlp queries
+    // YouTube's search API with its default (English/US) locale, so a German
+    // query still comes back full of English results. Region is Austria,
+    // where the show runs.
+    '--extractor-args', 'youtube:lang=de',
+    '--geo-bypass-country', 'AT',
   ];
   return await new Promise<string>((resolve, reject) => {
     const proc = spawn(YT_DLP_BIN, args, { signal });

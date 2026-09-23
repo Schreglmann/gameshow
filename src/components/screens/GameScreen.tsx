@@ -169,7 +169,11 @@ export default function GameScreen() {
 
   return (
     <GameFactory
-      key={gameData.gameId}
+      // Keyed on ref AND index: the ref alone does not change when the same game
+      // appears twice in `gameOrder`, so a jump between those two slots would
+      // leave the old instance mounted mid-play. A live `content-changed`
+      // refresh keeps the index, so this adds no extra remounts.
+      key={`${gameData.gameId}#${gameData.currentIndex}`}
       config={gameData.config}
       gameId={gameData.gameId}
       currentIndex={gameData.currentIndex}

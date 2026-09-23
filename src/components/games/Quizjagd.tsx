@@ -7,6 +7,8 @@ import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
 import { useQuestionOrder } from '@/hooks/useQuestionOrder';
 import { useGameContext } from '@/context/GameContext';
 import { teamName } from '@/utils/teamNames';
+import { ALL_TEAM_KEYS, teamKeys, teamRoster, type TeamKey } from '@/utils/teams';
+import TeamDot from '@/components/common/TeamDot';
 
 type Difficulty = 'easy' | 'medium' | 'hard';
 type Phase = 'betting' | 'question';
@@ -17,7 +19,7 @@ interface QuizjagdQ {
 }
 
 interface TurnState {
-  team: 'team1' | 'team2';
+  team: TeamKey;
   difficulty: Difficulty | null;
   points: number;
   phase: Phase;
@@ -69,7 +71,7 @@ interface InnerProps {
   pointSystemEnabled: boolean;
   onGameComplete: () => void;
   setNavHandler: (fn: (() => void) | null) => void;
-  onAwardPoints: (team: 'team1' | 'team2', points: number) => void;
+  onAwardPoints: (team: TeamKey, points: number) => void;
   setGamemasterData: (data: GamemasterAnswerData | null) => void;
   setGamemasterControls: (controls: GamemasterControl[]) => void;
   setCommandHandler: (fn: ((cmd: GamemasterCommand) => void) | null) => void;
@@ -130,8 +132,17 @@ function QuizjagdInner({ config, gameId, pointSystemEnabled, onGameComplete, set
   const [used, setUsed] = useState<Record<Difficulty, number[]>>({ easy: [], medium: [], hard: [] });
   // Track which difficulty was used for the example round (null = not yet played)
   const [exampleDifficulty, setExampleDifficulty] = useState<Difficulty | null>(null);
-  const [team1Count, setTeam1Count] = useState(0);
-  const [team2Count, setTeam2Count] = useState(0);
+  // Questions each team has already had. A record, not a pair — the turn order
+  // is a round-robin over however many teams are in play. See specs/team-count.md.
+  const activeTeams = useMemo(() => teamKeys(state.settings.teamCount), [state.settings.teamCount]);
+  const [asked, setAsked] = useState<Partial<Record<TeamKey, number>>>({});
+  const askedOf = useCallback((team: TeamKey) => asked[team] ?? 0, [asked]);
+  const totalAsked = ALL_TEAM_KEYS.reduce((sum, k) => sum + (asked[k] ?? 0), 0);
+  /** The team after `team` in the round-robin; wraps to the first. */
+  const nextTeamAfter = useCallback((team: TeamKey): TeamKey => {
+    const idx = activeTeams.indexOf(team);
+    return activeTeams[(idx + 1) % Math.max(1, activeTeams.length)] ?? team;
+  }, [activeTeams]);
   const [turn, setTurn] = useState<TurnState>({
     team: 'team1',
     difficulty: null,
@@ -147,11 +158,11 @@ function QuizjagdInner({ config, gameId, pointSystemEnabled, onGameComplete, set
     if (turn.phase === 'betting' || !currentQuestion) {
       // Surface the active turn in the GM card during difficulty selection so
       // the GM doesn't see the generic "no game running" welcome screen.
-      const teamLabel = teamName(state.teams, turn.team === 'team1' ? 1 : 2);
+      const teamLabel = teamName(state.teams, turn.team);
       setGamemasterData({
         gameTitle: config.title,
         questionNumber: 0,
-        totalQuestions: questionsPerTeam * 2,
+        totalQuestions: questionsPerTeam * Math.max(1, activeTeams.length),
         answer: '',
         screenLabel: `${teamLabel} wählt Schwierigkeit`,
       });
@@ -159,14 +170,14 @@ function QuizjagdInner({ config, gameId, pointSystemEnabled, onGameComplete, set
       const diffLabel = turn.difficulty === 'easy' ? 'Leicht' : turn.difficulty === 'medium' ? 'Mittel' : 'Schwer';
       setGamemasterData({
         gameTitle: config.title,
-        questionNumber: team1Count + team2Count + (isCurrentExample ? 0 : 1),
-        totalQuestions: questionsPerTeam * 2,
+        questionNumber: totalAsked + (isCurrentExample ? 0 : 1),
+        totalQuestions: questionsPerTeam * Math.max(1, activeTeams.length),
         question: currentQuestion.question,
         answer: currentQuestion.answer,
         extraInfo: diffLabel,
       });
     }
-  }, [currentQuestion, turn.phase, turn.team, turn.difficulty, config.title, team1Count, team2Count, isCurrentExample, questionsPerTeam, setGamemasterData, state.teams]);
+  }, [currentQuestion, turn.phase, turn.team, turn.difficulty, config.title, totalAsked, isCurrentExample, questionsPerTeam, activeTeams.length, setGamemasterData, state.teams]);
 
   // Index 0 is the example question in every pool — skip it once any example has been played
   const nextUnusedIn = useCallback(
@@ -223,19 +234,17 @@ function QuizjagdInner({ config, gameId, pointSystemEnabled, onGameComplete, set
       setTurn(prev => ({ ...prev, difficulty: null, points: 0, phase: 'betting', showCorrectButtons: false }));
       return;
     }
-    const t1 = turn.team === 'team1' ? team1Count + 1 : team1Count;
-    const t2 = turn.team === 'team2' ? team2Count + 1 : team2Count;
-    setTeam1Count(t1);
-    setTeam2Count(t2);
-    if (t1 >= questionsPerTeam && t2 >= questionsPerTeam) {
+    const nextAsked = { ...asked, [turn.team]: askedOf(turn.team) + 1 };
+    setAsked(nextAsked);
+    if (activeTeams.every(t => (nextAsked[t] ?? 0) >= questionsPerTeam)) {
       onGameComplete();
       return;
     }
-    const nextTeam = turn.team === 'team1' ? 'team2' : 'team1';
+    const nextTeam = nextTeamAfter(turn.team);
     setShowAnswer(false);
     setCurrentQuestion(null);
     setTurn({ team: nextTeam, difficulty: null, points: 0, phase: 'betting', showCorrectButtons: false });
-  }, [isCurrentExample, turn.team, team1Count, team2Count, questionsPerTeam, onGameComplete]);
+  }, [isCurrentExample, turn.team, asked, askedOf, activeTeams, nextTeamAfter, questionsPerTeam, onGameComplete]);
 
   const handleNext = useCallback(() => {
     if (turn.phase !== 'question') return;
@@ -271,17 +280,15 @@ function QuizjagdInner({ config, gameId, pointSystemEnabled, onGameComplete, set
           onAwardPoints(team, -pts);
         }
 
-        const t1 = turn.team === 'team1' ? team1Count + 1 : team1Count;
-        const t2 = turn.team === 'team2' ? team2Count + 1 : team2Count;
-        setTeam1Count(t1);
-        setTeam2Count(t2);
+        const nextAsked = { ...asked, [turn.team]: askedOf(turn.team) + 1 };
+        setAsked(nextAsked);
 
-        if (t1 >= questionsPerTeam && t2 >= questionsPerTeam) {
+        if (activeTeams.every(t => (nextAsked[t] ?? 0) >= questionsPerTeam)) {
           onGameComplete();
           return;
         }
 
-        const nextTeam = turn.team === 'team1' ? 'team2' : 'team1';
+        const nextTeam = nextTeamAfter(turn.team);
         setShowAnswer(false);
         setCurrentQuestion(null);
         setTurn({ team: nextTeam, difficulty: null, points: 0, phase: 'betting', showCorrectButtons: false });
@@ -293,7 +300,7 @@ function QuizjagdInner({ config, gameId, pointSystemEnabled, onGameComplete, set
         setTurn(prev => ({ ...prev, difficulty: null, points: 0, phase: 'betting', showCorrectButtons: false }));
       }
     },
-    [currentQuestion, turn, team1Count, team2Count, questionsPerTeam, onAwardPoints, onGameComplete]
+    [currentQuestion, turn, asked, askedOf, activeTeams, nextTeamAfter, questionsPerTeam, onAwardPoints, onGameComplete]
   );
 
   // All three pools dry while both teams still have turns left = a dead end.
@@ -373,9 +380,9 @@ function QuizjagdInner({ config, gameId, pointSystemEnabled, onGameComplete, set
     turn.showCorrectButtons ? 'bottom' : 'top',
   );
 
-  const currentTeamCount = turn.team === 'team1' ? team1Count : team2Count;
-  const teamLabel = teamName(state.teams, turn.team === 'team1' ? 1 : 2);
-  const teamPlayers: string[] = turn.team === 'team1' ? state.teams.team1 : state.teams.team2;
+  const currentTeamCount = askedOf(turn.team);
+  const teamLabel = teamName(state.teams, turn.team);
+  const teamPlayers: string[] = teamRoster(state.teams, turn.team);
 
   return (
     <>
@@ -388,8 +395,8 @@ function QuizjagdInner({ config, gameId, pointSystemEnabled, onGameComplete, set
           : ''}
       </h2>
       {(exampleDifficulty !== null || turn.phase === 'question' || turn.phase === 'betting') && (
-        <p className="quizjagd-team-label">
-          {teamLabel} ist dran{teamPlayers.length > 0 ? ` · ${teamPlayers.join(' & ')}` : ''}
+        <p className="quizjagd-team-label" data-team={turn.team}>
+          <TeamDot team={turn.team} />{teamLabel} ist dran{teamPlayers.length > 0 ? ` · ${teamPlayers.join(' & ')}` : ''}
         </p>
       )}
 

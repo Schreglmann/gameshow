@@ -23,6 +23,18 @@ export function isGitCryptBlob(buffer: Buffer): boolean {
 }
 
 /**
+ * The show-level framing lines every gameshow shares, excluding the scoring
+ * sentence — that depends on the active gameshow's `pointMode` and is appended
+ * dynamically by `GET /api/settings` (`pointModeRule()`,
+ * src/utils/pointMode.ts), never stored. See specs/point-system.md.
+ */
+export const DEFAULT_GLOBAL_RULES: string[] = [
+  'Es gibt mehrere Spiele.',
+  'Bei jedem Spiel wird am Ende entschieden welches Team das Spiel gewonnen hat.',
+  'Das Team mit den meisten Punkten gewinnt am Ende.',
+];
+
+/**
  * Build the minimal default config used when config.json is missing, encrypted,
  * or unparseable. It defines a single empty "Beispiele" gameshow (active) plus
  * the show-level globalRules and shared rulesPresets. The gameOrder is filled by
@@ -34,18 +46,23 @@ export function buildDefaultConfig(): AppConfig {
     pointSystemEnabled: true,
     teamRandomizationEnabled: true,
     jokersInLastGame: false,
-    globalRules: [
-      'Es gibt mehrere Spiele.',
-      'Bei jedem Spiel wird am Ende entschieden welches Team das Spiel gewonnen hat.',
-      'Das erste Spiel ist 1 Punkt wert, das zweite 2 Punkte, etc.',
-      'Das Team mit den meisten Punkten gewinnt am Ende.',
-    ],
+    globalRules: DEFAULT_GLOBAL_RULES,
+    // Each preset carries all three team-count bands: `rules` is 2 teams,
+    // `rulesSolo` 0-1 (no opponent, so the fallback lines are dropped rather
+    // than reworded) and `rulesMulti` 3-4. See specs/rules-presets.md.
     rulesPresets: [
       {
         id: 'simultaneous-written',
         name: 'Gleichzeitig schriftlich',
         rules: [
           'Jede Frage wird beiden Teams gleichzeitig gestellt.',
+          'Die Teams schreiben ihre Antwort auf.',
+        ],
+        rulesSolo: [
+          'Die Antwort wird aufgeschrieben.',
+        ],
+        rulesMulti: [
+          'Jede Frage wird allen Teams gleichzeitig gestellt.',
           'Die Teams schreiben ihre Antwort auf.',
         ],
       },
@@ -57,6 +74,14 @@ export function buildDefaultConfig(): AppConfig {
           'Die erste Antwort eines Teams zählt.',
           'Antwortet ein Team falsch, darf das andere Team antworten.',
         ],
+        rulesSolo: [
+          'Die erste genannte Antwort zählt.',
+        ],
+        rulesMulti: [
+          'Alle Teams raten gleichzeitig.',
+          'Die erste Antwort eines Teams zählt.',
+          'Antwortet ein Team falsch, dürfen die anderen Teams antworten.',
+        ],
       },
       {
         id: 'alternating',
@@ -65,12 +90,27 @@ export function buildDefaultConfig(): AppConfig {
           'Die Teams raten abwechselnd.',
           'Antwortet ein Team falsch oder nicht, darf das andere Team antworten.',
         ],
+        rulesSolo: [
+          'Pro Frage darf einmal geraten werden.',
+        ],
+        rulesMulti: [
+          'Die Teams raten abwechselnd.',
+          'Antwortet ein Team falsch oder nicht, darf das nächste Team antworten.',
+        ],
       },
       {
         id: 'simultaneous-first-correct',
         name: 'Gleichzeitig (erste richtige gewinnt)',
         rules: [
           'Beide Teams raten gleichzeitig.',
+          'Die erste richtige Antwort gewinnt.',
+          'Die Teams dürfen beliebig oft raten.',
+        ],
+        rulesSolo: [
+          'Es darf beliebig oft geraten werden.',
+        ],
+        rulesMulti: [
+          'Alle Teams raten gleichzeitig.',
           'Die erste richtige Antwort gewinnt.',
           'Die Teams dürfen beliebig oft raten.',
         ],

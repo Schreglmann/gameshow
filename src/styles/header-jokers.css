@@ -17,6 +17,16 @@ header .team-header-cell {
        than its 1/3 column and overflow the header. Force 0 so the cell (and
        the truncating name inside it) can shrink to share the row. */
     min-width: 0;
+    /* Team-colour underline (no-op unless the operator enabled team colours).
+       See specs/team-colors.md. */
+    box-shadow: var(--team-edge-bottom) var(--team-color);
+}
+
+/* The generic `header div:hover` glow replaces box-shadow wholesale and outranks
+   the rule above, which used to drop the team underline on hover. Re-append it.
+   See specs/team-colors.md. */
+header .team-header-cell:hover {
+    box-shadow: 0 4px 20px rgba(var(--glass-rgb), 0.2), var(--team-edge-bottom) var(--team-color);
 }
 
 /* The cell is wider than its content, so `justify-content: center` splits the

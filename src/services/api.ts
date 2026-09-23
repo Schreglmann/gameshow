@@ -1,4 +1,4 @@
-import type { SettingsResponse, GameDataResponse } from '@/types/config';
+import type { SettingsResponse, GameDataResponse, RunOfShowResponse } from '@/types/config';
 
 /** Error carrying the HTTP status of a failed fetch so callers can branch on it
  *  (e.g. GameScreen treats a 404 on a live refresh as "this game no longer
@@ -21,6 +21,14 @@ export async function fetchSettings(): Promise<SettingsResponse> {
 export async function fetchGameData(index: number): Promise<GameDataResponse> {
   const res = await fetch(`/api/game/${index}`);
   if (!res.ok) throw new HttpError(res.status, `Failed to fetch game ${index}`);
+  return res.json();
+}
+
+/** The active gameshow's running order with resolved titles — backs the
+ *  gamemaster "Ablauf" panel. See specs/gamemaster-run-of-show.md. */
+export async function fetchRunOfShow(): Promise<RunOfShowResponse> {
+  const res = await fetch('/api/run-of-show');
+  if (!res.ok) throw new HttpError(res.status, 'Failed to fetch run of show');
   return res.json();
 }
 

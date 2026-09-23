@@ -20,6 +20,7 @@ vi.mock('@/services/backendApi', () => ({
   createExampleGames: (...args: unknown[]) => mockCreateExampleGames(...args),
   deleteGame: (...args: unknown[]) => mockDeleteGame(...args),
   saveGame: (...args: unknown[]) => mockSaveGame(...args),
+  saveGameBeacon: vi.fn(),
   fetchAssets: (...args: unknown[]) => mockFetchAssets(...args),
   fetchConfig: vi.fn().mockResolvedValue({ activeGameshow: 'test', gameshows: {} }),
 }));

@@ -143,17 +143,21 @@ Line 35 — add `'<slug>'` to the literal `VALID_THEMES` array used by per-game 
 
 **Three VALID_THEMES locations total** must include the slug: `ThemeContext.tsx` (derived from `THEMES`), `server/index.ts:3044`, `validate-config.ts:35`. Missing any one causes silent validation failures or 400 errors on `POST /api/theme`. (These three are independent of whether the theme is an admin theme — that distinction is `ADMIN_THEME_IDS` only.)
 
-### Step 7 — Picker preview swatches
+### Step 7 — Picker preview swatch
 
-Add an entry to the `THEME_GRADIENTS` object in **both** files — values must be identical:
-- [src/components/backend/ConfigTab.tsx:7-18](src/components/backend/ConfigTab.tsx#L7-L18)
-- [src/components/screens/ThemeShowcase.tsx:87-98](src/components/screens/ThemeShowcase.tsx#L87-L98)
+Add an entry to the single `THEME_SWATCHES` map in [src/context/ThemeContext.tsx](src/context/ThemeContext.tsx) (typed `Record<ThemeId, string>`, so `tsc` fails until the new id has one). `ConfigTab` and `ThemeShowcase` both import it — there is no second copy to keep in sync:
 
 ```typescript
-'<slug>': ['<bg-gradient-from>', '<bg-gradient-to>'],
+'<slug>': 'linear-gradient(135deg, <canvas> 0%, <main accent> ~50%, <signature pop> 100%)',
 ```
 
-Use the same two hex values written to `--bg-gradient-from` / `--bg-gradient-to` in Step 2. If the objects drift, the picker swatch won't match the actual theme. Required for **every** theme — the frontend picker swatch reads it even for frontend-only themes (`ConfigTab`'s "Gameshow" selector and the showcase's frontend row both map over all `THEMES`).
+Three stops: the canvas colour, the main accent and the brightest signature colour of the theme — not two near-identical background tones. Required for **every** theme — the frontend picker swatch reads it even for frontend-only themes.
+
+### Step 7b — Cross-theme reset chains + block order
+
+If the theme uses any opt-in token family (`--card-*` / `--input-*` surface, `--card-text*` in-card text, `--team*-house`, `--header-*`, or the atlas-light-only light-canvas tokens), add `:not([data-theme="<slug>"])` to the matching high-specificity reset chain in `themes.css` (search for `[data-theme]:not([data-theme="retro"])` for the surface chain and `--header-bg: initial` for the header chain). Without it the reset forces the tokens back to `initial` and the theme silently falls back to glass cards.
+
+Block order matters: the default `:root, [data-theme="atlas"]` block must stay **first** in the file and the iOS `@supports (-webkit-touch-callout: none)` block must stay **last** — insert the new theme between them (see the "Block ordering" note in [specs/themes.md](specs/themes.md)).
 
 ### Step 8 — Background-music folder
 

@@ -24,6 +24,7 @@ games/
 
 ```json
 {
+  "showTitle": "Sommerfest Quiz",
   "pointSystemEnabled": true,
   "teamRandomizationEnabled": true,
   "jokersInLastGame": false,
@@ -37,6 +38,9 @@ games/
   "gameshows": {
     "gameshow1": {
       "name": "Gameshow 1",
+      "showTitle": "Sommerfest Quiz 2026",
+      "teamCount": 2,
+      "pointMode": "positional",
       "gameOrder": [
         "allgemeinwissen/v1",
         "audio-guess",
@@ -57,11 +61,16 @@ games/
 ```
 
 **Top-level Settings:**
+- `showTitle` — What the show calls itself: the `HomeScreen` heading, the gamemaster's start/summary label and the browser tab title. A gameshow can override it with its own `showTitle`; blank/omitted at both levels means `"Game Show"`. Editable in the admin (Konfiguration tab globally, Gameshows tab per show) — see [specs/show-title.md](specs/show-title.md)
 - `pointSystemEnabled` — Enable/disable the point system (default: `true`). When `false` the show has **no teams**: no scores are shown or awarded, the `HomeScreen` drops the team overview/assignment for a bare "Zum Starten klicken" start prompt, jokers are auto-disabled (`enabledJokers` served empty), and **every** game becomes a pure play-through — the inline-scored games (BetQuiz, Quizjagd, FinalQuiz, WerKenntMehr) hide their bet/point/scoring UI and advance with a plain "Weiter" (see [specs/point-system.md](specs/point-system.md))
-- `teamRandomizationEnabled` — How the two teams are formed on the `HomeScreen` (default: `true`). `true` = enter a name pool that is shuffled + split automatically; `false` = **manual assignment** — add/remove players to Team 1 / Team 2 by hand on the show and the gamemaster (see [specs/team-management.md](specs/team-management.md))
+- `gameshows[key].teamCount` — how many teams this gameshow is played with (`0`–`4`, default `2`). `0` means no teams at all, exactly like the global `pointSystemEnabled: false`; `1` keeps the point system but still has no team assignment or randomization — the audience plays against the show. A game type whose mechanic cannot be scored at that count still plays, just without scoring — see [specs/team-count.md](specs/team-count.md)
+- `gameshows[key].showTitle` — overrides the global `showTitle` while this gameshow is active (blank/omitted inherits it) — see [specs/show-title.md](specs/show-title.md)
+- `gameshows[key].pointMode` — how this gameshow turns a game result into points: `positional` (default, omitted — game N is worth N points), `flat` (every game 1 point) or `per-correct-answer` (one point per correct answer, read off the gamemaster's tally). The four inline-scored types keep their own scoring in every mode — see [specs/point-system.md](specs/point-system.md)
+- `teamColorsEnabled` / `teamColors` — Opt-in per-team colours (default: off). When on, every surface that renders a team marks it with an accent edge plus a dot beside the name, in all three zones; the four colours are picked in the admin Konfiguration tab and a blank one falls back to the active theme (see [specs/team-colors.md](specs/team-colors.md))
+- `teamRandomizationEnabled` — How the teams are formed on the `HomeScreen` (default: `true`). `true` = enter a name pool that is shuffled + split automatically; `false` = **manual assignment** — add/remove players per team by hand on the show and the gamemaster (see [specs/team-management.md](specs/team-management.md))
 - `jokersInLastGame` — Allow jokers to stay available in the last game (default: `false`; when off, the joker UI is hidden in the last game)
 - `globalRules` — Array of strings for the global rules screen
-- `rulesPresets` — Optional list of `{ id, name, rules[] }` entries. Games may reference one via `rulesPreset`; the server resolves it onto the per-game task line at runtime. See [specs/rules-presets.md](specs/rules-presets.md).
+- `rulesPresets` — Optional list of `{ id, name, rules[], rulesSolo?[], rulesMulti?[] }` entries. Games may reference one via `rulesPreset`; the server resolves it onto the per-game task line at runtime, picking the wording band for the active gameshow's team count (`rulesSolo` at 0–1 teams, `rules` at 2, `rulesMulti` at 3–4). See [specs/rules-presets.md](specs/rules-presets.md).
 - `activeGameshow` — Key of the gameshow to run (must match a key in `gameshows`)
 
 **`gameshows`** — Record of all defined gameshows (current and past):
@@ -150,6 +159,7 @@ Instance-specific fields override the base config. So an instance can have its o
 | `ranking` | Guess answers in the correct order; host reveals one rank at a time | Yes |
 | `wer-kennt-mehr` | Final game: both teams name as many of a thing as possible; the team that named more scores that count (tie splits) | Yes |
 | `random-frame` | Guess the movie/show from a single random still frame extracted from a video at runtime (GM can re-roll) | Yes |
+| `city-compass` | Name the hidden city at the center of a compass rose, from the cities placed around it at their true bearing | Yes |
 
 See [GAME_TYPES.md](GAME_TYPES.md) for detailed per-type documentation.
 
@@ -178,7 +188,7 @@ See [GAME_TYPES.md](GAME_TYPES.md) for detailed per-type documentation.
 
 | Endpoint | Response |
 |----------|----------|
-| `GET /api/settings` | `{ pointSystemEnabled, teamRandomizationEnabled, jokersInLastGame, globalRules, enabledJokers, jokerRules }` |
+| `GET /api/settings` | `{ showTitle, pointSystemEnabled, teamRandomizationEnabled, teamColors, jokersInLastGame, globalRules, enabledJokers, jokerRules }` |
 | `GET /api/game/:index` | `{ gameId, config, currentIndex, totalGames, pointSystemEnabled }` |
 | `GET /api/background-music` | `string[]` (audio filenames) |
 

@@ -223,7 +223,7 @@ describe('RandomFrame', () => {
 
     // Either the point screen appears (point system on) or onNextGame fired.
     await waitFor(() => {
-      const pointScreen = screen.queryByText(/Punkte/i);
+      const pointScreen = screen.queryAllByText(/Punkte/i).length > 0;
       expect(pointScreen || defaultProps.onNextGame.mock.calls.length > 0).toBeTruthy();
     });
   });

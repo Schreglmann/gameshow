@@ -5,6 +5,8 @@ import { ThemeProvider } from '@/context/ThemeContext';
 import { GameProvider } from '@/context/GameContext';
 import { MusicProvider, useMusicPlayer } from '@/context/MusicContext';
 import { useMusicStateSync, useMusicCommandListener } from '@/hooks/useMusicSync';
+import { useShowNavigationCommands } from '@/hooks/useShowNavigationCommands';
+import { useShowDocumentTitle } from '@/hooks/useShowDocumentTitle';
 import { AudioCoverMetaProvider } from '@/context/AudioCoverMetaContext';
 import Header from '@/components/layout/Header';
 import MusicControls from '@/components/layout/MusicControls';
@@ -51,6 +53,14 @@ function AppContent() {
   // See specs/gamemaster-music-control.md.
   useMusicStateSync(musicPlayer);
   useMusicCommandListener(musicPlayer);
+
+  // Jump-to-game from the gamemaster's run-of-show panel. Handled here rather
+  // than in a screen because no mounted screen owns both `navigate` and a
+  // command listener. See specs/gamemaster-run-of-show.md.
+  useShowNavigationCommands();
+
+  // Browser tab title follows the operator's show title. See specs/show-title.md.
+  useShowDocumentTitle();
 
   return (
     <>

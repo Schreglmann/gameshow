@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom';
 import { configure } from '@testing-library/react';
 import { clearPlaythroughStore } from '@/utils/gamePlaythroughStore';
+import { __resetSaveQueueForTests } from '@/services/saveQueue';
 
 // Testing-library's `waitFor` defaults to a 1000 ms timeout, which is not enough
 // headroom when the whole suite runs in parallel on a contended machine — a
@@ -120,4 +121,8 @@ beforeEach(() => {
   // inherit the deck and progress of the previous test that used the same
   // gameId. Clearing it models a fresh page load. See specs/live-question-order.md.
   clearPlaythroughStore();
+  // The admin save queue is module-level and deliberately outlives every component,
+  // so a queued payload, a live retry timer or a leftover listener would follow a
+  // test into the next one. See specs/admin-save-queue.md.
+  __resetSaveQueueForTests();
 });

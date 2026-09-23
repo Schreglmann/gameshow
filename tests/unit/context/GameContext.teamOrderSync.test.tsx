@@ -68,7 +68,7 @@ function remoteState(overrides: Partial<TeamState> = {}): TeamState {
   };
 }
 
-// Regression: `orderSwapped` rides the `gamemaster-team-state` channel. The
+// Regression: `orderSwapped` rides the `gamemaster-team-state-v2` channel. The
 // inbound normalizer used to rebuild a whitelist object that dropped it, so
 // only the device that pressed "Teams tauschen" knew about the swap — the GM
 // surfaces that compute their own order (CorrectAnswersTracker, joker cards)
@@ -82,12 +82,12 @@ describe('GameContext — team order cross-device sync', () => {
     __clearWsCacheForTests();
   });
 
-  it('applies orderSwapped from an inbound gamemaster-team-state', async () => {
+  it('applies orderSwapped from an inbound gamemaster-team-state-v2', async () => {
     render(<GameProvider><Consumer /></GameProvider>);
     await act(async () => { await Promise.resolve(); });
     expect(screen.getByTestId('order-swapped').textContent).toBe('false');
 
-    act(() => { __emitChannelForTests('gamemaster-team-state', remoteState({ orderSwapped: true })); });
+    act(() => { __emitChannelForTests('gamemaster-team-state-v2', remoteState({ orderSwapped: true })); });
 
     expect(screen.getByTestId('order-swapped').textContent).toBe('true');
     expect(localStorage.getItem('teamOrderSwapped')).toBe('true');
@@ -99,7 +99,7 @@ describe('GameContext — team order cross-device sync', () => {
     await act(async () => { await Promise.resolve(); });
     expect(screen.getByTestId('order-swapped').textContent).toBe('true');
 
-    act(() => { __emitChannelForTests('gamemaster-team-state', remoteState({ orderSwapped: false })); });
+    act(() => { __emitChannelForTests('gamemaster-team-state-v2', remoteState({ orderSwapped: false })); });
 
     expect(screen.getByTestId('order-swapped').textContent).toBe('false');
     expect(localStorage.getItem('teamOrderSwapped')).toBe('false');
@@ -112,7 +112,7 @@ describe('GameContext — team order cross-device sync', () => {
 
     // An older/foreign client that never sends the field means "unswapped" —
     // the normalizer fills `false` explicitly rather than leaving it undefined.
-    act(() => { __emitChannelForTests('gamemaster-team-state', remoteState()); });
+    act(() => { __emitChannelForTests('gamemaster-team-state-v2', remoteState()); });
 
     expect(screen.getByTestId('order-swapped').textContent).toBe('false');
   });
@@ -135,10 +135,10 @@ describe('GameContext — team order cross-device sync', () => {
     await act(async () => { await Promise.resolve(); });
     sendWsMock.mockClear();
 
-    act(() => { __emitChannelForTests('gamemaster-team-state', remoteState({ orderSwapped: true })); });
+    act(() => { __emitChannelForTests('gamemaster-team-state-v2', remoteState({ orderSwapped: true })); });
     await act(async () => { await Promise.resolve(); });
 
-    const teamStateEmits = sendWsMock.mock.calls.filter(c => c[0] === 'gamemaster-team-state');
+    const teamStateEmits = sendWsMock.mock.calls.filter(c => c[0] === 'gamemaster-team-state-v2');
     expect(teamStateEmits).toHaveLength(0);
   });
 });

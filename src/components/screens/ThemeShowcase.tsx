@@ -1,11 +1,18 @@
 import { useState, useEffect } from 'react';
+import type { CSSProperties } from 'react';
 import { useTheme, THEMES, ADMIN_THEMES, THEME_SWATCHES } from '@/context/ThemeContext';
 import type { ThemeId } from '@/context/ThemeContext';
 import { JobRow, type UnifiedJob } from '@/components/backend/SystemTab';
 import { JOKER_CATALOG, getJoker, GENERIC_JOKER_RULES } from '@/data/jokers';
 import JokerIcon from '@/components/common/JokerIcon';
+import TeamDot from '@/components/common/TeamDot';
+import TeamCardName from '@/components/common/TeamCardName';
+import type { TeamKey } from '@/utils/teams';
+import { teamNameLongHint } from '@/utils/teamNames';
+import ColorPickerField from '@/components/backend/ColorPickerField';
 import DeadlineTimer from '@/components/common/DeadlineTimer';
 import { ColorPie } from '@/components/games/ColorGuess';
+import CompassRose from '@/components/common/CompassRose';
 import { QRCodeSVG } from 'qrcode.react';
 import RulesEditor from '@/components/backend/RulesEditor';
 import SpellCheckPanel, { type SpellGroup } from '@/components/backend/SpellCheckPanel';
@@ -16,6 +23,7 @@ import NavIcon from '@/components/backend/AdminNavIcons';
 import NasSyncConflictsCard from '@/components/backend/NasSyncConflictsCard';
 import type { NasSyncConflictEntry } from '@/services/backendApi';
 import ConflictBanner from '@/components/backend/ConflictBanner';
+import SaveStatusToast from '@/components/backend/SaveStatusToast';
 import RetryImage from '@/components/common/RetryImage';
 import AssetReloadButton from '@/components/common/AssetReloadButton';
 import type { RulesPreset } from '@/types/config';
@@ -25,6 +33,10 @@ import '@/styles/gamemaster.css';
 import '@/styles/header-jokers.css';
 import '@/styles/install-button.css';
 import '@/styles/inactive-show-overlay.css';
+
+/** Four jokers — the count a real show usually runs, and the one that makes the
+ *  header joker grid two rows deep. Used by the multi-team header preview. */
+const SHOWCASE_JOKERS = ['solo-answer', 'comeback', 'double-answer', 'call-friend'];
 
 const SPELL_DEMO_GROUPS: SpellGroup[] = [
   {
@@ -167,20 +179,108 @@ function FrontendShowcase() {
     <div>
       <Section title="Header">
         <header style={{ position: 'relative', animation: 'none' }}>
-          <div className="team-header-cell team-header-left">
+          <div className="team-header-cell team-header-left" data-team="team1">
             <span className="team-header-label">
               <span className="team-header-name">Team 1</span>
               <span className="team-header-score">: <span>12</span> Punkte</span>
             </span>
           </div>
           <div id="gameNumber">Spiel 3 von 8</div>
-          <div className="team-header-cell team-header-right">
+          <div className="team-header-cell team-header-right" data-team="team2">
             <span className="team-header-label">
               <span className="team-header-name">Team 2</span>
               <span className="team-header-score">: <span>9</span> Punkte</span>
             </span>
           </div>
         </header>
+      </Section>
+
+      <Section title="Header mit 4 Teams">
+        {/* Same shape as the two-team header — a side, the counter, a side —
+            except each side is a COLUMN of two team pills, the joker grid drops
+            to a single row and everything steps down a size. That keeps one team
+            per row, so a joker grid is never adjacent to another team's name.
+            See specs/team-count.md and specs/header.md. */}
+        <header data-team-count={4} style={{ position: 'relative', animation: 'none' }}>
+          <div className="team-header-stack team-header-stack-left">
+            {(['Team 1', 'Team 2'] as const).map((name, i) => (
+              <div key={name} data-team={i === 0 ? 'team1' : 'team2'} className="team-header-cell team-header-left">
+                <span className="team-header-label">
+                  <span className="team-header-name">{name}</span>
+                  <span className="team-header-score">: <span>{[12, 9][i]}</span> Punkte</span>
+                </span>
+                <HeaderJokersPreviewRow
+                  side="left"
+                  enabled={SHOWCASE_JOKERS}
+                  used={i === 1 ? ['comeback'] : []}
+                />
+              </div>
+            ))}
+          </div>
+          <div id="gameNumber">Spiel 3 von 8</div>
+          <div className="team-header-stack team-header-stack-right">
+            {(['Team 3', 'Team 4'] as const).map((name, i) => (
+              <div key={name} data-team={i === 0 ? 'team3' : 'team4'} className="team-header-cell team-header-right">
+                <HeaderJokersPreviewRow
+                  side="right"
+                  enabled={SHOWCASE_JOKERS}
+                  used={i === 1 ? ['call-friend'] : []}
+                />
+                <span className="team-header-label">
+                  <span className="team-header-name">{name}</span>
+                  <span className="team-header-score">: <span>{[7, 4][i]}</span> Punkte</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </header>
+      </Section>
+
+      <Section title="Header mit 4 Teams (ohne Joker)">
+        {/* The same header with no jokers enabled (or in the last game, where
+            they are hidden). Each side — with or without jokers — is a centred
+            row-wrap line of content-sized pills: both teams on ONE line when the
+            column is wide enough (it is at 1920px), the second dropping under
+            the first when not. In this narrow showcase section the sides wrap,
+            so drag the window wide to see the one-line form. See specs/header.md. */}
+        <header data-team-count={4} style={{ position: 'relative', animation: 'none' }}>
+          <div className="team-header-stack team-header-stack-left">
+            {(['Team 1', 'Team 2'] as const).map((name, i) => (
+              <div key={name} data-team={i === 0 ? 'team1' : 'team2'} className="team-header-cell team-header-left">
+                <span className="team-header-label">
+                  <span className="team-header-name">{name}</span>
+                  <span className="team-header-score">: <span>{[12, 9][i]}</span> Punkte</span>
+                </span>
+              </div>
+            ))}
+          </div>
+          <div id="gameNumber">Spiel 3 von 8</div>
+          <div className="team-header-stack team-header-stack-right">
+            {(['Team 3', 'Team 4'] as const).map((name, i) => (
+              <div key={name} data-team={i === 0 ? 'team3' : 'team4'} className="team-header-cell team-header-right">
+                <span className="team-header-label">
+                  <span className="team-header-name">{name}</span>
+                  <span className="team-header-score">: <span>{[7, 4][i]}</span> Punkte</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </header>
+      </Section>
+
+      <Section title="Team-Anzahl-Warnung (Startseite)">
+        {/* Non-blocking notice listing the games that cannot be scored at the
+            configured team count. See specs/team-count.md. */}
+        <div className="cache-preflight-banner team-count-warning" role="status">
+          <div className="cache-preflight-banner__head">
+            <span className="cache-preflight-banner__icon" aria-hidden="true">⚠️</span>
+            <strong>2 Spiele passen nicht zu 3 Teams und werden ohne Wertung gespielt</strong>
+          </div>
+          <ul className="cache-preflight-banner__list">
+            <li>Einsatzquiz <span className="team-count-warning__type">(Einsatzquiz)</span> · Runde 5</li>
+            <li>Wer kennt mehr? <span className="team-count-warning__type">(Wer kennt mehr?)</span> · Runde 6</li>
+          </ul>
+        </div>
       </Section>
 
       <Section title="Führungswechsel-Banner (Lead Change)">
@@ -381,6 +481,14 @@ function FrontendShowcase() {
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
             <button
               type="button"
+              className="gm-ablauf-toggle"
+              aria-pressed={false}
+              title="Ablauf der Show anzeigen — aktuelles Spiel, nächstes Spiel, und direkt zu einem Punkt springen."
+            >
+              Ablauf
+            </button>
+            <button
+              type="button"
               className="gm-lock-toggle"
               aria-pressed={false}
               title="Klicks und Tasten in der Gamemaster-Ansicht sperren, damit nichts versehentlich weitergeschaltet wird. Weiter/Zurück bleiben aktiv."
@@ -506,6 +614,34 @@ function FrontendShowcase() {
         </div>
       </Section>
 
+      {/* Hint list: the answer stays visible above it — that is the point of the
+          separate block. See specs/games/city-compass.md. */}
+      <Section title="Gamemaster Hinweisliste">
+        <div className="gamemaster-card" style={{ textAlign: 'center' }}>
+          <div className="gamemaster-meta">Frage 2 / 8</div>
+          <div className="gamemaster-title">Städte-Kompass</div>
+          <div className="gamemaster-question">Welche Stadt liegt im Zentrum?</div>
+          <div className="gamemaster-answer">Wien · AT</div>
+          <div className="gamemaster-hints">
+            <div className="gamemaster-hints-label">Hinweise</div>
+            <ul className="gamemaster-answer-list">
+              {[
+                { rank: 1, text: 'Budapest · 215 km', revealed: true },
+                { rank: 2, text: 'Brno · 111 km', revealed: true },
+                { rank: 3, text: 'Graz · 145 km', revealed: false },
+              ].map(hint => (
+                <li key={hint.rank}>
+                  <div className={`gamemaster-answer-item gamemaster-answer-item--static${hint.revealed ? ' revealed' : ' pending'}`}>
+                    <span className="gamemaster-answer-rank">{hint.rank}</span>
+                    <span className="gamemaster-answer-text">{hint.text}</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </Section>
+
       <Section title="Gamemaster mit versteckten Antworten">
         <div className="gamemaster-card" style={{ textAlign: 'center' }}>
           <div className="gamemaster-meta">Frage 3 / 10</div>
@@ -540,6 +676,94 @@ function FrontendShowcase() {
           <button type="button" className="gm-btn gm-btn--primary gm-desync-btn">
             Jetzt synchronisieren
           </button>
+        </div>
+      </Section>
+
+      {/* Static markup with the real classes, per the convention in this file.
+          The panel is rendered in its GUTTER form (static block, no drawer
+          chrome) with one row of each state. See specs/gamemaster-run-of-show.md. */}
+      <Section title="Gamemaster Ablauf (Run-of-Show)">
+        <nav
+          className="gm-runofshow"
+          aria-label="Ablauf der Show"
+          style={{ position: 'static', width: 'min(320px, 100%)', transform: 'none', transition: 'none', borderRight: 'none' }}
+        >
+          <div className="gm-runofshow-header">
+            <span className="gm-runofshow-heading">Ablauf</span>
+            {/* Expand control — shown here with an explicit display, since it is
+                normally scoped to the real `.gm-sidebar`. */}
+            <button type="button" className="gm-runofshow-expand" style={{ display: 'inline-flex' }} aria-label="Alle Spiele zeigen">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <polyline points="4 10 12 18 20 10" />
+                <polyline points="4 4 12 12 20 4" />
+              </svg>
+            </button>
+          </div>
+          <div className="gm-runofshow-listbox">
+          <ul className="gm-runofshow-list">
+            <li className="gm-runofshow-item--window">
+              <button type="button" className="gm-runofshow-row gm-runofshow-row--past">
+                <span className="gm-runofshow-marker">1</span>
+                <span className="gm-runofshow-text">
+                  <span className="gm-runofshow-label">Allgemeinwissen</span>
+                  <span className="gm-runofshow-sublabel">Klassisches Quiz</span>
+                </span>
+              </button>
+            </li>
+            <li className="gm-runofshow-item--window">
+              <button type="button" className="gm-runofshow-row gm-runofshow-row--current" disabled aria-current="true">
+                <span className="gm-runofshow-marker">2</span>
+                <span className="gm-runofshow-text">
+                  <span className="gm-runofshow-label">Quizjagd</span>
+                  <span className="gm-runofshow-sublabel">Quizjagd</span>
+                </span>
+              </button>
+            </li>
+            <li className="gm-runofshow-item--window">
+              <button type="button" className="gm-runofshow-row">
+                <span className="gm-runofshow-marker">3</span>
+                <span className="gm-runofshow-text">
+                  <span className="gm-runofshow-label">Klassische Musik</span>
+                  <span className="gm-runofshow-sublabel">Musikraten</span>
+                </span>
+              </button>
+            </li>
+            <li className="gm-runofshow-item--window">
+              <button type="button" className="gm-runofshow-row gm-runofshow-row--missing" disabled>
+                <span className="gm-runofshow-marker">4</span>
+                <span className="gm-runofshow-text">
+                  <span className="gm-runofshow-label">geloescht/v1</span>
+                  <span className="gm-runofshow-sublabel">Referenz nicht gefunden</span>
+                </span>
+                <span className="gm-runofshow-badge gm-runofshow-badge--missing">Fehlt</span>
+              </button>
+            </li>
+            <li className="gm-runofshow-item--window">
+              <button type="button" className="gm-runofshow-row">
+                <span className="gm-runofshow-marker">·</span>
+                <span className="gm-runofshow-text">
+                  <span className="gm-runofshow-label">Zusammenfassung</span>
+                </span>
+              </button>
+            </li>
+          </ul>
+          </div>
+        </nav>
+      </Section>
+
+      {/* Flattened out of its overlay, like the admin Confirm Dialog section. */}
+      <Section title="Gamemaster Sprung-Bestätigung">
+        <div className="gm-confirm-box" role="alertdialog" aria-label="Sprung bestätigen" style={{ margin: 0, animation: 'none' }}>
+          <h3 className="gm-confirm-title">Zu «Finale» springen?</h3>
+          <div className="gm-confirm-description">
+            Das laufende Spiel wird verlassen und «Finale» startet von vorne.
+            <br />
+            Bereits vergebene Punkte bleiben erhalten.
+          </div>
+          <div className="gm-confirm-actions">
+            <button type="button" className="gm-btn">Abbrechen</button>
+            <button type="button" className="gm-btn gm-btn--primary">Springen</button>
+          </div>
         </div>
       </Section>
 
@@ -686,33 +910,155 @@ function FrontendShowcase() {
         </div>
       </Section>
 
-      <Section title="Award Points">
+      <Section title="Award Points (Auswahl)">
         <GlassCard>
           <h2 style={{ fontSize: '1.6em', marginBottom: 4 }}>Punkte vergeben</h2>
-          <p className="award-points-hint">Wer hat diese Runde gewonnen?</p>
-          <div className="button-row" style={{ marginBottom: 8 }}>
-            <button className="award-team-button">
-              Team 1
-              <span className="award-double-badge" title="Aufholjoker: Punkte zählen doppelt">×2 Aufholjoker</span>
+          <p className="award-points-hint">Team 1 hat gewonnen</p>
+          <div className="award-teams">
+            <button type="button" className="award-team-card is-selected" aria-pressed={true} style={{ animation: 'none' }}>
+              <span className="award-team-card-name">
+                Team 1
+                <span className="award-double-badge" title="Aufholjoker: Punkte zählen doppelt">×2 Aufholjoker</span>
+              </span>
+              <span className="award-team-card-points">+6 Punkte</span>
+              <span className="award-team-card-count">3 richtige Antworten</span>
             </button>
-            <button className="award-team-button active">Team 2</button>
+            <button type="button" className="award-team-card" aria-pressed={false} style={{ animation: 'none' }}>
+              <span className="award-team-card-name">Team 2</span>
+              <span className="award-team-card-points">0 Punkte</span>
+              <span className="award-team-card-count">2 richtige Antworten</span>
+            </button>
           </div>
-          <p className="award-points-warning">3 Punkte werden vergeben</p>
+          <button className="quiz-button award-confirm">Punkte vergeben &amp; weiter</button>
+        </GlassCard>
+      </Section>
+
+      <Section title="Award Points (nichts ausgewählt)">
+        <GlassCard>
+          <h2 style={{ fontSize: '1.6em', marginBottom: 4 }}>Punkte vergeben</h2>
+          <p className="award-points-hint">Welches Team hat gewonnen?</p>
+          <div className="award-teams">
+            <button type="button" className="award-team-card" aria-pressed={false} style={{ animation: 'none' }}>
+              <span className="award-team-card-name">Team 1</span>
+            </button>
+            <button type="button" className="award-team-card" aria-pressed={false} style={{ animation: 'none' }}>
+              <span className="award-team-card-name">Team 2</span>
+            </button>
+          </div>
+          <button className="quiz-button award-confirm" disabled>Punkte vergeben &amp; weiter</button>
+        </GlassCard>
+      </Section>
+
+      <Section title="Award Points (4 Teams, Unentschieden)">
+        <GlassCard>
+          <h2 style={{ fontSize: '1.6em', marginBottom: 4 }}>Punkte vergeben</h2>
+          <p className="award-points-hint">Unentschieden — Team 1 und Team 3 erhalten Punkte</p>
+          <div className="award-teams" data-team-count={4}>
+            {(['Team 1', 'Team 2', 'Team 3', 'Team 4'] as const).map((name, i) => {
+              const won = i === 0 || i === 2;
+              return (
+                <button
+                  key={name}
+                  type="button"
+                  className={`award-team-card${won ? ' is-selected' : ''}`}
+                  data-team={`team${i + 1}`}
+                  aria-pressed={won}
+                  style={{ animation: 'none' }}
+                >
+                  <span className="award-team-card-name">{name}</span>
+                  <span className="award-team-card-points">{won ? '+6 Punkte' : '0 Punkte'}</span>
+                  <span className="award-team-card-count">{[3, 2, 3, 1][i]} richtige Antworten</span>
+                </button>
+              );
+            })}
+          </div>
+          <button className="quiz-button award-confirm">Punkte vergeben &amp; weiter</button>
+        </GlassCard>
+      </Section>
+
+      <Section title="Award Points (1 Punkt pro richtiger Antwort)">
+        <GlassCard>
+          <h2 style={{ fontSize: '1.6em', marginBottom: 4 }}>Punkte vergeben</h2>
+          <p className="award-points-hint">Jede richtige Antwort zählt 1 Punkt</p>
+          {/* Read-only: the tally already decided the outcome, so the cards are
+              divs — no toggle, no aria-pressed, and every card shows its points
+              right away. See specs/point-system.md. */}
+          <div className="award-teams">
+            <div className="award-team-card is-selected is-readonly" style={{ animation: 'none' }}>
+              <span className="award-team-card-name">Team 1</span>
+              <span className="award-team-card-points">+4 Punkte</span>
+              <span className="award-team-card-count">4 richtige Antworten</span>
+            </div>
+            <div className="award-team-card is-selected is-readonly" style={{ animation: 'none' }}>
+              <span className="award-team-card-name">Team 2</span>
+              <span className="award-team-card-points">+2 Punkte</span>
+              <span className="award-team-card-count">2 richtige Antworten</span>
+            </div>
+          </div>
+          <button className="quiz-button award-confirm">Punkte vergeben &amp; weiter</button>
+        </GlassCard>
+      </Section>
+
+      <Section title="Guessing Game Tipps">
+        <GlassCard>
+          <div className="guess-form">
+            <div className="guess-fields">
+              <div className="guess-field">
+                <label htmlFor="showcaseGuess1">Tipp Team 1:</label>
+                <input type="number" id="showcaseGuess1" defaultValue={42} />
+              </div>
+              <div className="guess-field">
+                <label htmlFor="showcaseGuess2">Tipp Team 2:</label>
+                <input type="number" id="showcaseGuess2" defaultValue={50} />
+              </div>
+            </div>
+            <button type="button" className="quiz-button">Tipp Abgeben</button>
+          </div>
         </GlassCard>
       </Section>
 
       <Section title="Guessing Game Results">
-        <GlassCard style={{ textAlign: 'left' }}>
-          <div className="result-row" style={{ margin: '8px 0' }}>
-            <span>Team 1: <strong>42</strong></span>
-            <span className="difference">Differenz: 3</span>
+        <GlassCard>
+          <div className="guess-result">
+            <div className="guess-result-answer" style={{ animation: 'none' }}>
+              <span className="guess-result-label">Richtige Antwort</span>
+              <span className="guess-result-value">45</span>
+            </div>
+            <div className="guess-result-teams">
+              <div className="guess-result-team is-winner" style={{ animation: 'none' }}>
+                <span className="guess-result-team-name">Team 1</span>
+                <span className="guess-result-guess">42</span>
+                <span className="guess-result-diff">Differenz: 3</span>
+                <span className="guess-result-badge">Näher dran!</span>
+              </div>
+              <div className="guess-result-team" style={{ animation: 'none' }}>
+                <span className="guess-result-team-name">Team 2</span>
+                <span className="guess-result-guess">56</span>
+                <span className="guess-result-diff">Differenz: 11</span>
+              </div>
+            </div>
           </div>
-          <div className="result-row" style={{ margin: '8px 0' }}>
-            <span>Team 2: <strong>50</strong></span>
-            <span className="difference">Differenz: 11</span>
-          </div>
-          <div className="winner" style={{ animation: 'none', marginTop: 16, fontSize: '1.2em', padding: 16 }}>
-            Team 1 ist naeher dran!
+        </GlassCard>
+        <GlassCard>
+          <div className="guess-result">
+            <div className="guess-result-answer" style={{ animation: 'none' }}>
+              <span className="guess-result-label">Richtige Antwort</span>
+              <span className="guess-result-value">45</span>
+            </div>
+            <div className="guess-result-teams">
+              <div className="guess-result-team is-winner" style={{ animation: 'none' }}>
+                <span className="guess-result-team-name">Team 1</span>
+                <span className="guess-result-guess">42</span>
+                <span className="guess-result-diff">Differenz: 3</span>
+                <span className="guess-result-badge is-tie">Gleichstand!</span>
+              </div>
+              <div className="guess-result-team is-winner" style={{ animation: 'none' }}>
+                <span className="guess-result-team-name">Team 2</span>
+                <span className="guess-result-guess">48</span>
+                <span className="guess-result-diff">Differenz: 3</span>
+                <span className="guess-result-badge is-tie">Gleichstand!</span>
+              </div>
+            </div>
           </div>
         </GlassCard>
       </Section>
@@ -840,6 +1186,41 @@ function FrontendShowcase() {
         </GlassCard>
       </Section>
 
+      <Section title="City Compass (Kompass-Rose)">
+        <GlassCard>
+          <div className="city-compass-stage">
+            <CompassRose
+              center={{ name: 'Wien', lat: 48.2085, lon: 16.3721, country: 'AT' }}
+              neighbors={[
+                { name: 'Prag', lat: 50.088, lon: 14.4208, country: 'CZ' },
+                { name: 'Budapest', lat: 47.4984, lon: 19.0404, country: 'HU' },
+                { name: 'Berlin', lat: 52.5244, lon: 13.4105, country: 'DE' },
+                { name: 'Rom', lat: 41.8919, lon: 12.5113, country: 'IT' },
+                { name: 'Krems an der Donau', lat: 48.4092, lon: 15.6142, country: 'AT' },
+              ]}
+              showDistances
+            />
+            <div className="city-compass-progress">5 von 5 Städten</div>
+          </div>
+        </GlassCard>
+        <GlassCard>
+          {/* The solved centre, because that is where the rose has to hold a second
+              colour: the answer pill carries the success token on top of the drawing. */}
+          <div className="city-compass-stage">
+            <CompassRose
+              center={{ name: 'Wien', lat: 48.2085, lon: 16.3721, country: 'AT' }}
+              neighbors={[
+                { name: 'Prag', lat: 50.088, lon: 14.4208, country: 'CZ' },
+                { name: 'Budapest', lat: 47.4984, lon: 19.0404, country: 'HU' },
+                { name: 'München', lat: 48.1374, lon: 11.5755, country: 'DE' },
+                { name: 'Zagreb', lat: 45.8144, lon: 15.978, country: 'HR' },
+              ]}
+              solved
+            />
+          </div>
+        </GlassCard>
+      </Section>
+
       <Section title="Form / Name Entry">
         <div className="name-form" style={{ marginBottom: 0 }}>
           <h2 style={{ fontSize: '1.4em' }}>Namen zuweisen</h2>
@@ -850,19 +1231,44 @@ function FrontendShowcase() {
 
       <Section title="Team-Name bearbeiten (Klick auf Überschrift)">
         <div className="team" style={{ minWidth: 220 }}>
-          <h2 className="team-name-editable" title="Zum Umbenennen klicken">Die Unbesiegbaren Adler</h2>
+          <TeamCardName team="team1" name="Die Unbesiegbaren Adler" />
         </div>
         <div className="team" style={{ minWidth: 220, marginTop: 12 }}>
           <input className="team-name-edit-input" defaultValue="Die Unbesiegbaren Adler" readOnly />
-          <p className="team-name-hint" role="status">
-            Name ist zu lang – wird im Punkte-Header auf kleineren Bildschirmen abgekürzt (mit 3 Jokern weniger Platz).
-          </p>
+          <p className="team-name-hint" role="status">{teamNameLongHint(3)}</p>
+        </div>
+      </Section>
+
+      {/* Four cards in the setup screen's own `#teams[data-team-count=4]`
+          grid: every heading gets ONE full-size line of height, and a name too
+          long for it is fitted into that same height at a smaller size by
+          `useFitTeamName` instead of being cut off (specs/team-management.md).
+          The member names use the wider 3-4 team scale. */}
+      <Section title="Vier Teams: lange Überschrift + Roster">
+        <div id="teams" data-team-count={4} style={{ marginTop: 0 }}>
+          {[
+            { name: 'Die absolut unbesiegbaren Adler vom Nordhang', members: ['Maxi', 'Mitch', 'Thomas'] },
+            { name: 'Donaudampfschifffahrtsgesellschaftskapitäne', members: ['Péter', 'Gerhard', 'Kathi'] },
+            { name: 'Isi allein zu Haus', members: ['Maus', 'Fabian Sp.', 'Carina'] },
+            { name: 'Team 4', members: ['Michael M.', 'Isabella', 'Bianca'] },
+          ].map(({ name, members }, i) => (
+            <div className="team" data-team={`team${i + 1}`} key={name}>
+              <TeamCardName team={`team${i + 1}` as TeamKey} name={name} />
+              <ul className="team-members team-members-editable">
+                {members.map(m => (
+                  <li className="team-member-row" key={m}>
+                    <input className="team-member-input" defaultValue={m} readOnly />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </div>
       </Section>
 
       <Section title="Team-Roster bearbeiten (inline)">
         <div className="team" style={{ minWidth: 260 }}>
-          <h2 className="team-name-editable" title="Zum Umbenennen klicken">Team 1</h2>
+          <TeamCardName team="team1" name="Team 1" />
           <ul className="team-members team-members-editable">
             <li className="team-member-row">
               <input className="team-member-input" defaultValue="Anna" readOnly />
@@ -877,17 +1283,92 @@ function FrontendShowcase() {
         </div>
       </Section>
 
-      <Section title="Team Cards">
+      {/* All FOUR cards carry `data-team`, because that is what the accent ring
+          hangs off: it resolves --team-color per team from the operator's colour,
+          else the theme's --team1-house … --team4-house. With only two cards here,
+          a theme's teams 3/4 accents were unverifiable. The panels of the theme
+          grid reset --teamN-color, so THIS section always shows the theme's own
+          house colours. See specs/themes.md and specs/team-colors.md. */}
+      <Section title="Team Cards (Haus-Akzente, 4 Teams)">
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-          <div className="team" style={{ flex: 1, minWidth: 180 }}>
-            <h2 style={{ fontSize: '1.2em' }}>Team 1</h2>
-            <p style={{ color: 'rgba(var(--text-rgb), max(0.7, var(--text-fade-floor, 0)))' }}>Anna, Ben, Clara</p>
-            <p style={{ fontSize: '1.5em', fontWeight: 700, marginTop: 8 }}>12 Punkte</p>
+          {[
+            { key: 'team1', name: 'Team 1', members: 'Anna, Ben, Clara', points: '12 Punkte' },
+            { key: 'team2', name: 'Team 2', members: 'David, Eva, Finn', points: '9 Punkte' },
+            { key: 'team3', name: 'Team 3', members: 'Greta, Hans, Ida', points: '7 Punkte' },
+            { key: 'team4', name: 'Team 4', members: 'Jonas, Klara, Lena', points: '4 Punkte' },
+          ].map(team => (
+            <div key={team.key} id={team.key} data-team={team.key} className="team" style={{ flex: 1, minWidth: 180 }}>
+              <h2 style={{ fontSize: '1.2em' }}>{team.name}</h2>
+              <p style={{ color: 'rgba(var(--text-rgb), max(0.7, var(--text-fade-floor, 0)))' }}>{team.members}</p>
+              <p style={{ fontSize: '1.5em', fontWeight: 700, marginTop: 8 }}>{team.points}</p>
+            </div>
+          ))}
+        </div>
+      </Section>
+
+      {/* Per-team colours. The colours are hardcoded and the wrapper carries
+          `.team-colors-on`, so the section renders the same in every theme and in
+          a screenshot regardless of whether the operator has the feature on.
+          Team 3 deliberately has NO colour, so the fallback to the theme's own
+          --team3-house (and to nothing, in a theme without one) is visible here
+          too. See specs/team-colors.md. */}
+      <Section title="Team-Farben (Akzent + Punkt)">
+        <div
+          className="team-colors-on"
+          style={{
+            '--team1-color': '#ff5d6c',
+            '--team2-color': '#4f8af0',
+            // `initial` (the guaranteed-invalid value), not "omitted": the
+            // operator's own --team3-color on <html> would otherwise inherit in
+            // and hide the theme-fallback case this row exists to show.
+            '--team3-color': 'initial',
+            '--team4-color': '#e0c918',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 16,
+          } as CSSProperties}
+        >
+          <header style={{ position: 'relative', animation: 'none' }}>
+            <div className="team-header-cell team-header-left" data-team="team1">
+              <span className="team-header-label">
+                <TeamDot team="team1" />
+                <span className="team-header-name">Team 1</span>
+                <span className="team-header-score">: <span>12</span> Punkte</span>
+              </span>
+            </div>
+            <div id="gameNumber">Spiel 3 von 8</div>
+            <div className="team-header-cell team-header-right" data-team="team2">
+              <span className="team-header-label">
+                <TeamDot team="team2" />
+                <span className="team-header-name">Team 2</span>
+                <span className="team-header-score">: <span>9</span> Punkte</span>
+              </span>
+            </div>
+          </header>
+          <div className="award-teams" data-team-count={4}>
+            {(['team1', 'team2', 'team3', 'team4'] as const).map((key, i) => (
+              <div
+                key={key}
+                data-team={key}
+                className={`award-team-card${i === 0 ? ' is-selected' : ''}`}
+              >
+                <span className="award-team-card-name">
+                  <TeamDot team={key} />
+                  Team {i + 1}
+                </span>
+                <span className="award-team-card-points">{i === 0 ? '+4 Punkte' : '0 Punkte'}</span>
+              </div>
+            ))}
           </div>
-          <div className="team" style={{ flex: 1, minWidth: 180 }}>
-            <h2 style={{ fontSize: '1.2em' }}>Team 2</h2>
-            <p style={{ color: 'rgba(var(--text-rgb), max(0.7, var(--text-fade-floor, 0)))' }}>David, Eva, Finn</p>
-            <p style={{ fontSize: '1.5em', fontWeight: 700, marginTop: 8 }}>9 Punkte</p>
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+            {(['team1', 'team2', 'team3', 'team4'] as const).map((key, i) => (
+              <div key={key} data-team={key} className="gm-joker-team" style={{ flex: 1, minWidth: 150 }}>
+                <div className="gm-joker-team-label">
+                  <span><TeamDot team={key} />Team {i + 1}</span>
+                  <span className="gm-joker-team-remaining">{i} / 3</span>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </Section>
@@ -907,6 +1388,23 @@ function FrontendShowcase() {
           >
             {GENERIC_JOKER_RULES.map((rule, i) => (
               <li key={i} style={{ padding: '6px 0', border: 'none' }}>{rule}</li>
+            ))}
+          </ul>
+        </div>
+      </Section>
+
+      <Section title="Siegerbildschirm mit großem Team">
+        {/* The real card is fixed and viewport-centred; here it is placed in the
+            flow so the theme is verifiable. Nine names show the balanced roster
+            grid (`memberColumns` → data-columns) — see specs/team-management.md. */}
+        <div
+          className="winner-announcement"
+          style={{ position: 'static', transform: 'none', animation: 'none', width: '100%', minWidth: 0, maxWidth: '100%' }}
+        >
+          <h1 style={{ fontSize: '2em', animation: 'none' }}>Die Rasenden Reporter hat gewonnen!</h1>
+          <ul className="winner-members" data-columns={3}>
+            {['Anna', 'Bernd', 'Christina', 'Dominik', 'Elena', 'Franz', 'Gabriele', 'Hannes', 'Isabella'].map(name => (
+              <li key={name} style={{ animation: 'none', opacity: 1 }}>{name}</li>
             ))}
           </ul>
         </div>
@@ -1003,11 +1501,11 @@ function HeaderJokersRowPreview({ heading, enabled, team1Used, team2Used, isLast
             <span className="team-header-name">Team 1</span>
             <span className="team-header-score">: <span>7</span> Punkte</span>
           </span>
-          <HeaderJokersPreviewRow team="team1" enabled={enabled} used={team1Used} lockedIds={team1Locked} />
+          <HeaderJokersPreviewRow side="left" enabled={enabled} used={team1Used} lockedIds={team1Locked} />
         </div>
         <div id="gameNumber">Spiel 3 von 8</div>
         <div className="team-header-cell team-header-right">
-          <HeaderJokersPreviewRow team="team2" enabled={enabled} used={team2Used} lockedIds={team2Locked} />
+          <HeaderJokersPreviewRow side="right" enabled={enabled} used={team2Used} lockedIds={team2Locked} />
           <span className="team-header-label">
             <span className="team-header-name">Team 2</span>
             <span className="team-header-score">: <span>5</span> Punkte</span>
@@ -1019,15 +1517,17 @@ function HeaderJokersRowPreview({ heading, enabled, team1Used, team2Used, isLast
 }
 
 interface HeaderJokersPreviewRowProps {
-  team: 'team1' | 'team2';
+  /** Which header half the cell sits in — drives the separator side + tooltip
+      direction, exactly as in `TeamJokers`. */
+  side: 'left' | 'right';
   enabled: string[];
   used: string[];
   lockedIds?: string[];
 }
 
-function HeaderJokersPreviewRow({ team, enabled, used, lockedIds = [] }: HeaderJokersPreviewRowProps) {
+function HeaderJokersPreviewRow({ side, enabled, used, lockedIds = [] }: HeaderJokersPreviewRowProps) {
   return (
-    <div className={`header-jokers header-jokers-${team}`} role="group" aria-label="Joker (Vorschau)">
+    <div className={`header-jokers header-jokers-${side}`} role="group" aria-label="Joker (Vorschau)">
       {enabled.map(id => {
         const def = getJoker(id);
         if (!def) return null;
@@ -1126,10 +1626,31 @@ function JobRowShowcase() {
 }
 
 const DEMO_PRESETS: RulesPreset[] = [
-  { id: 'demo-a', name: 'Gleichzeitig schriftlich', rules: ['Jede Frage wird beiden Teams gleichzeitig gestellt.', 'Die Teams schreiben ihre Antwort auf.'] },
-  { id: 'demo-b', name: 'Abwechselnd', rules: ['Die Teams raten abwechselnd.', 'Antwortet ein Team falsch oder nicht, darf das andere Team antworten.'] },
-  { id: 'demo-c', name: 'Gleichzeitig (erste richtige gewinnt)', rules: ['Beide Teams raten gleichzeitig.', 'Die erste richtige Antwort gewinnt.', 'Die Teams dürfen beliebig oft raten.'] },
+  {
+    id: 'demo-a',
+    name: 'Gleichzeitig schriftlich',
+    rules: ['Jede Frage wird beiden Teams gleichzeitig gestellt.', 'Die Teams schreiben ihre Antwort auf.'],
+    rulesSolo: ['Die Antwort wird aufgeschrieben.'],
+    rulesMulti: ['Jede Frage wird allen Teams gleichzeitig gestellt.', 'Die Teams schreiben ihre Antwort auf.'],
+  },
+  {
+    id: 'demo-b',
+    name: 'Abwechselnd',
+    rules: ['Die Teams raten abwechselnd.', 'Antwortet ein Team falsch oder nicht, darf das andere Team antworten.'],
+    rulesSolo: ['Pro Frage darf einmal geraten werden.'],
+    rulesMulti: ['Die Teams raten abwechselnd.', 'Antwortet ein Team falsch oder nicht, darf das nächste Team antworten.'],
+  },
+  {
+    id: 'demo-c',
+    name: 'Gleichzeitig (erste richtige gewinnt)',
+    rules: ['Beide Teams raten gleichzeitig.', 'Die erste richtige Antwort gewinnt.', 'Die Teams dürfen beliebig oft raten.'],
+    rulesSolo: ['Es darf beliebig oft geraten werden.'],
+    rulesMulti: ['Alle Teams raten gleichzeitig.', 'Die erste richtige Antwort gewinnt.', 'Die Teams dürfen beliebig oft raten.'],
+  },
 ];
+
+/** Team counts the showcase steps through, so every preset band is visible. */
+const DEMO_TEAM_COUNTS = [1, 2, 4];
 
 function LiveRulesEditorDemo() {
   const [rules, setRules] = useState<string[]>([
@@ -1141,7 +1662,23 @@ function LiveRulesEditorDemo() {
   const [activePresetId, setActivePresetId] = useState<string | undefined>(undefined);
   const [randomize, setRandomize] = useState(false);
   const [limit, setLimit] = useState<string>('');
+  // Preset rules are team-count-sensitive (specs/rules-presets.md); switching the count
+  // here shows the locked rows and the band note in all three bands.
+  const [teamCount, setTeamCount] = useState(2);
   return (
+    <>
+    <div className="be-preset-buttons" style={{ marginBottom: 8 }}>
+      {DEMO_TEAM_COUNTS.map(n => (
+        <button
+          key={n}
+          type="button"
+          className={`be-icon-btn${teamCount === n ? ' is-active' : ''}`}
+          onClick={() => setTeamCount(n)}
+        >
+          {n} {n === 1 ? 'Team' : 'Teams'}
+        </button>
+      ))}
+    </div>
     <RulesEditor
       rules={rules}
       onChange={setRules}
@@ -1149,6 +1686,7 @@ function LiveRulesEditorDemo() {
       presets={DEMO_PRESETS}
       activePresetId={activePresetId}
       onPresetChange={setActivePresetId}
+      teamCount={teamCount}
       extraCenter={
         <label className="be-toggle">
           <input type="checkbox" checked={randomize} onChange={e => setRandomize(e.target.checked)} />
@@ -1171,6 +1709,7 @@ function LiveRulesEditorDemo() {
         </label>
       }
     />
+    </>
   );
 }
 
@@ -1188,6 +1727,37 @@ function AdminShowcase() {
         <span className="section-title">Gameshows</span>
       </Section>
 
+      <Section title="Team-Farben (Farbwähler)">
+        <div className="backend-card">
+          <h3>Team-Farben</h3>
+          <p className="be-hint" style={{ marginTop: 0, marginBottom: 12 }}>
+            Leeres Feld = Farbe des aktiven Themes.
+          </p>
+          <div className="config-team-colors">
+            {[
+              { label: 'Farbe Team 1', value: '#ff5d6c' },
+              { label: 'Farbe Team 2', value: '#4f8af0' },
+              { label: 'Farbe Team 3 (leer)', value: '' },
+              { label: 'Farbe Team 4 (ungültig)', value: '#zzz' },
+            ].map(field => (
+              <div key={field.label}>
+                <label className="be-label">{field.label}</label>
+                <ColorPickerField
+                  allowEmpty
+                  value={field.value}
+                  placeholder="#rrggbb"
+                  aria-label={field.label}
+                  onChange={() => {}}
+                  onError={() => {}}
+                  onRemove={() => {}}
+                  removeTitle="Farbe entfernen (Farbe des Themes verwenden)"
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      </Section>
+
       <Section title="Cards & Forms">
         <div className="backend-card">
           <h3>Globale Einstellungen</h3>
@@ -1195,9 +1765,7 @@ function AdminShowcase() {
           <input className="be-input" defaultValue="Allgemeinwissen" readOnly />
           <label className="be-label">Team 1 Name (optional)</label>
           <input className="be-input" defaultValue="Die Unbesiegbaren Adler" readOnly />
-          <p className="be-field-hint" role="status">
-            Name ist zu lang – wird im Header auf kleineren Bildschirmen abgekürzt (mit 3 Jokern weniger Platz).
-          </p>
+          <p className="be-field-hint" role="status">{teamNameLongHint(3)}</p>
           <label className="be-label">Beschreibung</label>
           <textarea className="be-textarea" defaultValue="Ein kurzes Quiz..." readOnly style={{ minHeight: 50 }} />
           <label className="be-label">Spieltyp</label>
@@ -1527,33 +2095,165 @@ function AdminShowcase() {
         </div>
       </Section>
 
-      <Section title="Progress overlays (minimized)">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-start' }}>
+      <Section title="Progress overlays">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'flex-start' }}>
+          {/* One job — the row opens expanded, no group header */}
+          <div className="upload-progress-box progress-group">
+            <div className="progress-group-rows">
+              <div className="progress-row">
+                <div className="progress-row-head">
+                  <button type="button" className="progress-row-toggle">
+                    <span className="progress-row-chevron">▾</span>
+                    <span className="progress-row-label">YouTube: Interstellar — Main Theme</span>
+                    <span className="progress-row-detail">42 %</span>
+                  </button>
+                  <button type="button" className="upload-progress-minimize-btn">▬</button>
+                  <button type="button" className="progress-row-cancel">✕</button>
+                </div>
+                <div className="upload-progress-track progress-row-track">
+                  <div className="upload-progress-fill" style={{ width: '42%' }} />
+                </div>
+                <div className="progress-row-detail-block">
+                  <div className="upload-progress-phase">Audio wird von YouTube heruntergeladen…</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Three jobs — grouped, one row expanded, one failed */}
+          <div className="upload-progress-box progress-group">
+            <div className="progress-group-header">
+              <div className="progress-group-header-row">
+                <span className="progress-group-title">Aktivität · 3</span>
+                <span className="progress-group-summary">2 aktiv · 58 %</span>
+                <button type="button" className="upload-progress-minimize-btn">▬</button>
+              </div>
+              <div className="upload-progress-track">
+                <div className="upload-progress-fill" style={{ width: '58%' }} />
+              </div>
+            </div>
+            <div className="progress-group-rows">
+              <div className="progress-row">
+                <div className="progress-row-head">
+                  <button type="button" className="progress-row-toggle">
+                    <span className="progress-row-chevron">▸</span>
+                    <span className="progress-row-label">Upload: soundtrack-collection-2024.mp3</span>
+                    <span className="progress-row-detail">3 / 12</span>
+                  </button>
+                  <button type="button" className="progress-row-cancel">✕</button>
+                </div>
+                <div className="upload-progress-track progress-row-track">
+                  <div className="upload-progress-fill" style={{ width: '25%' }} />
+                </div>
+              </div>
+              <div className="progress-row">
+                <div className="progress-row-head">
+                  <button type="button" className="progress-row-toggle">
+                    <span className="progress-row-chevron">▾</span>
+                    <span className="progress-row-label">YouTube Playlist: Best of 80s</span>
+                    <span className="progress-row-detail">4 / 12</span>
+                  </button>
+                  <button type="button" className="progress-row-cancel">✕</button>
+                </div>
+                <div className="upload-progress-track progress-row-track">
+                  <div className="upload-progress-fill upload-progress-processing" style={{ width: '33%' }} />
+                </div>
+                <div className="progress-row-detail-block">
+                  <div className="progress-track-list">
+                    {[
+                      { n: '5', name: 'Take On Me — a-ha', w: '78%', cls: '' },
+                      { n: '6', name: 'Africa — Toto', w: '40%', cls: '' },
+                      { n: '~', name: 'Sweet Dreams — Eurythmics', w: '100%', cls: ' upload-progress-processing' },
+                    ].map((t, i) => (
+                      <div key={i} className="progress-track-row">
+                        <div className="progress-track-index">{t.n}</div>
+                        <div className="progress-track-body">
+                          <div className="progress-track-name">{t.name}</div>
+                          <div className="upload-progress-track progress-track-bar">
+                            <div className={`upload-progress-fill${t.cls}`} style={{ width: t.w }} />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="progress-row">
+                <div className="progress-row-head">
+                  <button type="button" className="progress-row-toggle">
+                    <span className="progress-row-chevron">▾</span>
+                    <span className="progress-row-label">YouTube: Ein privates Video</span>
+                    <span className="progress-row-detail">✕</span>
+                  </button>
+                  <button type="button" className="progress-row-cancel">✕</button>
+                </div>
+                <div className="upload-progress-track progress-row-track">
+                  <div className="upload-progress-fill upload-progress-error" style={{ width: '100%' }} />
+                </div>
+                <div className="progress-row-detail-block">
+                  <div className="progress-row-note progress-row-note--error">Video ist privat oder wurde entfernt</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Eight jobs — the row list scrolls instead of growing the panel */}
+          <div className="upload-progress-box progress-group">
+            <div className="progress-group-header">
+              <div className="progress-group-header-row">
+                <span className="progress-group-title">Aktivität · 8</span>
+                <span className="progress-group-summary">7 aktiv · 46 %</span>
+                <button type="button" className="upload-progress-minimize-btn">▬</button>
+              </div>
+              <div className="upload-progress-track">
+                <div className="upload-progress-fill" style={{ width: '46%' }} />
+              </div>
+            </div>
+            <div className="progress-group-rows">
+              {[
+                { name: 'Arrival — On the Nature of Daylight', d: '✓', w: '100%', cls: ' upload-progress-done' },
+                { name: 'Interstellar — Main Theme', d: '42 %', w: '42%', cls: '' },
+                { name: 'Dune — Paul’s Dream', d: '71 %', w: '71%', cls: '' },
+                { name: 'Blade Runner 2049 — Sea Wall', d: '', w: '100%', cls: ' upload-progress-resolving' },
+                { name: 'Inception — Time', d: '18 %', w: '18%', cls: '' },
+                { name: 'The Grand Budapest Hotel — Mr. Moustafa', d: '55 %', w: '55%', cls: '' },
+                { name: 'Gladiator — Now We Are Free', d: '', w: '100%', cls: ' upload-progress-processing' },
+                { name: 'Amélie — Comptine d’un autre été', d: '9 %', w: '9%', cls: '' },
+              ].map((r, i) => (
+                <div key={i} className="progress-row">
+                  <div className="progress-row-head">
+                    <button type="button" className="progress-row-toggle">
+                      <span className="progress-row-chevron">▸</span>
+                      <span className="progress-row-label">YouTube: {r.name}</span>
+                      <span className="progress-row-detail">{r.d}</span>
+                    </button>
+                    <button type="button" className="progress-row-cancel">✕</button>
+                  </div>
+                  <div className="upload-progress-track progress-row-track">
+                    <div className={`upload-progress-fill${r.cls}`} style={{ width: r.w }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Whole group collapsed */}
           <div className="upload-progress-minimized" style={{ pointerEvents: 'none' }}>
             <div className="upload-progress-minimized-row">
-              <span className="upload-progress-minimized-label">YouTube Playlist: Demo Songs</span>
-              <span className="upload-progress-minimized-detail">4 / 12</span>
+              <span className="upload-progress-minimized-label">Aktivität</span>
+              <span className="upload-progress-minimized-detail">3 aktiv · 58 %</span>
             </div>
             <div className="upload-progress-track">
-              <div className="upload-progress-fill" style={{ width: '33%' }} />
+              <div className="upload-progress-fill" style={{ width: '58%' }} />
             </div>
           </div>
           <div className="upload-progress-minimized" style={{ pointerEvents: 'none' }}>
             <div className="upload-progress-minimized-row">
-              <span className="upload-progress-minimized-label">Upload: song-42.mp3</span>
-              <span className="upload-progress-minimized-detail">12 / 12</span>
+              <span className="upload-progress-minimized-label">Aktivität</span>
+              <span className="upload-progress-minimized-detail">✓ 4 fertig</span>
             </div>
             <div className="upload-progress-track">
               <div className="upload-progress-fill upload-progress-done" style={{ width: '100%' }} />
-            </div>
-          </div>
-          <div className="upload-progress-minimized" style={{ pointerEvents: 'none' }}>
-            <div className="upload-progress-minimized-row">
-              <span className="upload-progress-minimized-label">Audio Covers</span>
-              <span className="upload-progress-minimized-detail">✕</span>
-            </div>
-            <div className="upload-progress-track">
-              <div className="upload-progress-fill upload-progress-error" style={{ width: '60%' }} />
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1883,6 +2583,27 @@ function AdminShowcase() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <ConflictBanner what="Dieses Spiel" onReload={() => {}} onDismiss={() => {}} />
           <ConflictBanner what="Die Konfiguration" onReload={() => {}} onDismiss={() => {}} />
+        </div>
+      </Section>
+
+      <Section title="Speicher-Status (Admin-Shell)">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
+          <SaveStatusToast variant="saving" text="Speichern…" />
+          <SaveStatusToast variant="saved" text="✅ Gespeichert!" />
+          <SaveStatusToast
+            variant="offline"
+            text="Offline – Änderungen werden gespeichert, sobald die Verbindung zurück ist"
+          />
+          <SaveStatusToast
+            variant="retrying"
+            text="Speichern fehlgeschlagen – erneuter Versuch in 4 s"
+            action={{ label: 'Jetzt versuchen', onClick: () => {} }}
+          />
+          <SaveStatusToast
+            variant="error"
+            text="❌ Speichern fehlgeschlagen: invalid-config"
+            action={{ label: 'Erneut versuchen', onClick: () => {} }}
+          />
         </div>
       </Section>
 

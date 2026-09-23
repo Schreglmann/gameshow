@@ -12,6 +12,6 @@
     "outDir": "./dist/server",
     "declaration": true
   },
-  "include": ["server/**/*.ts", "src/types/**/*.ts"],
+  "include": ["server/**/*.ts", "src/types/**/*.ts", "src/utils/teams.ts", "src/utils/rulesPreset.ts", "src/data/gameTypeInfo.ts"],
   "exclude": ["node_modules"]
 }

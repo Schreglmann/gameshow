@@ -89,7 +89,7 @@ describe('Comeback-Joker — ×2 multiplier on award', () => {
     rules: ['R1'],
     totalQuestions: 3,
     pointSystemEnabled: true,
-    pointValue: 3,
+    currentIndex: 2,
     onNextGame: vi.fn(),
     children: vi.fn(() => <div data-testid="game-content" />),
   };
@@ -112,7 +112,7 @@ describe('Comeback-Joker — ×2 multiplier on award', () => {
     renderWrapper(<BaseGameWrapper {...baseProps} onAwardPoints={onAwardPoints} />);
     await advanceToGame();
     emitCmd('award-team1');
-    // pointValue 3 → doubled to 6 for the armed team.
+    // Game index 2 → 3 positional points, doubled to 6 for the armed team.
     expect(onAwardPoints).toHaveBeenCalledWith('team1', 6);
     await waitFor(() => expect(localStorage.getItem('doubleNextGame')).toBeNull());
   });

@@ -163,6 +163,8 @@
 
   --team1-house: #ff5d6c;
   --team2-house: #4f8af0;
+  --team3-house: #3ed79a;
+  --team4-house: #b57bff;
 
   --header-bg: rgba(9, 22, 56, 0.92);
   --header-border-bottom: 1px solid rgba(255, 212, 94, 0.5);
@@ -383,6 +385,8 @@
 
   --team1-house: #c22433;
   --team2-house: #2d5fc0;
+  --team3-house: #1a7a54;
+  --team4-house: #6b3fa0;
 
   --header-bg: rgba(247, 240, 221, 0.94);
   --header-border-bottom: 1px solid rgba(24, 48, 110, 0.5);
@@ -670,9 +674,11 @@
   --card-heading-from: #6b1d3a;   /* burgundy → bronze: reads on cream */
   --card-heading-to: #7a5c0a;
 
-  /* ── House-color team accents (consumed by #team1 / #team2 in layout.css) ── */
+  /* ── House-color team accents (consumed by #team1 … #team4 in layout.css) ── */
   --team1-house: #7f0909;         /* Gryffindor crimson */
   --team2-house: #1a472a;         /* Slytherin green */
+  --team3-house: #0e1a40;         /* Ravenclaw blue */
+  --team4-house: #7a5c0a;         /* Hufflepuff gold, darkened for parchment */
 
   /* ── Sticky header: dark night-sky banner (atmosphere must not bleed through
      the score header now that the cards are bright parchment) ── */
@@ -689,6 +695,12 @@
     radial-gradient(ellipse 120% 55% at 50% 100%, rgba(201, 162, 39, 0.10) 0%, transparent 55%),
     linear-gradient(to bottom, #0c0820 0%, #1c0b2e 45%, #2a0e3a 75%, #1a0820 100%);
   background-attachment: fixed;
+  /* `background-color` = this gradient's FINAL stop. Colour is not subject to
+     `background-attachment`, so it fills the whole box no matter what — it is what
+     keeps the area past a mis-painted fixed background from being bare canvas.
+     See the `@supports (-webkit-touch-callout: none)` block at the END of this
+     file, and specs/themes.md. */
+  background-color: #1a0820;
 }
 
 /* Harry Potter — ::before = night sky over the grounds: a pale moon (disc + soft halo,
@@ -1032,9 +1044,11 @@
   --card-heading-from: #7a1220;   /* dragon-crimson → bronze: reads on cream */
   --card-heading-to: #7a5c0a;
 
-  /* ── Team accents: Red Dragon / Blue Dragon (consumed by #team1 / #team2) ── */
+  /* ── Team accents: Red / Blue / Green / Gold Dragon (#team1 … #team4) ── */
   --team1-house: #7a1220;
   --team2-house: #1f3b52;
+  --team3-house: #1f4d2b;
+  --team4-house: #7a5c0a;
 
   /* ── Sticky header: opaque dark-stone banner (the busy lair must not bleed
      through the score header now that the cards are bright parchment) ── */
@@ -1376,7 +1390,7 @@
    panel with `data-theme="galaxia"` inside an `html[data-theme="retro"]`
    resolves its surface vars to the `var(..., default)` fallback (Galaxy
    glass look), instead of inheriting retro's opaque black from the ancestor. */
-[data-theme]:not([data-theme="retro"]):not([data-theme="minecraft"]):not([data-theme="classical-music"]):not([data-theme="modern-music"]):not([data-theme="movie-quiz"]):not([data-theme="harry-potter"]):not([data-theme="dnd"]):not([data-theme="atlas"]):not([data-theme="atlas-light"]) {
+[data-theme]:not([data-theme="retro"]):not([data-theme="minecraft"]):not([data-theme="classical-music"]):not([data-theme="modern-music"]):not([data-theme="movie-quiz"]):not([data-theme="harry-potter"]):not([data-theme="dnd"]):not([data-theme="atlas"]):not([data-theme="atlas-light"]):not([data-theme="pub-quiz"]) {
   --card-bg: initial;
   --card-border: initial;
   --card-shadow: initial;
@@ -1406,6 +1420,22 @@
   --card-heading-to: initial;
   --team1-house: initial;
   --team2-house: initial;
+  --team3-house: initial;
+  --team4-house: initial;
+}
+
+/* The operator's team colours live in <html>'s inline style and therefore inherit
+   into the showcase's nested theme panels, which would make every panel show the
+   same four colours and leave each THEME's house colours unverifiable — the whole
+   point of /theme-showcase. Reset them here (a declaration on the element beats an
+   inherited value) rather than in the chain above: that chain matches <html> too,
+   so listing --teamN-color there would silently wipe the operator's setting on
+   every theme it does not exclude. See specs/team-colors.md. */
+.theme-preview-panel {
+  --team1-color: initial;
+  --team2-color: initial;
+  --team3-color: initial;
+  --team4-color: initial;
 }
 
 /* Retro — CRT scanlines + slow horizontal scan sweep */
@@ -1502,6 +1532,12 @@
     /* Sky base — vertical gradient instead of the global 135deg sweep */
     linear-gradient(to bottom, #04001a 0%, #0c032a 50%, #1a0538 100%) center / 100% 100% no-repeat fixed;
   background-attachment: fixed;
+  /* `background-color` = this gradient's FINAL stop. Colour is not subject to
+     `background-attachment`, so it fills the whole box no matter what — it is what
+     keeps the area past a mis-painted fixed background from being bare canvas.
+     See the `@supports (-webkit-touch-callout: none)` block at the END of this
+     file, and specs/themes.md. */
+  background-color: #1a0538;
 }
 
 /* Retro — responsive simplification */
@@ -1962,7 +1998,7 @@
    Minecraft-only bandle-stars vars so they don't cascade into nested
    [data-theme] panels (showcase, admin-shell) — keeps other themes on the
    default behaviour (translucent glass header, inherited star font). */
-[data-theme]:not([data-theme="minecraft"]):not([data-theme="classical-music"]):not([data-theme="retro"]):not([data-theme="modern-music"]):not([data-theme="movie-quiz"]):not([data-theme="harry-potter"]):not([data-theme="dnd"]):not([data-theme="atlas"]):not([data-theme="atlas-light"]) {
+[data-theme]:not([data-theme="minecraft"]):not([data-theme="classical-music"]):not([data-theme="retro"]):not([data-theme="modern-music"]):not([data-theme="movie-quiz"]):not([data-theme="harry-potter"]):not([data-theme="dnd"]):not([data-theme="atlas"]):not([data-theme="atlas-light"]):not([data-theme="pub-quiz"]) {
   --header-bg: initial;
   --header-border-bottom: initial;
   --header-blur: initial;
@@ -1975,10 +2011,11 @@
 }
 
 /* Classical Music sets --card-entrance-animate to disable the panel fade-ins
-   on .quiz-container / .rules-container; reset it on every other theme so
-   nested showcase panels under [data-theme="classical-music"] don't inherit
-   the disabled value. */
-[data-theme]:not([data-theme="classical-music"]) {
+   on .quiz-container / .rules-container, Pub Quiz sets it to a scale-free
+   fadeIn (its dashed chalk border would crawl during scaleIn); reset it on
+   every other theme so nested showcase panels under those themes don't
+   inherit the override. */
+[data-theme]:not([data-theme="classical-music"]):not([data-theme="pub-quiz"]) {
   --card-entrance-animate: initial;
 }
 
@@ -2036,6 +2073,12 @@
   background:
     linear-gradient(to bottom, #4a85d8 0%, #6aa0e8 50%, #a5d0f8 100%) center / 100% 100% no-repeat fixed;
   background-attachment: fixed;
+  /* `background-color` = this gradient's FINAL stop. Colour is not subject to
+     `background-attachment`, so it fills the whole box no matter what — it is what
+     keeps the area past a mis-painted fixed background from being bare canvas.
+     See the `@supports (-webkit-touch-callout: none)` block at the END of this
+     file, and specs/themes.md. */
+  background-color: #a5d0f8;
 }
 
 /* Minecraft — responsive simplification */
@@ -2266,6 +2309,12 @@
   background:
     linear-gradient(to bottom, #f4ecd8 0%, #e8dcc0 50%, #d4c39e 100%) center / 100% 100% no-repeat fixed;
   background-attachment: fixed;
+  /* `background-color` = this gradient's FINAL stop. Colour is not subject to
+     `background-attachment`, so it fills the whole box no matter what — it is what
+     keeps the area past a mis-painted fixed background from being bare canvas.
+     See the `@supports (-webkit-touch-callout: none)` block at the END of this
+     file, and specs/themes.md. */
+  background-color: #d4c39e;
 }
 
 /* Classical Music — responsive simplification */
@@ -2642,6 +2691,12 @@
     /* Vertical near-black gradient with violet hint */
     linear-gradient(to bottom, #0a0a14 0%, #14091c 50%, #1a0a1f 100%);
   background-attachment: fixed;
+  /* `background-color` = this gradient's FINAL stop. Colour is not subject to
+     `background-attachment`, so it fills the whole box no matter what — it is what
+     keeps the area past a mis-painted fixed background from being bare canvas.
+     See the `@supports (-webkit-touch-callout: none)` block at the END of this
+     file, and specs/themes.md. */
+  background-color: #1a0a1f;
 }
 
 /* Modern Music — animation: every EQ bar pulses on its own rhythm
@@ -2893,6 +2948,12 @@
     /* Vertical near-black/crimson gradient */
     linear-gradient(to bottom, #0d0608 0%, #1a0a0d 55%, #0a0506 100%);
   background-attachment: fixed;
+  /* `background-color` = this gradient's FINAL stop. Colour is not subject to
+     `background-attachment`, so it fills the whole box no matter what — it is what
+     keeps the area past a mis-painted fixed background from being bare canvas.
+     See the `@supports (-webkit-touch-callout: none)` block at the END of this
+     file, and specs/themes.md. */
+  background-color: #0a0506;
 }
 
 /* Filme — warm searchlight beams rising from the bottom corners (::before).
@@ -3088,6 +3149,12 @@
 [data-theme="deepsea"] body {
   background: linear-gradient(to bottom, #04303f 0%, #021a26 55%, #010f17 100%);
   background-attachment: fixed;
+  /* `background-color` = this gradient's FINAL stop. Colour is not subject to
+     `background-attachment`, so it fills the whole box no matter what — it is what
+     keeps the area past a mis-painted fixed background from being bare canvas.
+     See the `@supports (-webkit-touch-callout: none)` block at the END of this
+     file, and specs/themes.md. */
+  background-color: #010f17;
   background-size: cover;
 }
 
@@ -3158,6 +3225,12 @@
 [data-theme="atlas"] body {
   background: radial-gradient(ellipse 120% 100% at 50% 8%, #163a82 0%, #0f1f44 48%, #081026 100%);
   background-attachment: fixed;
+  /* `background-color` = this gradient's FINAL stop. Colour is not subject to
+     `background-attachment`, so it fills the whole box no matter what — it is what
+     keeps the area past a mis-painted fixed background from being bare canvas.
+     See the `@supports (-webkit-touch-callout: none)` block at the END of this
+     file, and specs/themes.md. */
+  background-color: #081026;
 }
 
 /* Atlas — ::before = faint paper grain (tiled fractalNoise); no linework, no
@@ -3195,13 +3268,13 @@
 [data-theme="atlas"] .quiz-button.active:hover,
 [data-theme="atlas"] .next-game-button,
 [data-theme="atlas"] .next-game-button:hover,
-[data-theme="atlas"] .award-team-button.active,
+[data-theme="atlas"] .award-team-card.is-selected,
 [data-theme="atlas"] .bandle-track.revealed.active,
 [data-theme="atlas"] .bandle-track-hint.revealed.active,
 [data-theme="atlas"] .bandle-track-answer.hidden,
 [data-theme="atlas"] .bandle-track-answer.hidden:hover,
 [data-theme="atlas"] .bandle-track-answer.revealed,
-[data-theme="atlas"] .winner,
+[data-theme="atlas"] .guess-result-team.is-winner,
 [data-theme="atlas-light"] header div:hover,
 [data-theme="atlas-light"] header button,
 [data-theme="atlas-light"] header button:hover,
@@ -3211,14 +3284,24 @@
 [data-theme="atlas-light"] .quiz-button.active:hover,
 [data-theme="atlas-light"] .next-game-button,
 [data-theme="atlas-light"] .next-game-button:hover,
-[data-theme="atlas-light"] .award-team-button.active,
+[data-theme="atlas-light"] .award-team-card.is-selected,
 [data-theme="atlas-light"] .bandle-track.revealed.active,
 [data-theme="atlas-light"] .bandle-track-hint.revealed.active,
 [data-theme="atlas-light"] .bandle-track-answer.hidden,
 [data-theme="atlas-light"] .bandle-track-answer.hidden:hover,
 [data-theme="atlas-light"] .bandle-track-answer.revealed,
-[data-theme="atlas-light"] .winner {
+[data-theme="atlas-light"] .guess-result-team.is-winner {
   box-shadow: none;
+}
+/* …but `none` above would also drop the team-colour edge on exactly the two
+   states a host looks at most (the picked award card, the winning guess row), so
+   restore it at higher specificity. With team colours off this resolves to the
+   transparent no-op, i.e. the same thing as `none`. See specs/team-colors.md. */
+[data-theme="atlas"] .award-team-card.is-selected[data-team],
+[data-theme="atlas-light"] .award-team-card.is-selected[data-team],
+[data-theme="atlas"] .guess-result-team.is-winner[data-team],
+[data-theme="atlas-light"] .guess-result-team.is-winner[data-team] {
+  box-shadow: var(--team-edge-left) var(--team-color);
 }
 /* bandlePulse / bandleAnswerPulse animate box-shadow glow — kill them (the
    active track stays marked by its solid primary fill + border). */
@@ -3232,8 +3315,8 @@
 }
 /* Hardcoded ivory focus halo — use the theme's own crisp focus ring instead
    (the var resolves per-theme: gold ring on Atlas, navy ring on Atlas Light). */
-[data-theme="atlas"] .guess-input input:focus,
-[data-theme="atlas-light"] .guess-input input:focus {
+[data-theme="atlas"] .guess-field input:focus,
+[data-theme="atlas-light"] .guess-field input:focus {
   box-shadow: var(--input-focus-shadow);
 }
 
@@ -3252,6 +3335,12 @@
 [data-theme="atlas-light"] body {
   background: radial-gradient(ellipse 120% 100% at 50% 8%, #f8f2e2 0%, #efe6cf 48%, #e0d2ac 100%);
   background-attachment: fixed;
+  /* `background-color` = this gradient's FINAL stop. Colour is not subject to
+     `background-attachment`, so it fills the whole box no matter what — it is what
+     keeps the area past a mis-painted fixed background from being bare canvas.
+     See the `@supports (-webkit-touch-callout: none)` block at the END of this
+     file, and specs/themes.md. */
+  background-color: #e0d2ac;
 }
 
 /* Atlas Light — ::before = the SAME grain tile as Atlas. The SVG rect renders
@@ -3273,6 +3362,198 @@
   opacity: 1;
 }
 
+/* ── Theme: Pub Quiz — Kreidetafel & Kneipenabend ──
+   Slate-green chalkboard, chalk-white hand-written text, chalk-yellow
+   buttons with dark text, chalk-blue primary, pastel chalk success/error.
+   Opaque "lighter board" cards with a chalk-DASHED border, no blur, fully
+   static. Frontend-scoped: body / ::before (chalk dust) / ::after (wooden
+   frame + smudges + vignette) below. In the surface + header :not() chains.
+   Picked from a rendered three-way comparison (chalkboard / dark wood & brass /
+   light beer garden) — see specs/themes.md "Pub Quiz theme — design notes". */
+[data-theme="pub-quiz"] {
+  --font-primary: 'Patrick Hand', 'Segoe Print', 'Bradley Hand', cursive;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 999px;
+  --glass-blur: 0;
+  --glass-blur-heavy: 0;
+  --glass-opacity: 0.12;              /* cards are opaque; only gamemaster pills consume this */
+  --glass-border-opacity: 0.45;
+  --btn-text-transform: none;         /* hand-written caps read badly */
+  --btn-letter-spacing: 0.5px;
+  --btn-font-weight: 400;             /* Patrick Hand ships 400 only — no faux bold */
+  --btn-color: #1c2622;
+  --btn-glow: none;
+  --btn-glow-hover: none;
+  --bg-animate: none;
+  --orb-animate: none;
+  --entrance-animate: fadeInUp 0.6s ease-out;
+  /* Cards fade in WITHOUT the default scaleIn: a dashed border is re-laid
+     out on every size change, so a scaling card makes the chalk dashes crawl
+     along the edge. Reset to initial on other themes (see the
+     --card-entrance-animate :not() chain next to classical-music). */
+  --card-entrance-animate: fadeIn 0.5s ease-out;
+  --hover-lift: none;
+  --shadow-strength: 1;
+
+  --bg-gradient-from: #1c2622;
+  --bg-gradient-to: #121a16;
+  --bg-orb-1: rgba(242, 238, 226, 0);
+  --bg-orb-2: rgba(0, 0, 0, 0);
+
+  --glass-rgb: 242, 238, 226;
+
+  --text-primary: #f2eee2;
+  --text-rgb: 242, 238, 226;
+  --text-on-accent: #1c2622;
+  --text-heading-from: #f2d264;
+  --text-heading-to: #8dc0e8;
+
+  --accent-from: #f2d264;
+  --accent-to: #e0be48;
+  --accent-rgb: 224, 190, 72;
+  --accent-hover-from: #f7dd7e;
+  --accent-hover-to: #e9c95c;
+
+  /* Primary: chalk blue — darkened so page text riding on it reads 3.4/5.5:1 */
+  --primary-from: #4a84b8;
+  --primary-to: #33628f;
+  --primary-rgb: 74, 132, 184;
+  --primary-hover-from: #5a92c4;
+  --primary-hover-to: #3f76a8;
+
+  --success: #9fd8a8;
+  --success-from: #9fd8a8;
+  --success-to: #7cc48a;
+  --success-rgb: 159, 216, 168;
+  --success-alt-from: #9fd8a8;
+  --success-alt-to: #7cc48a;
+  --success-alt-rgb: 159, 216, 168;
+  --success-deep-from: #6fb57e;
+  --success-deep-to: #4f9d63;
+  --success-deep-rgb: 111, 181, 126;
+
+  --error: #f28b8b;
+  --error-rgb: 242, 139, 139;
+  --error-light: #f6a5a5;
+  --error-lighter: #fac4c4;
+  --error-deep-rgb: 214, 92, 92;
+  --error-banner-rgb: 242, 139, 139;
+
+  --gold: #f5d86b;
+  --gold-warm: #f9e394;
+  --gold-warm-rgb: 249, 227, 148;
+  --gold-glow-from: transparent;
+  --gold-glow-to: transparent;
+  --gold-team-label: rgba(249, 227, 148, 0.95);
+
+  --disabled-from: #8c9a92;
+  --disabled-to: #7d8a82;
+
+  --admin-accent: #f2d264;
+  --admin-accent-rgb: 242, 210, 100;
+  --admin-accent-deep: #e0be48;
+  --admin-accent-deep-rgb: 224, 190, 72;
+  --admin-accent-text: #f7dd7e;
+  --admin-accent-light: #f9e394;
+  --admin-sidebar-bg: rgba(16, 24, 20, 0.97);
+  --admin-input-bg: rgba(242, 238, 226, 0.06);
+  --admin-input-focus-bg: rgba(242, 238, 226, 0.10);
+  --admin-select-bg: #1c2622;
+  --admin-secondary-from: #4a84b8;
+  --admin-secondary-to: #33628f;
+  --admin-info-key: #8dc0e8;
+  --admin-msg-success: #9fd8a8;
+  --admin-msg-success-rgb: 159, 216, 168;
+  --admin-msg-error: #f28b8b;
+  --admin-msg-error-rgb: 242, 139, 139;
+
+  --sync-blue: #8dc0e8;
+  --download-purple: #e0be48;
+
+  /* Opt-in surface family: lighter board + chalk-dashed border */
+  --card-bg: #22302a;
+  --card-border: 2px dashed rgba(242, 238, 226, 0.55);
+  --card-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), inset 0 0 0 1px rgba(242, 238, 226, 0.06);
+  --card-backdrop-blur: 0px;
+  --input-border-color: rgba(242, 238, 226, 0.4);
+  --input-bg: rgba(0, 0, 0, 0.25);
+  --input-focus-border-color: #f2d264;
+  --input-focus-bg: rgba(0, 0, 0, 0.35);
+  --input-focus-shadow: 0 0 0 3px rgba(242, 210, 100, 0.25);
+
+  /* Opt-in header family: opaque board */
+  --header-bg: rgba(18, 26, 22, 0.94);
+  --header-border-bottom: 2px dashed rgba(242, 238, 226, 0.35);
+  --header-blur: 0px;
+
+  /* Answer reveal in CHALK YELLOW, not green: the board itself is green, so
+     green chalk text on its green tint has almost no hue contrast even though
+     it clears the AA ratio. Same move as Atlas (gold). Action-success buttons
+     keep the green --success family, so "the answer" and "action succeeded"
+     stay distinct. No !important needed — pub-quiz is in the card-token
+     :not() allowlist, so the reset never touches this. */
+  --card-success: #f2d264;
+  --card-success-rgb: 242, 210, 100;
+}
+
+[data-theme="pub-quiz"] body {
+  background: radial-gradient(ellipse 120% 100% at 50% 10%, #22302a 0%, #1c2622 45%, #121a16 100%);
+  background-attachment: fixed;
+  background-color: #121a16;
+}
+/* chalk dust — the Atlas grain tile; light specks read as chalk residue */
+[data-theme="pub-quiz"]::before {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='atlasGrain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23atlasGrain)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 180px 180px;
+  opacity: 0.12;
+}
+/* wooden frame (4 bevelled 14px bars) + two erased-chalk smudges + vignette. Static. */
+[data-theme="pub-quiz"]::after {
+  opacity: 1;
+  /* The frame is a physical object in front of the board, so it has to paint OVER
+     the content — the shared html::after sits at z-index 0, i.e. behind `main`
+     (z-index 1), which left the bars covered by anything that reached the edge.
+     Still below the sticky header (z-index 100), so the header stays fully
+     visible and the frame reads as starting underneath it. Scoped to this theme:
+     the other themes' atmosphere layers belong behind the content.
+     `pointer-events: none` on the base rule keeps it click-through.
+
+     `top` starts the frame BELOW the sticky header (--header-h, published by
+     `useHeaderHeightVar`; 0 on screens that have no header), so the top bar is
+     visible instead of hidden behind it and the content area is closed off on
+     all four sides. */
+  top: var(--header-h, 0px);
+  z-index: 50;
+  background:
+    linear-gradient(90deg,  #8a5a2e 0, #6b4423 3px, #5a3818 11px, #3a2410 14px),
+    linear-gradient(270deg, #8a5a2e 0, #6b4423 3px, #5a3818 11px, #3a2410 14px),
+    linear-gradient(180deg, #8a5a2e 0, #6b4423 3px, #5a3818 11px, #3a2410 14px),
+    linear-gradient(0deg,   #8a5a2e 0, #6b4423 3px, #5a3818 11px, #3a2410 14px),
+    radial-gradient(ellipse 38% 16% at 28% 62%, rgba(242, 238, 226, 0.055) 0%, transparent 70%),
+    radial-gradient(ellipse 30% 12% at 70% 30%, rgba(242, 238, 226, 0.045) 0%, transparent 70%),
+    radial-gradient(ellipse 82% 82% at 50% 45%, transparent 55%, rgba(0, 0, 0, 0.35) 100%);
+  background-size: 14px 100%, 14px 100%, 100% 14px, 100% 14px, 100% 100%, 100% 100%, 100% 100%;
+  background-position: left top, right top, left top, left bottom, center, center, center;
+  background-repeat: no-repeat;
+}
+@media (max-width: 576px) {
+  /* phones: drop the frame, keep smudge + vignette */
+  [data-theme="pub-quiz"]::after {
+    /* No frame here, so back behind the content: a full-viewport vignette over
+       the content is only wanted as part of the frame. */
+    z-index: 0;
+    background:
+      radial-gradient(ellipse 38% 16% at 28% 62%, rgba(242, 238, 226, 0.055) 0%, transparent 70%),
+      radial-gradient(ellipse 82% 82% at 50% 45%, transparent 55%, rgba(0, 0, 0, 0.35) 100%);
+    background-size: 100% 100%;
+    background-position: center;
+    background-repeat: no-repeat;
+  }
+}
 
 .theme-preview-panel::before,
 .theme-preview-panel::after {
@@ -3367,5 +3648,113 @@ html.theme-reload-pulse body::after {
   45%  { filter: brightness(0.06); }
   55%  { filter: brightness(0.06); }
   100% { filter: brightness(1); }
+}
+
+/* ── iOS / iPadOS: `background-attachment: fixed` must degrade to `scroll` ──
+
+   iOS WebKit does not implement a fixed-attachment background as a
+   viewport-anchored layer. It paints ONE tile anchored at the document origin,
+   sized to the viewport, that does not follow the scroll — so on any page taller
+   than `100vh` the background simply stops at document y = 100vh, and from there
+   down only `background-color` shows. Measured on an iPad: with the page scrolled
+   275px, the cut appeared 757px down a ~1030px viewport — i.e. exactly at the
+   document's 100vh line, not at the viewport's bottom edge.
+
+   That also rules out matching the cut with a colour. The seam falls wherever the
+   gradient happens to be at document y = 100vh, which is mid-gradient, not at its
+   final stop — the `background-color` twins above still can't be seamless there.
+   (They stay: they are what keeps the region below from being bare canvas, and
+   they are the fallback if this query ever stops matching.)
+
+   `@supports (-webkit-touch-callout: none)` is the standard iOS/iPadOS probe —
+   the property exists only in iOS WebKit, so desktop Safari, Chrome and Firefox
+   all skip this block and keep the intended parallax. Chrome and Firefox ON iOS
+   are WebKit too, and correctly match. Here the background falls back to
+   `scroll`: it is then sized and positioned against the root element's box — the
+   whole document — so it always covers, at the cost of a parallax iOS was never
+   actually delivering.
+
+   `[data-theme] body` matches the per-theme `[data-theme="…"] body` rules'
+   specificity exactly, so this block wins on source order — it MUST stay last in
+   this file. See specs/themes.md. */
+@supports (-webkit-touch-callout: none) {
+  [data-theme] body {
+    background-attachment: scroll;
+  }
+
+  /* Same reasoning for the two atmosphere layers. `html::before` / `html::after`
+     are `position: fixed`, i.e. viewport-anchored, and iOS mis-rasterises them on
+     a page taller than the viewport exactly as it does the fixed background —
+     leaving stale rectangles behind as the page scrolls. Re-anchor them to the
+     DOCUMENT instead: `html` becomes the containing block (it is `static` by
+     default, so an absolute child would otherwise resolve against the
+     viewport-sized initial containing block — the very thing being avoided), and
+     the layers stretch over its box, which is the full document.
+
+     Selected as `[data-theme]::before` rather than `html::before` so this also
+     out-specifies the per-theme `[data-theme="…"]::before` blocks, several of
+     which set `background: … fixed` inside a shorthand. */
+  html {
+    position: relative;
+  }
+
+  html[data-theme]::before,
+  html[data-theme]::after {
+    position: absolute;
+    inset: 0;
+    background-attachment: scroll;
+  }
+
+  /* ── The fake fixed background ──
+     Everything above stops the SEAM, but it leaves the background anchored to the
+     document, so it rescales whenever a panel expands and the page visibly
+     shifts. What is actually wanted is the original effect — a background that
+     stays put while the page scrolls — which is exactly what iOS refuses to do
+     with `position: fixed` or `background-attachment: fixed`.
+
+     `position: sticky` does it instead. iOS composites sticky correctly (it is
+     what every sticky header on the platform relies on), so a viewport-tall
+     sticky layer pinned at `top: 0` stays glued to the viewport for the whole
+     scroll. `height` and a matching negative `margin-bottom` cancel out, so it
+     occupies no space and the document keeps its natural height and its normal
+     scrolling.
+
+     `background: inherit` copies BODY's whole computed background onto it —
+     every theme's gradient and every decorative layer, with no per-theme
+     duplication — and the layer is exactly one viewport tall, so the percentage
+     and `vh` sizes inside those layers resolve exactly as they did against the
+     viewport. `background-attachment` is forced back to `scroll` because
+     `inherit` would otherwise carry the broken `fixed` in with it.
+
+     `z-index: -1` paints it above the canvas but beneath every in-flow box, so
+     it is a backdrop and nothing else has to change. `flex: 0 0 auto` because
+     base.css makes `body` a flex column and the layer must not be shrunk.
+
+     Deliberately LOW specificity: Harry Potter defines its own
+     `[data-theme="harry-potter"] body::before` lanterns, which win, so that
+     theme keeps its current behaviour rather than losing an atmosphere layer. */
+  body::before {
+    content: '';
+    display: block;
+    position: sticky;
+    top: 0;
+    z-index: -1;
+    flex: 0 0 auto;
+    height: 100vh;
+    margin-bottom: -100vh;
+    background: inherit;
+    background-attachment: scroll;
+    pointer-events: none;
+  }
+
+  /* The vignette is the one layer left that is sized as a proportion of a
+     document-tall box, so it alone would still rescale as the page grows. On the
+     Atlas themes it is a soft edge-darkening over a near-flat navy — dropping it
+     on iOS costs almost nothing and removes the last moving part. Other themes
+     keep theirs; see specs/themes.md. */
+  html[data-theme="atlas"]::after,
+  html[data-theme="atlas-light"]::after {
+    background: none;
+  }
 }
 /* hmr */

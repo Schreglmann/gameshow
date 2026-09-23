@@ -88,7 +88,7 @@ describe('QuestionScorePanel — visibility', () => {
   it('shows on the award-points screen (the review moment)', async () => {
     mockAnswer.current = { ...answerOn(undefined), screenLabel: 'Punktevergabe' };
     mockControls.current = { phase: 'points', gameIndex: 0 };
-    localStorage.setItem(TALLY_KEY, JSON.stringify({ '0': { '1': { team1: 1, team2: 0 } } }));
+    localStorage.setItem(TALLY_KEY, JSON.stringify({ '0': { '1': { team1: 1 } } }));
     renderGM();
     await waitFor(() => expect(panel()).not.toBeNull());
   });
@@ -148,7 +148,7 @@ describe('QuestionScorePanel — tally feed (normal games)', () => {
   it('marks a skipped question as "keine Wertung"', async () => {
     const user = userEvent.setup();
     localStorage.setItem(TALLY_KEY, JSON.stringify({
-      '0': { '1': { team1: 1, team2: 0 }, '3': { team1: 0, team2: 1 } },
+      '0': { '1': { team1: 1 }, '3': { team1: 0, team2: 1 } },
     }));
     renderGM();
     await expand(user);
@@ -162,7 +162,7 @@ describe('QuestionScorePanel — tally feed (normal games)', () => {
 
   it('corrects a forgotten question in place', async () => {
     const user = userEvent.setup();
-    localStorage.setItem(TALLY_KEY, JSON.stringify({ '0': { '1': { team1: 1, team2: 0 } } }));
+    localStorage.setItem(TALLY_KEY, JSON.stringify({ '0': { '1': { team1: 1 } } }));
     renderGM();
     await expand(user);
 
@@ -172,7 +172,7 @@ describe('QuestionScorePanel — tally feed (normal games)', () => {
     await user.click(screen.getByLabelText('Frage 2 Team 1 plus'));
 
     const stored = JSON.parse(localStorage.getItem(TALLY_KEY)!);
-    expect(stored['0']['2']).toEqual({ team1: 1, team2: 0 });
+    expect(stored['0']['2']).toEqual({ team1: 1 });
     // Only Frage 2 stopped being a gap; Frage 3 is still legitimately empty.
     expect(screen.getAllByText('keine Wertung')).toHaveLength(1);
     const empty = document.querySelectorAll('.gm-qscore-row--empty');
@@ -182,7 +182,7 @@ describe('QuestionScorePanel — tally feed (normal games)', () => {
 
   it('disables a row\'s − at zero', async () => {
     const user = userEvent.setup();
-    localStorage.setItem(TALLY_KEY, JSON.stringify({ '0': { '1': { team1: 1, team2: 0 } } }));
+    localStorage.setItem(TALLY_KEY, JSON.stringify({ '0': { '1': { team1: 1 } } }));
     renderGM();
     await expand(user);
 
@@ -192,7 +192,7 @@ describe('QuestionScorePanel — tally feed (normal games)', () => {
 
   it('keeps a later corrected row visible after navigating back', async () => {
     const user = userEvent.setup();
-    localStorage.setItem(TALLY_KEY, JSON.stringify({ '0': { '4': { team1: 1, team2: 0 } } }));
+    localStorage.setItem(TALLY_KEY, JSON.stringify({ '0': { '4': { team1: 1 } } }));
     mockAnswer.current = answerOn(2); // host stepped back to question 2
     renderGM();
     await expand(user);
@@ -203,7 +203,7 @@ describe('QuestionScorePanel — tally feed (normal games)', () => {
   it('surfaces the example and reserved buckets when they hold counts', async () => {
     const user = userEvent.setup();
     localStorage.setItem(TALLY_KEY, JSON.stringify({
-      '0': { '0': { team1: 1, team2: 0 }, '1': { team1: 1, team2: 0 }, none: { team1: 0, team2: 1 } },
+      '0': { '0': { team1: 1 }, '1': { team1: 1 }, none: { team1: 0, team2: 1 } },
     }));
     mockAnswer.current = answerOn(1);
     renderGM();
@@ -280,7 +280,7 @@ describe('QuestionScorePanel — score-log feed (inline-scored games)', () => {
 
   it('suppresses editing while the mirrored state is desynced', async () => {
     const user = userEvent.setup();
-    localStorage.setItem(TALLY_KEY, JSON.stringify({ '0': { '1': { team1: 1, team2: 0 } } }));
+    localStorage.setItem(TALLY_KEY, JSON.stringify({ '0': { '1': { team1: 1 } } }));
     // Answer card says "Startseite" while controls claim mid-game → desync banner.
     mockAnswer.current = { ...answerOn(1), screenLabel: 'Startseite' };
     mockControls.current = { phase: 'game', gameIndex: 0, hideCorrectTracker: false };

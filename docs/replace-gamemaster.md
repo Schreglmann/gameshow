@@ -17,8 +17,9 @@ It is the smallest of the three PWAs — two HTTP endpoints and a handful of Web
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| `GET` | `/api/settings` | Read enabled jokers, team randomization flag, global rules. |
+| `GET` | `/api/settings` | Read enabled jokers, team randomization flag, global rules, `teamColors` (per-team accent colours, empty when off). |
 | `GET` | `/api/game/:index` | Look up game metadata (mainly `title`, `totalQuestions`) when rendering answer cards. |
+| `GET` | `/api/run-of-show` | **Optional.** `{ games: [{ index, gameId, title, type, missing? }] }` — the active gameshow's running order. Fetch it if you render a run-of-show overview or offer jump-to-game; the WebSocket channels only ever tell you about the CURRENT game. See [specs/gamemaster-run-of-show.md](../specs/gamemaster-run-of-show.md). |
 
 That's it for HTTP. Everything else flows over WebSocket.
 
@@ -31,8 +32,8 @@ One socket at `/api/ws`. Wire format: `{ channel, data }`.
 | Channel | Cached? | Purpose |
 |---------|---------|---------|
 | `gamemaster-answer` | yes | Current answer card state pushed by the active show. |
-| `gamemaster-controls` | yes | Current control panel + phase + gameIndex pushed by the active show. |
-| `gamemaster-team-state` | yes | Team members, points, joker usage, and `scoreHistory` (scoring-undo audit log; ≤60 entries, each optionally carrying `gameIndex` + `questionNumber`). |
+| `gamemaster-controls` | yes | Current control panel + phase + gameIndex pushed by the active show. Also carries `pointsDisabled`: when true the playing game awards no points (0 teams, or a type the team count cannot score) — hide any per-question scoring breakdown, since `pointSystemEnabled` is resolved per game by `GET /api/game/:index` and you never fetch it. |
+| `gamemaster-team-state-v2` | yes | Team members, points, joker usage, and `scoreHistory` (scoring-undo audit log; ≤60 entries, each optionally carrying `gameIndex` + `questionNumber`). Teams 1-4; `team3`/`team4` only in a 3-4 team show. See specs/team-count.md. |
 | `gamemaster-question-tally` | yes | `{ [gameIndex]: { [questionKey]: { team1, team2 } } }` correct-answer tally, nested per question (`"0"` = example question, `"none"` = no question attributable). |
 | `music-state` | yes | **Optional.** `{ isPlaying, currentSong, currentTime, duration, volume }` — the active show's background-music snapshot (~1 Hz while playing). Subscribe to render a music remote-control player. See [specs/gamemaster-music-control.md](../specs/gamemaster-music-control.md). |
 | `content-changed` | no | **Optional.** `{ config?, theme?, games? }`. Subscribe if you fetch `GET /api/game/:index` / `GET /api/settings` directly and want those re-fetched live when config/games change on disk. |
@@ -44,7 +45,7 @@ One socket at `/api/ws`. Wire format: `{ channel, data }`.
 | Channel | Cached? | When to send |
 |---------|---------|--------------|
 | `gamemaster-command` | no | On every button tap or input submit. |
-| `gamemaster-team-state` | yes | On every local team/joker state mutation (incl. a scoring undo, which mutates points + `scoreHistory`). Bump `rev` to `(highest rev seen) + 1`, and mutate the LAST RECEIVED state — publishing a snapshot this device captured earlier reverts points everywhere. The server drops a write that doesn't beat its cached rev and returns the cached value instead. |
+| `gamemaster-team-state-v2` | yes | On every local team/joker state mutation (incl. a scoring undo, which mutates points + `scoreHistory`). Bump `rev` to `(highest rev seen) + 1`, and mutate the LAST RECEIVED state — publishing a snapshot this device captured earlier reverts points everywhere. The server drops a write that doesn't beat its cached rev and returns the cached value instead. |
 | `gamemaster-question-tally` | yes | On every local tally mutation. |
 | `show-hold` | yes | `{ active, message? }` when toggling the panic/pause hold overlay on the show. |
 | `music-command` | no | **Optional.** `{ action: 'toggle'\|'skip'\|'volume'\|'seek', value?, timestamp }` to control the active show's background music. `value` is 0–1 for `volume`/`seek`. Set `timestamp` to `Date.now()` (replay dedup). See [specs/gamemaster-music-control.md](../specs/gamemaster-music-control.md). |
@@ -72,6 +73,13 @@ interface GamemasterCommand {
 
 The show uses `timestamp` to de-duplicate replays. Always set it to `Date.now()` on send — never reuse a stale timestamp.
 
+Most `controlId`s come straight from the controls message. Four do not — they are
+navigation commands you can send unprompted, from any screen, to jump the show out of its
+linear order: `goto:home`, `goto:rules`, `goto:game-<index>` (index as served by
+`GET /api/run-of-show`) and `goto:summary`. Confirm before sending one: the show leaves the
+running game and restarts the target from its title screen. See
+[specs/gamemaster-run-of-show.md](../specs/gamemaster-run-of-show.md).
+
 ## Example: minimal flow
 
 ```ts
@@ -85,7 +93,7 @@ ws.addEventListener('message', (ev) => {
   switch (msg.channel) {
     case 'gamemaster-answer':    setAnswer(msg.data); break;
     case 'gamemaster-controls':  setControls(msg.data); break;
-    case 'gamemaster-team-state': setTeams(msg.data); break;
+    case 'gamemaster-team-state-v2': setTeams(msg.data); break;
     case 'gamemaster-question-tally': setTally(msg.data); break;
   }
 });
@@ -108,7 +116,7 @@ function sendCommand(controlId: string, value?: string | Record<string,string>) 
 - `info` — read-only text card. No interaction.
 - `nav` — implicit back/next navigation control. Respect `hideBack`.
 
-`data.phase` is one of `landing | rules | game | points`. Use it for contextual UI decisions. `data.gameIndex` is the 0-based game slot. `data.hideCorrectTracker` says whether to show the correct-answer counter bar (some game types track progress via points instead).
+`data.phase` is one of `landing | rules | game | points`. Use it for contextual UI decisions. `data.gameIndex` is the 0-based game slot. `data.hideCorrectTracker` says whether to show the correct-answer counter bar (some game types track progress via points instead). `data.tallyReadOnly` says the playing game fills that tally itself (guessing-game's automatic scoring) - render the counts, but leave out the editing controls.
 
 ## State persistence
 

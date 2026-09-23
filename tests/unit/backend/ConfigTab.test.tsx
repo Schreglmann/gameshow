@@ -1,11 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { ThemeProvider, THEMES, ADMIN_THEMES } from '@/context/ThemeContext';
 import ConfigTab from '@/components/backend/ConfigTab';
 import { GENERIC_JOKER_RULES } from '@/data/jokers';
+import { POINT_MODE_RULE_DEFAULTS } from '@/utils/pointMode';
+import { DEFAULT_TEAM_COLORS } from '@/utils/teamColors';
 import type { AppConfig } from '@/types/config';
+import { getStatus } from '@/services/saveQueue';
 
 function renderConfigTab() {
   return render(<MemoryRouter><ThemeProvider><ConfigTab /></ThemeProvider></MemoryRouter>);
@@ -18,6 +21,7 @@ const mockFetchGames = vi.fn();
 vi.mock('@/services/backendApi', () => ({
   fetchConfig: (...args: unknown[]) => mockFetchConfig(...args),
   saveConfig: (...args: unknown[]) => mockSaveConfig(...args),
+  saveConfigBeacon: vi.fn(),
   fetchGames: (...args: unknown[]) => mockFetchGames(...args),
 }));
 
@@ -118,6 +122,189 @@ describe('ConfigTab', () => {
     });
   });
 
+  it('renders "Punkte-Regel-Texte" card', async () => {
+    renderConfigTab();
+    await waitFor(() => {
+      expect(screen.getByText('Punkte-Regel-Texte')).toBeInTheDocument();
+    });
+  });
+
+  it('prefills every point-mode field with its built-in default when config has none', async () => {
+    renderConfigTab();
+    await waitFor(() => {
+      expect(screen.getByDisplayValue(POINT_MODE_RULE_DEFAULTS.positional)).toBeInTheDocument();
+      expect(screen.getByDisplayValue(POINT_MODE_RULE_DEFAULTS.flat)).toBeInTheDocument();
+      expect(screen.getByDisplayValue(POINT_MODE_RULE_DEFAULTS['per-correct-answer'])).toBeInTheDocument();
+    });
+  });
+
+  it('shows an existing pointModeRules override from config', async () => {
+    mockFetchConfig.mockResolvedValue({ ...sampleConfig, pointModeRules: { flat: 'Eigener Punkte-Text' } });
+    renderConfigTab();
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Eigener Punkte-Text')).toBeInTheDocument();
+    });
+  });
+
+  it('editing a Punkte-Regel-Text autosaves config.pointModeRules', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderConfigTab();
+    await waitFor(() => {
+      expect(screen.getByDisplayValue(POINT_MODE_RULE_DEFAULTS.flat)).toBeInTheDocument();
+    });
+
+    const input = screen.getByDisplayValue(POINT_MODE_RULE_DEFAULTS.flat);
+    await user.clear(input);
+    await user.type(input, 'Geänderter Punkte-Text');
+    act(() => { vi.advanceTimersByTime(800); });
+
+    await waitFor(() => {
+      expect(mockSaveConfig).toHaveBeenCalledWith(
+        expect.objectContaining({
+          pointModeRules: expect.objectContaining({ flat: 'Geänderter Punkte-Text' }),
+        })
+      );
+    });
+  });
+
+  // Global show title — see specs/show-title.md.
+  it('renders the show-title field with the default as placeholder', async () => {
+    renderConfigTab();
+    await waitFor(() => {
+      expect(screen.getByLabelText('Titel der Show')).toHaveAttribute('placeholder', 'Game Show');
+    });
+    expect(screen.getByLabelText('Titel der Show')).toHaveValue('');
+  });
+
+  it('shows the configured show title', async () => {
+    mockFetchConfig.mockResolvedValue({ ...sampleConfig, showTitle: 'Sommerfest Quiz' });
+    renderConfigTab();
+    await waitFor(() => {
+      expect(screen.getByLabelText('Titel der Show')).toHaveValue('Sommerfest Quiz');
+    });
+  });
+
+  it('editing the show title autosaves config.showTitle', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderConfigTab();
+    await waitFor(() => {
+      expect(screen.getByLabelText('Titel der Show')).toBeInTheDocument();
+    });
+
+    await user.type(screen.getByLabelText('Titel der Show'), 'Sommerfest');
+    act(() => { vi.advanceTimersByTime(800); });
+
+    await waitFor(() => {
+      expect(mockSaveConfig).toHaveBeenCalledWith(
+        expect.objectContaining({ showTitle: 'Sommerfest' })
+      );
+    });
+  });
+
+  // Per-team colours — see specs/team-colors.md.
+  it('prefills the four colour fields with the default palette', async () => {
+    renderConfigTab();
+    await waitFor(() => {
+      expect(screen.getByRole('checkbox', { name: 'Team-Farben' })).not.toBeChecked();
+    });
+    // Two inputs per team (the hidden native picker + the hex text field), both
+    // carrying the same accessible name.
+    expect(screen.getAllByLabelText('Farbe Team 1')[1]).toHaveValue(DEFAULT_TEAM_COLORS.team1);
+    expect(screen.getAllByLabelText('Farbe Team 4')[1]).toHaveValue(DEFAULT_TEAM_COLORS.team4);
+  });
+
+  it('flipping the Team-Farben toggle autosaves config.teamColorsEnabled', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderConfigTab();
+    await waitFor(() => {
+      expect(screen.getByRole('checkbox', { name: 'Team-Farben' })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('checkbox', { name: 'Team-Farben' }));
+
+    act(() => { vi.advanceTimersByTime(800); });
+
+    await waitFor(() => {
+      expect(mockSaveConfig).toHaveBeenCalledWith(
+        expect.objectContaining({ teamColorsEnabled: true })
+      );
+    }, { timeout: 5000 });
+  });
+
+  it('editing one colour persists only that team — the others stay absent', async () => {
+    // An untouched team must NOT be materialized: absent means "use the default",
+    // which is a different stored state from an explicit value.
+    //
+    // Driven through the native colour picker (the first of the field's two
+    // inputs), which commits inside its own onChange. The text field commits on
+    // BLUR instead, and under full-suite load the change event's state update
+    // had not always reached the draft by then, so blur committed the old value.
+    renderConfigTab();
+    await waitFor(() => {
+      expect(screen.getAllByLabelText('Farbe Team 2')[0]).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getAllByLabelText('Farbe Team 2')[0]!, {
+      target: { value: '#123456' },
+    });
+    act(() => { vi.advanceTimersByTime(800); });
+
+    await waitFor(() => {
+      expect(mockSaveConfig).toHaveBeenCalledWith(
+        expect.objectContaining({ teamColors: { team2: '#123456' } })
+      );
+    }, { timeout: 5000 });
+  });
+
+  it('clearing a colour stores an empty string, not an absent key', async () => {
+    // Blank is the operator's explicit "use the theme's colour" — deleting the
+    // key instead would silently restore the default palette entry.
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderConfigTab();
+    await waitFor(() => {
+      expect(screen.getAllByLabelText('Farbe Team 3')[1]).toBeInTheDocument();
+    });
+
+    const removeButtons = screen.getAllByTitle('Farbe entfernen (Farbe des Themes verwenden)');
+    await user.click(removeButtons[2]!);
+    act(() => { vi.advanceTimersByTime(800); });
+
+    await waitFor(() => {
+      expect(mockSaveConfig).toHaveBeenCalledWith(
+        expect.objectContaining({ teamColors: { team3: '' } })
+      );
+    }, { timeout: 5000 });
+  });
+
+  it('rejects an invalid hex with a German message and does not save it', async () => {
+    // REAL timers for this one. Nothing here waits on the save debounce — an
+    // invalid value must never reach the queue in the first place — and the
+    // fake clock actively gets in the way: it replaces the timers React's
+    // scheduler uses, so the field's draft never reached it before the blur and
+    // the handler committed the previous, VALID value with no error at all.
+    vi.useRealTimers();
+    renderConfigTab();
+    await waitFor(() => {
+      expect(screen.getAllByLabelText('Farbe Team 1')[1]).toBeInTheDocument();
+    });
+
+    const field = screen.getAllByLabelText('Farbe Team 1')[1]!;
+    fireEvent.change(field, { target: { value: '#nope' } });
+    await waitFor(() => expect(field).toHaveValue('#nope'));
+    fireEvent.blur(field);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Ungültiger Hex-Code "#nope" – bitte im Format #rrggbb eingeben.',
+    );
+    // Asserted on the VALUE rather than as "teamColors was never saved": the save
+    // queue is module-scoped, so a preceding test's debounced write can still land
+    // here and would make the broader negative assertion fail at random.
+    for (const [saved] of mockSaveConfig.mock.calls) {
+      expect((saved as AppConfig).teamColors?.team1).not.toBe('#nope');
+    }
+    expect(screen.getAllByLabelText('Farbe Team 1')[1]).toHaveValue(DEFAULT_TEAM_COLORS.team1);
+  });
+
   it('renders "Joker-Regeln" card', async () => {
     renderConfigTab();
     await waitFor(() => {
@@ -201,7 +388,10 @@ describe('ConfigTab', () => {
     expect(mockSaveConfig).not.toHaveBeenCalled();
   });
 
-  it('shows success toast after saving', async () => {
+  // The "Gespeichert" toast is owned by the shell's SaveStatusIndicator, not by this pane —
+  // it has to survive the pane unmounting. Here we only assert the write itself; the toast is
+  // covered in SaveStatusIndicator.test.tsx. See specs/admin-save-queue.md.
+  it('reaches idle once the debounced save lands', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderConfigTab();
     await waitFor(() => {
@@ -211,12 +401,15 @@ describe('ConfigTab', () => {
     await user.click(screen.getAllByRole('checkbox')[0]);
     act(() => { vi.advanceTimersByTime(800); });
 
-    await waitFor(() => {
-      expect(screen.getByText(/Config gespeichert/)).toBeInTheDocument();
-    });
+    await waitFor(() => expect(mockSaveConfig).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(getStatus().state).toBe('idle'));
+    expect(screen.queryByText(/gespeichert/i)).not.toBeInTheDocument();
   });
 
-  it('shows error toast when save fails', async () => {
+  // A failed save is no longer reported by a toast in this pane — the pane can be gone
+  // before the failure is known. The queue keeps the payload and retries it, and the
+  // admin shell's save-status pill reports the failure. See specs/admin-save-queue.md.
+  it('keeps retrying a failed save instead of dropping it', async () => {
     mockSaveConfig.mockRejectedValueOnce(new Error('Save error'));
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderConfigTab();
@@ -226,13 +419,16 @@ describe('ConfigTab', () => {
 
     await user.click(screen.getAllByRole('checkbox')[0]);
     act(() => { vi.advanceTimersByTime(800); });
+    await waitFor(() => expect(mockSaveConfig).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(getStatus().state).toBe('retrying'));
 
-    await waitFor(() => {
-      expect(screen.getByText(/Save error/)).toBeInTheDocument();
-    });
+    // First backoff step: 1s.
+    await act(async () => { vi.advanceTimersByTime(1000); });
+    await waitFor(() => expect(mockSaveConfig).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(getStatus().state).toBe('idle'));
   });
 
-  it('Gameshow theme selector renders all 12 themes', async () => {
+  it('Gameshow theme selector renders all 13 themes', async () => {
     const { container } = renderConfigTab();
     await waitFor(() => {
       expect(screen.getByText('Themes')).toBeInTheDocument();
@@ -241,7 +437,7 @@ describe('ConfigTab', () => {
     expect(selectors).toHaveLength(2);
     // First selector = Gameshow (frontend) → every theme available.
     expect(selectors[0].querySelectorAll('.theme-option')).toHaveLength(THEMES.length);
-    expect(THEMES.length).toBe(12);
+    expect(THEMES.length).toBe(13);
   });
 
   it('Admin theme selector renders only the curated admin subset', async () => {
@@ -259,7 +455,7 @@ describe('ConfigTab', () => {
     expect(adminText).toContain('Galaxia');
     expect(adminText).toContain('Tiefsee');
     expect(adminText).toContain('Enterprise');
-    for (const removed of ['Harry Potter', 'D&D', 'Retro', 'Minecraft', 'Classical Music', 'Modern Music', 'Filme']) {
+    for (const removed of ['Harry Potter', 'D&D', 'Retro', 'Minecraft', 'Classical Music', 'Modern Music', 'Filme', 'Pub Quiz']) {
       expect(adminText).not.toContain(removed);
     }
   });

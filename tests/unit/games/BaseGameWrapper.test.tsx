@@ -20,7 +20,6 @@ vi.mock('@/services/api', () => ({
 interface RenderOptions {
   pointSystemEnabled?: boolean;
   skipPointsScreen?: boolean;
-  pointValue?: number;
   rules?: string[];
   totalQuestions?: number;
   currentIndex?: number;
@@ -47,7 +46,6 @@ function renderWrapper(opts: RenderOptions = {}) {
             totalQuestions={opts.totalQuestions ?? 4}
             pointSystemEnabled={opts.pointSystemEnabled ?? true}
             currentIndex={opts.currentIndex ?? 2}
-            pointValue={opts.pointValue ?? 3}
             skipPointsScreen={opts.skipPointsScreen}
             resumeAtEnd={opts.resumeAtEnd}
             onRulesShow={opts.onRulesShow}
@@ -92,7 +90,6 @@ function renderFullscreenWrapper(media: FullscreenMedia | null, clickMedia?: Ful
             totalQuestions={4}
             pointSystemEnabled
             currentIndex={2}
-            pointValue={3}
             onAwardPoints={vi.fn()}
             onNextGame={vi.fn()}
           >
@@ -228,7 +225,7 @@ describe('BaseGameWrapper (shared game shell)', () => {
 
   it('shows AwardPoints after completion and awards the winner the point value', async () => {
     const user = userEvent.setup();
-    const { onAwardPoints, onNextGame } = renderWrapper({ pointValue: 3 });
+    const { onAwardPoints, onNextGame } = renderWrapper({ currentIndex: 2 });
     await waitFor(() => expect(screen.getByText('Testspiel')).toBeInTheDocument());
 
     pressArrowRight();
@@ -238,15 +235,16 @@ describe('BaseGameWrapper (shared game shell)', () => {
     await user.click(screen.getByText('Spiel beenden'));
     await waitFor(() => expect(screen.getByText('Punkte vergeben')).toBeInTheDocument());
 
-    await user.click(screen.getByRole('button', { name: 'Team 1' }));
+    await user.click(screen.getByRole('button', { name: /Team 1/ }));
+    await user.click(screen.getByRole('button', { name: 'Punkte vergeben & weiter' }));
     expect(onAwardPoints).toHaveBeenCalledTimes(1);
     expect(onAwardPoints).toHaveBeenCalledWith('team1', 3);
     expect(onNextGame).toHaveBeenCalledTimes(1);
   });
 
-  it('awards both teams on Unentschieden', async () => {
+  it('awards both teams when both are selected (draw)', async () => {
     const user = userEvent.setup();
-    const { onAwardPoints, onNextGame } = renderWrapper({ pointValue: 2 });
+    const { onAwardPoints, onNextGame } = renderWrapper({ currentIndex: 1 });
     await waitFor(() => expect(screen.getByText('Testspiel')).toBeInTheDocument());
 
     pressArrowRight();
@@ -255,7 +253,9 @@ describe('BaseGameWrapper (shared game shell)', () => {
     await user.click(screen.getByText('Spiel beenden'));
     await waitFor(() => expect(screen.getByText('Punkte vergeben')).toBeInTheDocument());
 
-    await user.click(screen.getByRole('button', { name: 'Unentschieden' }));
+    await user.click(screen.getByRole('button', { name: /Team 1/ }));
+    await user.click(screen.getByRole('button', { name: /Team 2/ }));
+    await user.click(screen.getByRole('button', { name: 'Punkte vergeben & weiter' }));
     expect(onAwardPoints).toHaveBeenCalledWith('team1', 2);
     expect(onAwardPoints).toHaveBeenCalledWith('team2', 2);
     expect(onNextGame).toHaveBeenCalledTimes(1);

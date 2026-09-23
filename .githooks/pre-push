@@ -1,5 +1,7 @@
 #!/bin/sh
-# Full sweep before code leaves the machine: validate + lint + both typechecks +
-# contracts:lint + the whole test suite. Runs once per push instead of once per
-# commit, which is what makes the scoped pre-commit safe.
-exec node scripts/verify-changed.cjs --full
+# Only the gate CI cannot run: `config.json` and `games/*.json` are git-crypt
+# encrypted in GitHub Actions, so the validator there sees ciphertext. Lint,
+# both typechecks, `contracts:lint` and the full test suite run in
+# `.github/workflows/ci.yml` on every push to every branch.
+# See AGENTS.md §7 (Verification).
+exec node --import tsx/esm validate-config.ts

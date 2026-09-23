@@ -74,3 +74,11 @@ Two selectable scoring modes (config `scoringMode`, default `standard`), chosen 
 - Team buzzers / timed betting
 - Showing both teams' bets on screen (the losing bet is never captured — teams write it on paper)
 - Tiebreaker logic for equal bets (the gamemaster simply picks a team)
+
+## Team count
+`standard` mode works with **1–4 teams** (plus 0, where it plays without scoring): the betting team
+is simply picked from however many are in play, and the GM control ids become `select-<teamKey>`.
+
+`transfer` mode is **2 teams only**. Its move is zero-sum against *the* opponent, which is undefined
+with three or more and impossible with one; at any other count the server serves the game
+`pointSystemEnabled: false` and it plays through without scoring. See [../team-count.md](../team-count.md).

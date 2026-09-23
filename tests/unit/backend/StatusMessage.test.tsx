@@ -60,6 +60,24 @@ describe('StatusMessage', () => {
     expect(screen.getByText('Second')).toBeInTheDocument();
   });
 
+  it('still dismisses an earlier toast after a newer message arrives', () => {
+    const { rerender } = render(<StatusMessage message={{ type: 'success', text: 'First' }} />);
+    act(() => { vi.advanceTimersByTime(1000); });
+    rerender(<StatusMessage message={{ type: 'error', text: 'Second' }} />);
+    act(() => { vi.advanceTimersByTime(1500); });
+    expect(screen.queryByText('First')).not.toBeInTheDocument();
+    expect(screen.getByText('Second')).toBeInTheDocument();
+  });
+
+  it('clears every pending dismiss timer on unmount', () => {
+    // Regression: timers surviving unmount fired setState after jsdom teardown
+    // in CI ("ReferenceError: window is not defined" attributed to GamesTab.test).
+    const { unmount } = render(<StatusMessage message={{ type: 'success', text: 'Bye' }} />);
+    expect(vi.getTimerCount()).toBeGreaterThan(0);
+    unmount();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it('renders toast in document.body via portal', () => {
     render(<StatusMessage message={{ type: 'success', text: 'Portal toast' }} />);
     const container = document.querySelector('.be-toast-container');

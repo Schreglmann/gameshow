@@ -30,7 +30,9 @@ Allow downloading audio from YouTube URLs directly in the AssetsTab, so the host
 - Screen / component affected: `AssetsTab`
 - Button placement: next to the existing upload area, only for audio categories
 - Modal: simple dialog with URL input, optional subfolder dropdown, and a submit button
-- During download: modal shows progress bar with phase label (Downloading… / Processing…)
+- During download: the modal closes and the job becomes a row in the shared progress overlay — label, percentage
+  and a bar, expanding to the phase label (Audio wird von YouTube heruntergeladen… / 🎵 Lautstärke wird
+  normalisiert…). See [admin-backend.md](admin-backend.md) "Progress overlays".
 - On success: modal closes, file list refreshes, brief success toast
 - On error: error message shown in the modal
 - Edge cases:

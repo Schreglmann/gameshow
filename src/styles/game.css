@@ -877,15 +877,29 @@
     letter-spacing: 1px;
 }
 
-.award-points-teams {
-    margin-bottom: 10px;
+.award-points-hint:has(+ .award-points-note) {
+    margin-bottom: 8px;
 }
 
-/* WerKenntMehr end-of-game reward screen. It renders directly inside the
-   BaseGameWrapper card (not a nested #awardPointsContainer, which would stack a
-   second card surface), so the bare <h2> + prompt + buttons carry no margins of
-   their own. This wrapper supplies the vertical rhythm — title, prompt, team
-   buttons — mirroring the shared AwardPoints spacing. */
+/* Guidance under the hint (wer-kennt-mehr's round tally). */
+.award-points-note {
+    font-size: 0.95em;
+    color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.55, var(--text-fade-floor, 0)));
+    margin-bottom: 30px;
+    letter-spacing: 0.5px;
+}
+
+/* Embedded in a game's own card (`inline`), where the host supplies the vertical
+   rhythm with a flex `gap` — the screen's own margins would add to it. */
+.wkm-summary .award-points-hint,
+.wkm-summary .award-points-note {
+    margin-bottom: 0;
+}
+
+/* WerKenntMehr end-of-game reward screen. It renders the shared award screen
+   `inline` — directly inside the BaseGameWrapper card, not a nested
+   #awardPointsContainer, which would stack a second card surface. This wrapper
+   supplies the vertical rhythm the bare elements then lack. */
 .wkm-summary {
     display: flex;
     flex-direction: column;
@@ -900,25 +914,99 @@
     color: var(--card-text, var(--text-primary));
 }
 
-.award-points-warning {
-    font-size: 0.85em;
-    color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.5, var(--text-fade-floor, 0)));
-    margin-top: 10px;
-    letter-spacing: 0.5px;
+/* Award screen: both teams as selectable result cards — same two-column shape as
+   guessing-game's own `.guess-result-teams`, so the numbers the audience just saw
+   carry over — followed by one confirm button. A card is a toggle: the host picks
+   the winner (or both, for a draw) and only then are the points spelled out. */
+.award-teams {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: clamp(10px, 2.5vw, 24px);
+    width: 100%;
+    margin-bottom: clamp(10px, 2vw, 20px);
 }
 
-.award-team-button {
+.award-team-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: clamp(4px, 1vw, 8px);
+    padding: clamp(12px, 2vw, 20px);
+    background: rgba(var(--card-text-rgb, var(--text-rgb)), 0.05);
+    border: 2px solid rgba(var(--card-text-rgb, var(--text-rgb)), 0.14);
+    border-radius: 15px;
+    animation: fadeIn 0.5s ease-out;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+    /* Team-colour edge (no-op unless the operator enabled team colours). Kept a
+       LEFT edge rather than a ring so it never reads as the gold selection
+       border below. See specs/team-colors.md. */
+    box-shadow: var(--team-edge-left) var(--team-color);
+}
+
+.award-team-card:hover {
+    border-color: rgba(var(--card-text-rgb, var(--text-rgb)), 0.3);
+    transform: translateY(-2px);
+}
+
+/* The `per-correct-answer` point mode: the card states the outcome instead of
+   offering a choice, so every press affordance is dropped. It is a <div> there,
+   so :hover/:focus-visible can't fire — this only removes the pointer cursor.
+   See specs/point-system.md. */
+.award-team-card.is-readonly {
+    cursor: default;
+}
+
+.award-team-card:focus-visible {
+    outline: 2px solid rgba(var(--card-text-rgb, var(--text-rgb)), 0.7);
+    outline-offset: 3px;
+}
+
+.award-team-card.is-selected {
+    background: rgba(var(--card-gold-rgb, var(--gold-warm-rgb)), 0.18);
+    border-color: rgba(var(--card-gold-rgb, var(--gold-warm-rgb)), 0.75);
+    /* The gold glow REPLACES the base rule's shadow, so the team edge has to be
+       re-appended here or picking a team would erase its colour. */
+    box-shadow: 0 8px 32px rgba(var(--card-gold-rgb, var(--gold-warm-rgb)), 0.25), var(--team-edge-left) var(--team-color);
+}
+
+.award-team-card-name {
+    font-size: clamp(0.85em, 1.8vw, 1.05em);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    text-align: center;
+    color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.7, var(--text-fade-floor, 0)));
+}
+
+.award-team-card-points {
+    font-family: var(--font-heading, var(--font-primary));
+    font-size: clamp(1.1em, 2.6vw, 1.5em);
+    font-weight: 700;
+    line-height: 1.2;
+    text-align: center;
+    color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.6, var(--text-fade-floor, 0)));
+}
+
+.award-team-card-count {
+    font-size: clamp(0.8em, 1.6vw, 1em);
+    font-weight: 500;
+    text-align: center;
+    color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.55, var(--text-fade-floor, 0)));
+}
+
+.award-team-card.is-selected .award-team-card-points {
+    color: var(--card-gold, var(--gold-warm));
+}
+
+.award-confirm {
     font-size: clamp(1em, 2.5vw, 1.4em);
     padding: clamp(14px, 2vw, 22px) clamp(24px, 4vw, 55px);
-    min-width: clamp(120px, 20vw, 170px);
 }
 
-.award-team-button.active {
-    background: linear-gradient(135deg, var(--success-from) 0%, var(--success-to) 100%);
-    box-shadow: 0 8px 30px rgba(var(--success-rgb), 0.7);
-}
-
-/* Aufholjoker ×2 badge on the armed team's award button. */
+/* Aufholjoker ×2 badge on the armed team's award card. */
 .award-double-badge {
     display: block;
     margin-top: 0.4em;
@@ -938,86 +1026,198 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 20px;
+    gap: clamp(16px, 3vw, 32px);
+    width: 100%;
 }
+
+/* Both teams guess the same number, so the two fields sit side by side — that
+   keeps the pair on screen next to the question audio player. */
+.guess-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: clamp(10px, 2.5vw, 28px);
+    width: 100%;
+    max-width: 720px;
+}
+
+.guess-field {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: clamp(8px, 1.5vw, 14px);
+    padding: clamp(12px, 2vw, 20px);
+    background: rgba(var(--card-text-rgb, var(--text-rgb)), 0.05);
+    border: 1px solid rgba(var(--card-text-rgb, var(--text-rgb)), 0.14);
+    border-radius: var(--radius-md, 15px);
+}
+
+.guess-field label {
+    font-size: clamp(0.9em, 2vw, 1.15em);
+    font-weight: 600;
+    line-height: 1.3;
+    text-align: center;
+    color: var(--card-text, var(--text-primary));
+}
+
+.guess-field input {
+    /* Bottom-aligned so both inputs line up even when one team's name wraps to
+       more lines than the other's (the grid stretches both cards). */
+    margin-top: auto;
+    width: 100%;
+    max-width: 220px;
+    padding: clamp(12px, 2vw, 18px);
+    font-size: clamp(1em, 2.5vw, 1.3em);
+    font-weight: 600;
+    text-align: center;
+    border-radius: 12px;
+    /* Surface + focus ring come from the shared `--input-*` tokens (see base.css); the
+       fallbacks are derived from the card's own text colour, which contrasts with the card
+       by definition — unlike `--glass-rgb`, which is the card's own tint. */
+    border: 2px solid var(--input-border-color, rgba(var(--card-text-rgb, var(--text-rgb)), 0.35));
+    background: var(--input-bg, rgba(var(--card-text-rgb, var(--text-rgb)), 0.08));
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    color: var(--card-text, var(--text-primary));
+    transition: all 0.3s ease;
+}
+
+.guess-field input:focus {
+    outline: none;
+    border-color: var(--input-focus-border-color, rgba(var(--card-text-rgb, var(--text-rgb)), 0.65));
+    background: var(--input-focus-bg, rgba(var(--card-text-rgb, var(--text-rgb)), 0.13));
+    box-shadow: var(--input-focus-shadow, 0 0 20px rgba(var(--card-text-rgb, var(--text-rgb)), 0.2));
+}
+
+/* Result: the answer on top, both teams side by side below it. The verdict is a
+   badge on the winning card instead of a separate banner — otherwise the
+   guesses end up sandwiched between two result blocks. */
+.guess-result {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: clamp(12px, 2vw, 20px);
+    width: 100%;
+}
+
+.guess-result-answer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: clamp(2px, 0.6vw, 6px);
+    width: 100%;
+    box-sizing: border-box;
+    padding: clamp(12px, 2vw, 22px) clamp(16px, 3vw, 40px);
+    background: rgba(var(--card-success-rgb, var(--success-rgb)), 0.1);
+    border: 2px solid rgba(var(--card-success-rgb, var(--success-rgb)), 0.3);
+    border-radius: 15px;
+    animation: fadeIn 0.5s ease-out;
+}
+
+.guess-result-label {
+    font-size: clamp(0.7em, 1.5vw, 0.9em);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.65, var(--text-fade-floor, 0)));
+}
+
+.guess-result-value {
+    font-family: var(--font-heading, var(--font-primary));
+    font-size: clamp(1.8em, 5vw, 3em);
+    font-weight: 700;
+    line-height: 1.1;
+    color: var(--card-success, var(--success));
+}
+
+.guess-result-teams {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: clamp(10px, 2.5vw, 24px);
+    width: 100%;
+}
+
+.guess-result-team {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: clamp(4px, 1vw, 8px);
+    padding: clamp(12px, 2vw, 20px);
+    background: rgba(var(--card-text-rgb, var(--text-rgb)), 0.05);
+    border: 2px solid rgba(var(--card-text-rgb, var(--text-rgb)), 0.14);
+    border-radius: 15px;
+    animation: fadeIn 0.5s ease-out;
+    transition: all 0.3s ease;
+    /* Team-colour edge — see the award cards above. */
+    box-shadow: var(--team-edge-left) var(--team-color);
+}
+
+.guess-result-team.is-winner {
+    background: rgba(var(--card-gold-rgb, var(--gold-warm-rgb)), 0.18);
+    border-color: rgba(var(--card-gold-rgb, var(--gold-warm-rgb)), 0.75);
+    box-shadow: 0 8px 32px rgba(var(--card-gold-rgb, var(--gold-warm-rgb)), 0.25), var(--team-edge-left) var(--team-color);
+}
+
+.guess-result-team-name {
+    font-size: clamp(0.85em, 1.8vw, 1.05em);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    text-align: center;
+    color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.7, var(--text-fade-floor, 0)));
+}
+
+.guess-result-guess {
+    font-family: var(--font-heading, var(--font-primary));
+    font-size: clamp(1.5em, 4vw, 2.2em);
+    font-weight: 700;
+    line-height: 1.1;
+    color: var(--card-text, var(--text-primary));
+}
+
+.guess-result-team.is-winner .guess-result-guess {
+    color: var(--card-gold, var(--gold-warm));
+}
+
+.guess-result-diff {
+    font-size: clamp(0.8em, 1.6vw, 1em);
+    font-weight: 500;
+    color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.6, var(--text-fade-floor, 0)));
+}
+
+/* Filled accent pill (same fill/ink pair as the buttons) — on themes where
+   success and gold are the same hue, the solid badge is what separates the
+   winning card from the answer card above it. */
+.guess-result-badge {
+    margin-top: clamp(2px, 0.8vw, 6px);
+    padding: 0.35em 1.1em;
+    border: none;
+    border-radius: 999px;
+    font-size: clamp(0.7em, 1.5vw, 0.9em);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    background: linear-gradient(135deg, var(--accent-from) 0%, var(--accent-to) 100%);
+    color: var(--btn-color);
+}
+
+.guess-result-badge.is-tie {
+    background: rgba(var(--card-text-rgb, var(--text-rgb)), 0.12);
+    color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.8, var(--text-fade-floor, 0)));
+    box-shadow: inset 0 0 0 1px rgba(var(--card-text-rgb, var(--text-rgb)), 0.3);
+}
+
+.guess-result .quiz-image {
+    margin: 0;
+}
+
+/* ── Betting input ──
+   Applied to the <input> itself by bet-quiz, final-quiz and wer-kennt-mehr
+   (together with `.betting-input`); it must stay below that rule in the
+   cascade. */
 
 .guess-input {
     margin-bottom: 40px;
     text-align: center;
-}
-
-.guess-input label {
-    display: block;
-    font-size: 1.2em;
-    color: var(--card-text, var(--text-primary));
-    margin-bottom: 20px;
-    font-weight: 600;
-}
-
-.guess-input input {
-    padding: 20px;
-    font-size: 1.2em;
-    border-radius: 15px;
-    border: 2px solid rgba(var(--glass-rgb), 0.3);
-    background: rgba(var(--glass-rgb), 0.1);
-    backdrop-filter: blur(10px);
-    color: var(--card-text, var(--text-primary));
-    width: 150px;
-    text-align: center;
-    transition: all 0.3s ease;
-}
-
-.guess-input input:focus {
-    outline: none;
-    border-color: rgba(var(--glass-rgb), 0.6);
-    background: rgba(var(--glass-rgb), 0.15);
-    box-shadow: 0 0 20px rgba(var(--glass-rgb), 0.2);
-}
-
-.result-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    width: 100%;
-    max-width: 900px;
-    margin: 15px auto;
-    padding: 20px;
-    background: rgba(var(--glass-rgb), 0.05);
-    border-radius: 15px;
-    border: 1px solid rgba(var(--glass-rgb), 0.1);
-    transition: all 0.3s ease;
-}
-
-.result-row:hover {
-    background: rgba(var(--glass-rgb), 0.1);
-    transform: translateX(5px);
-}
-
-.difference {
-    font-size: 1em;
-    color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.6, var(--text-fade-floor, 0)));
-    margin-left: 20px;
-    font-weight: 500;
-}
-
-.winner {
-    font-size: 1.8em;
-    color: var(--card-gold, var(--gold-warm));
-    font-weight: 700;
-    margin-top: 40px;
-    text-align: center;
-    background: rgba(var(--card-gold-rgb, var(--gold-warm-rgb)), 0.1);
-    backdrop-filter: blur(10px);
-    border: 2px solid rgba(var(--card-gold-rgb, var(--gold-warm-rgb)), 0.3);
-    padding: 30px;
-    border-radius: 20px;
-    box-shadow: 0 8px 32px rgba(var(--card-gold-rgb, var(--gold-warm-rgb)), 0.2);
-    animation: pulse 2s ease-in-out infinite;
-}
-
-.winner.centered {
-    text-align: center;
-    width: 100%;
 }
 
 /* ── Four Statements ── */
@@ -1399,6 +1599,206 @@ textarea {
     font-size: 10px;
 }
 
+/* ── City Compass ── */
+
+.city-compass-stage {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    /* Explicit width, not the shrink-to-fit an `align-items: center` column would
+     * give: the rose's own `width: 100%` needs a definite parent width, or the
+     * browser falls back to the 300px default width of a replaced element. */
+    width: 100%;
+    gap: clamp(6px, 1.2vw, 12px);
+    /* Deliberately tighter than the card's own rhythm: the crop already leaves a
+     * little air above and below the drawing, and on the stage the rose runs out of
+     * height before it runs out of width. */
+    margin: clamp(6px, 1.2vw, 12px) 0;
+}
+
+/* The rose has no background of its own — it sits directly on the card the theme
+ * draws. It inherits the card text color and every part paints with `currentColor`
+ * at its own opacity, so one token carries the whole drawing through every theme.
+ *
+ * The ratio of the crop `layoutCompass` measured arrives inline as `--compass-aspect`,
+ * and the rose is sized by width alone: the height it may take, times that ratio, is
+ * as wide as it may get. Both dimensions therefore always fit the drawing. The height
+ * needs a cap of its own because a question of short names crops to a nearly square
+ * box, which at full width would be so tall that the answer below it leaves the
+ * screen. `overflow: visible` is a guard — the crop estimates the text width, and a
+ * name a few units wider than estimated should spill rather than lose a letter.
+ *
+ * Type sizes are SVG user-space units set as attributes in CompassRose, not here: the
+ * crop is computed from them, so they have to be one number both sides agree on. That
+ * also means they need no breakpoints — the label keeps its share of the rose at every
+ * width, and cropping the box already makes the names on a phone about twice the size
+ * they were in the fixed one. */
+.compass-rose {
+    --compass-max-height: min(62vh, 780px);
+
+    width: 100%;
+    max-width: min(100%, calc(var(--compass-max-height) * var(--compass-aspect, 1.6)));
+    aspect-ratio: var(--compass-aspect, 1.6);
+    height: auto;
+    display: block;
+    overflow: visible;
+    color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.92, var(--text-fade-floor, 0)));
+}
+
+.compass-rose__grid line {
+    stroke: currentColor;
+    stroke-opacity: 0.16;
+    stroke-width: 2;
+}
+
+.compass-rose__ring {
+    fill: none;
+    stroke: currentColor;
+    stroke-opacity: 0.3;
+    stroke-width: 3;
+}
+
+.compass-rose__spoke {
+    stroke: currentColor;
+    stroke-opacity: 0.42;
+    stroke-width: 2.5;
+    /* One dash covering the whole spoke, so the draw-in can offset it out of view. */
+    stroke-dasharray: var(--compass-spoke-len, 300);
+}
+
+.compass-rose__dot {
+    fill: currentColor;
+    fill-opacity: 0.88;
+}
+
+.compass-rose__label {
+    fill: currentColor;
+    font-weight: 700;
+}
+
+.compass-rose__distance {
+    fill: currentColor;
+    fill-opacity: 0.62;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+}
+
+.compass-rose__center {
+    fill: currentColor;
+    fill-opacity: 0.14;
+    stroke: currentColor;
+    stroke-opacity: 0.5;
+    stroke-width: 3;
+}
+
+.compass-rose__unknown {
+    fill: currentColor;
+    font-weight: 800;
+}
+
+/* The solved center reuses the answer colour of `.quiz-answer`, so the reveal reads as
+ * the same event in both places. The fill is nearly opaque and the ring of spokes stops
+ * at its edge (see `centerInset` in cityCompass.ts): a translucent pill let all six
+ * spokes converge visibly through the name. */
+.compass-rose__pill {
+    fill: rgba(var(--card-success-rgb, var(--success-rgb)), 0.14);
+    stroke: rgba(var(--card-success-rgb, var(--success-rgb)), 0.85);
+    stroke-width: 4;
+}
+
+.compass-rose__solution {
+    fill: var(--card-success, var(--success));
+    font-weight: 800;
+    letter-spacing: 0.5px;
+}
+
+/* Same soft halo `.gm-answer-value` puts behind the gamemaster's answer — it lifts the
+ * name off the card without needing a second colour token. */
+.compass-rose__solved {
+    filter: drop-shadow(0 0 12px rgba(var(--card-success-rgb, var(--success-rgb)), 0.35));
+}
+
+.city-compass-progress {
+    font-size: clamp(0.9em, 1.5vw, 1.1em);
+    color: rgba(var(--card-text-rgb, var(--text-rgb)), 0.75);
+    letter-spacing: 0.5px;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Scoped override for the admin preview, which sits in a form column: the crop can be
+ * nearly square, and a preview as tall as the column is wide would push the fields it
+ * belongs to off the screen. */
+.compass-rose.compass-rose--fit {
+    --compass-max-height: 420px;
+}
+
+/* ── City Compass: drawing the constellation ──
+ * Each city arrives in turn — its spoke draws outward from the centre, the dot lands,
+ * the name fades in. The delays are per element, set in CompassRose. Every keyframe
+ * animates *from* a hidden state to the element's normal styling above, so when these
+ * animations do not run the rose is simply there, fully drawn. */
+
+@keyframes compass-spoke-in {
+    from { stroke-dashoffset: var(--compass-spoke-len, 300); }
+    to { stroke-dashoffset: 0; }
+}
+
+@keyframes compass-dot-in {
+    0% { transform: scale(0); }
+    65% { transform: scale(1.4); }
+    100% { transform: scale(1); }
+}
+
+@keyframes compass-label-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes compass-ring-in {
+    from { opacity: 0; transform: scale(0.86); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+.compass-rose__spoke {
+    animation: compass-spoke-in 380ms ease-out backwards;
+}
+
+.compass-rose__dot {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: compass-dot-in 260ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+}
+
+.compass-rose__label {
+    animation: compass-label-in 260ms ease-out backwards;
+}
+
+.compass-rose__ring,
+.compass-rose__grid {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: compass-ring-in 420ms ease-out backwards;
+}
+
+.compass-rose__hidden-center,
+.compass-rose__solved {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: compass-dot-in 320ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .compass-rose__spoke,
+    .compass-rose__dot,
+    .compass-rose__label,
+    .compass-rose__ring,
+    .compass-rose__grid,
+    .compass-rose__hidden-center,
+    .compass-rose__solved {
+        animation: none;
+    }
+}
+
 /* ── Video loading spinner ── */
 .video-loading-spinner {
     width: 48px;
@@ -1524,4 +1924,66 @@ textarea {
 
 .bet-quiz-host-hint--error {
     color: rgba(var(--error-deep-rgb, 239, 68, 68), 0.9);
+}
+
+/* ── Team names inside a game ──
+   A custom team name is free text and can be one long unbreakable word. Every
+   place a game prints one WRAPS it inside its own box — mid-word if it has to —
+   instead of letting it run past the card ("Tipp <44 letters>:" used to spill
+   across the neighbouring guess field). The header pill is the one surface that
+   cuts a name, and the long-name hint is measured there; so nothing here may
+   cut or overflow, or that hint would be lying about the game.
+   `min-width: 0`: these are flex/grid items, whose default `min-width: auto`
+   refuses to shrink below the longest word. See specs/team-management.md. */
+.guess-field label,
+.guess-result-team-name,
+.award-team-card-name,
+.judgment-group h3,
+.quizjagd-team-label,
+.bet-quiz-team-choice .quiz-button,
+.bet-quiz-team-members {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+}
+
+/* The team buttons of bet-quiz and wer-kennt-mehr used to ellipsize on one
+   line, which left "Donaudampfsch…" with nothing to say which team it was.
+   They wrap now; the row already gives every button its own equal column. */
+.bet-quiz-team-choice .quiz-button {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+}
+
+/* The colour dot before a name is inline content, and a long single-word name
+   does not fit beside it — so the browser breaks at the one real opportunity on
+   the line, right after the dot, and the dot sat alone on its own line with the
+   name underneath. As a FLEX sibling the dot keeps the first line and the name
+   wraps in the room next to it (the fix the home-screen card heading already
+   uses). `baseline` pins the dot to the first line of a wrapped name; the text
+   around it (e.g. "Tipp … :", "… ist dran") is one anonymous item, centred as
+   before. `overflow-wrap: anywhere` above is what lets that item shrink below
+   its longest word. */
+.guess-field label,
+.guess-result-team-name,
+.award-team-card-name,
+.judgment-group h3,
+.quizjagd-team-label,
+.bet-quiz-team-choice .quiz-button {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: baseline;
+    justify-content: center;
+    column-gap: 0.42em;
+}
+
+/* The gap replaces the dot's inline margin. */
+.guess-field label > .team-dot,
+.guess-result-team-name > .team-dot,
+.award-team-card-name > .team-dot,
+.judgment-group h3 > .team-dot,
+.quizjagd-team-label > .team-dot,
+.bet-quiz-team-choice .quiz-button > .team-dot {
+    margin-right: 0;
 }

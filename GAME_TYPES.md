@@ -2,6 +2,24 @@
 
 This document provides detailed information about each game type available in the gameshow system.
 
+## Team count
+
+A gameshow runs with **0–4 teams** (`GameshowConfig.teamCount`, default 2). Every type can be
+*played* at any count; most can also be *scored* at any count. Three scoring modes are narrower,
+because their mechanic needs a specific number of opponents:
+
+| Type / mode | Scorable at | Why |
+|---|---|---|
+| `bet-quiz` · `transfer` | 0, 2 | Zero-sum: the bet moves off *the* opponent |
+| `wer-kennt-mehr` · `count-penalty` | 0, 2 | Winner `+n` / loser `−n` is head-to-head |
+| `wer-kennt-mehr` · `count` | 0, 2–4 | "Who named more" needs at least one opponent |
+| `guessing-game` · `auto` | 0, 2–4 | "Closest guess" needs at least one opponent |
+| everything else | 0–4 | — |
+
+At an unsupported count the game still plays in full — the server just serves it
+`pointSystemEnabled: false`, so it never reaches an award — and the operator is warned in the admin
+and on the show's start screen. See [specs/team-count.md](specs/team-count.md).
+
 ---
 
 ## 1. Simple Quiz (`simple-quiz`)
@@ -251,6 +269,13 @@ Question fields match `simple-quiz` (image, audio, list, colors, timer, replaceI
     {
       "question": "Population of Tokyo (in millions)?",
       "answer": 37400000
+    },
+    {
+      "question": "„Dancing Queen“ — ABBA",
+      "answer": 1976,
+      "questionAudio": "/audio/ABBA/01 Dancing Queen.m4a",
+      "questionAudioStart": 42,
+      "answerImage": "/images/Audio-Covers/ABBA Gold.jpg"
     }
   ]
 }
@@ -260,13 +285,17 @@ Question fields match `simple-quiz` (image, audio, list, colors, timer, replaceI
 - Automatic number formatting (e.g., 1.000.000)
 - Calculates which team is closer
 - Displays both guesses and the correct answer
+- `scoringMode` (`"auto"` is the **default**, also when the field is absent; `"standard"` opts out): with automatic scoring the show counts the won questions itself (equidistant guesses count for both teams, the example question never counts). The award screen then opens with that team's card already selected (both on an equal count) and each card showing its won-question count, so one press books the positional points — and the host can still pick a different team before confirming. The gamemaster's per-question tally fills itself: the score boxes show the running standing and "Wertung pro Frage" lists every judged question, both read-only (no `+`/`−` at all — the show awards the points). Starting the game again from its title screen clears that standing, so a restart begins at 0–0. Set it in admin via the "Punktevergabe" dropdown
+- Optional `questionAudio`: auto-plays while the question is shown (with play/pause + restart controls, mirrored to the gamemaster) — e.g. "guess the release year of this song". Keeps playing through the result phase; stops on the next question
+- Optional `questionAudioStart` / `questionAudioEnd` / `questionAudioLoop`: trim the section that plays (same semantics as simple-quiz; pick the points on the waveform in admin)
+- Optional `answerImage`: shown after the reveal
 
 **How to Play**:
 1. Question is displayed
 2. Both teams enter their numerical guess
 3. Host submits both guesses
 4. System reveals which team was closer
-5. Host awards points to the winning team
+5. Host confirms the verdict the show already worked out — or, with `scoringMode: "standard"`, picks the winning team by hand
 
 ---
 
@@ -712,7 +741,7 @@ Both teams compete to name *more* of a given thing than the other team (e.g. "Ne
 
 Three **scoring modes** (config `scoringMode`, default `standard`):
 
-- **`standard`** (default — a **mid-show** game like any other): no points are awarded per round, but the gamemaster can record who named more each round ("Wer hatte mehr?" → Team 1 / Team 2 / Unentschieden); a running **round-win tally** is shown on the GM as scorekeeping guidance (the show frontend stays clean). After the last question a reward screen (Team 1 / Team 2 / Unentschieden) shows the tally and awards the **positional game points** (`currentIndex + 1`) to the team the host picks. Honors the **Aufholjoker** (×2 for the armed team), like every other positional-points game.
+- **`standard`** (default — a **mid-show** game like any other): no points are awarded per round, but the gamemaster can record who named more each round ("Wer hatte mehr?" → one toggle per team, several selected = a shared round); a running **round-win tally** is shown on the GM as scorekeeping guidance (the show frontend stays clean). After the last question a reward screen shows the tally and awards the **game's points** (whatever the gameshow's `pointMode` says) to the team(s) the host selects (several cards = a draw) and confirms — the shared award screen, rendered inside the game's card. Honors the **Aufholjoker** (×2 for the armed team), like every other award-screen game. It hides the correct-answer tracker, so under `per-correct-answer` it falls back to the positional value — see [specs/point-system.md](specs/point-system.md).
 - **`count`** (a **final** game): the team that named more wins the round and is awarded **points equal to that count** — so a strong round can swing the global score hard. A tie (both teams selected) splits the points (`floor(count / 2)` each).
 - **`count-penalty`** (a **final** game, high stakes): like `count`, but the losing team also **loses** that count (floored at 0). A tie changes nothing.
 
@@ -774,7 +803,7 @@ There is no correct answer in this game type, so **both example fields are optio
 3. The host advances to reveal the example answers
 4. The host toggles the **winning team** (selecting both teams = tie)
 5. **`count` mode:** the host enters the **higher count**; "Punkte vergeben" awards that count to the winner — a tie splits it (`floor(count / 2)` each) — and advances to the next round
-6. **`standard` mode:** no per-round scoring — each round is just reveal the answer and press forward to the next question. After the last question a reward screen appears and the host picks the overall winner (Team 1 / Team 2 / Unentschieden) to award the game's positional points (tie → both teams)
+6. **`standard` mode:** no per-round scoring — each round is just reveal the answer and press forward to the next question. After the last question a reward screen appears; the host selects the overall winner (or both cards for a tie — the recorded round wins are preselected) and confirms to award the game's positional points
 
 ---
 
@@ -828,6 +857,74 @@ Players see a **single random still frame** extracted at runtime from a video th
 ### Offline / NAS-only videos
 
 Videos often live only on the NAS, which may not be mounted at the live event. In the admin Zufallsbild editor, the **"Bilder herunterladen"** button prerenders **3 frame variants per question** to the local cache while the source is still reachable; a ✓ badge shows which questions are prepared, and clicking again refills them with fresh random frames. At show time the server always live-extracts when the source is reachable (so "Neues Bild" yields genuinely new frames); only when the source is unreachable does it serve the prerendered frames, and then the GM rotate cycles the 3 downloaded variants.
+
+---
+
+## 14. City Compass (`city-compass`)
+
+A hidden city sits at the center of a compass rose, and the named cities around it are placed at their **true geographic bearing** from it. Teams identify the center city from that constellation. Every neighbor sits on the same ring — distance is never encoded in the radius, and where it is shown at all it is written into the label, so the angles carry the puzzle.
+
+The rose is inline SVG drawn from coordinates in the game JSON, so it needs no map tiles and no network access at show time. When a question appears, the constellation draws itself: each spoke runs outward from the center, its dot lands, and the name fades in, one city after another and done inside a second.
+
+### Configuration Example
+
+```json
+{
+  "type": "city-compass",
+  "title": "Städte-Kompass",
+  "questions": [
+    {
+      "center": { "name": "Wien", "lat": 48.2085, "lon": 16.3721, "country": "AT" },
+      "neighbors": [
+        { "name": "Moskau", "lat": 55.7522, "lon": 37.6156, "country": "RU" },
+        { "name": "Berlin", "lat": 52.5244, "lon": 13.4105, "country": "DE" },
+        { "name": "Belgrad", "lat": 44.804, "lon": 20.4651, "country": "RS" },
+        { "name": "Budapest", "lat": 47.4984, "lon": 19.0404, "country": "HU" },
+        { "name": "Krems an der Donau", "lat": 48.4092, "lon": 15.6142, "country": "AT" }
+      ]
+    }
+  ]
+}
+```
+
+### Question Fields
+
+- **`center`** (required): The city teams have to name. Never rendered before the reveal
+- **`neighbors`** (required): 3–8 cities drawn around it. **The order is the reveal order**
+- **`question`** (optional): Prompt shown above the rose. Defaults to *"Welche Stadt liegt im Zentrum?"*
+- **`info`** (optional): Small-font subtitle above the question. Must not name the answer
+- **`answerImage`** (optional): Image shown alongside the answer on reveal
+- **`disabled`** (optional): Hide the question from playback
+
+A city is `{ name, lat, lon, country? }`. Coordinates are **stored**, not looked up at runtime — that keeps the city dataset out of the show bundle and makes the rose a pure function of the question, so an admin edit reaches a running show as soon as the new config arrives.
+
+### Instance Options
+
+- **`showDistances`** (optional, default `false`): Append the distance to each neighbor's name (`Linz · 180 km`). Left off, the bearing is the only clue — that is the intended puzzle, and switching distances on makes it easier
+- **`reveal`** (optional, default `"all"`): `"all"` shows the whole constellation at once; `"progressive"` starts with two neighbors and adds one per host advance. It starts at two because one city alone gives only a direction
+
+### Automatic Neighbor Selection
+
+The admin editor has an **Auto** button that fills the neighbor list from a curated dataset of about 3100 cities (`src/data/cities.generated.ts`). It runs in the browser, so it also works at an offline event.
+
+- Candidates lie **60–2000 km** from the center. Nearer than that is a suburb of the answer; further is outside the game's range
+- Prominence gates distance: capitals and cities above 300,000 inhabitants are eligible at any distance, cities above 150,000 up to 1200 km, and small towns only up to 350 km
+- One slot is reserved for a **regional town** rather than a capital — the hint that pins the region down, and the reason small Austrian and German towns are in the dataset at all. `Schwer` drops it
+- Picks are at least 25° apart in bearing, and the set spans a near and a far band
+- Population counts only weakly, so the largest cities do not take every slot: about 37 different cities show up across 20 re-rolls for one center
+- **Neu würfeln** re-rolls with a new seed; the same seed always gives the same selection
+
+Cities can also be searched and added by hand, and a city the dataset does not have can be entered with its own coordinates.
+
+### How to Play
+
+1. Question 0 is the **Beispiel** (practice) round; real rounds are labelled `Stadt N von M`
+2. Teams look at the constellation and write down which city they think sits in the middle
+3. With `reveal: "progressive"` the host advances to add one more neighbor at a time
+4. The host advances to reveal the answer: the `?` in the middle becomes the city name
+5. The host awards the round's points to the winning team via the standard point screen
+
+The gamemaster card shows the center city as the answer plus the full neighbor list, marking which cities the audience can already see.
 
 ---
 

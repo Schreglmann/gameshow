@@ -1,15 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import { isInactiveShowTab } from '@/services/showPresenceState';
+import { ALL_TEAM_KEYS, type TeamKey } from '@/utils/teams';
+
+/** Points per team, for however many teams are in play. */
+export type TeamPoints = Record<TeamKey, number>;
 
 export interface ScoreRevealResult {
-  /** Animating display value for team 1 (counts up/down toward the real total). */
-  team1: number;
-  /** Animating display value for team 2. */
-  team2: number;
+  /** Animating display values (count up/down toward the real totals), per team. */
+  points: TeamPoints;
   /**
-   * Increments on each genuine lead flip (one team overtakes the other).
-   * Establishing a lead from a tie, or settling into a tie, is NOT a flip.
-   * Consumers watch this to fire a "Führungswechsel!" banner + sting.
+   * Increments on each genuine lead flip — the SET of leading teams changed to a
+   * different set of teams. Establishing a lead from an all-tie, or settling
+   * into an all-tie, is NOT a flip. With two teams this is exactly the old rule
+   * (the sign of `team1 - team2` flipped). Consumers watch this to fire a
+   * "Führungswechsel!" banner + sting. See specs/score-reveal.md.
    */
   leadChangeKey: number;
 }
@@ -23,6 +27,22 @@ function prefersReducedMotion(): boolean {
 }
 
 /**
+ * Who is in front, as a stable, comparable string. `''` when every active team
+ * is level — a universal tie is "no leader", so moving out of it (or into it)
+ * never counts as a flip.
+ */
+function leaderSignature(points: TeamPoints, keys: readonly TeamKey[]): string {
+  if (keys.length === 0) return '';
+  const max = Math.max(...keys.map(k => points[k]));
+  const leaders = keys.filter(k => points[k] === max);
+  return leaders.length === keys.length ? '' : leaders.join(',');
+}
+
+function samePoints(a: TeamPoints, b: TeamPoints, keys: readonly TeamKey[]): boolean {
+  return keys.every(k => a[k] === b[k]);
+}
+
+/**
  * Presentational score-reveal: animates the displayed team totals from their
  * previous values to the current ones (count up AND down, so a corrected/undo
  * award animates back down), and signals a lead change. Purely derived — holds
@@ -31,24 +51,28 @@ function prefersReducedMotion(): boolean {
  * untouched, so the gamemaster is never slowed). Snaps instantly under
  * prefers-reduced-motion or on an inactive show tab. See specs/score-reveal.md.
  */
-export function useScoreReveal(team1: number, team2: number): ScoreRevealResult {
-  const [display, setDisplay] = useState({ team1, team2 });
+export function useScoreReveal(points: TeamPoints, keys: readonly TeamKey[]): ScoreRevealResult {
+  const [display, setDisplay] = useState<TeamPoints>(points);
   const [leadChangeKey, setLeadChangeKey] = useState(0);
-  const displayRef = useRef({ team1, team2 });
-  const prevTargetRef = useRef({ team1, team2 });
+  const displayRef = useRef<TeamPoints>(points);
+  const prevTargetRef = useRef<TeamPoints>(points);
   const rafRef = useRef<number | null>(null);
+
+  // The effect must re-run when any active total changes, but `points` is a
+  // fresh object every render — depend on the VALUES, not the reference, or the
+  // animation restarts on every unrelated re-render (background music re-renders
+  // the whole show tree ~10×/s).
+  const signature = ALL_TEAM_KEYS.map(k => points[k]).join(',');
+  const keySignature = keys.join(',');
 
   useEffect(() => {
     const prev = prevTargetRef.current;
-    const target = { team1, team2 };
-    if (prev.team1 === target.team1 && prev.team2 === target.team2) return;
+    const target = { ...points };
+    if (samePoints(prev, target, keys)) return;
 
-    // Lead flip: the leading team changed. Both diffs must be non-zero and of
-    // opposite sign — establishing a lead from a tie or settling to a tie is
-    // not a flip.
-    const prevDiff = prev.team1 - prev.team2;
-    const newDiff = target.team1 - target.team2;
-    if (Math.sign(prevDiff) !== 0 && Math.sign(newDiff) !== 0 && Math.sign(prevDiff) !== Math.sign(newDiff)) {
+    if (leaderSignature(prev, keys) !== leaderSignature(target, keys)
+      && leaderSignature(prev, keys) !== ''
+      && leaderSignature(target, keys) !== '') {
       setLeadChangeKey(k => k + 1);
     }
     prevTargetRef.current = target;
@@ -64,10 +88,10 @@ export function useScoreReveal(team1: number, team2: number): ScoreRevealResult 
     const step = (now: number) => {
       const t = Math.min(1, (now - startTime) / DURATION_MS);
       const ease = 1 - Math.pow(1 - t, 3); // easeOutCubic
-      const cur = {
-        team1: Math.round(start.team1 + (target.team1 - start.team1) * ease),
-        team2: Math.round(start.team2 + (target.team2 - start.team2) * ease),
-      };
+      const cur = { ...target };
+      for (const k of ALL_TEAM_KEYS) {
+        cur[k] = Math.round(start[k] + (target[k] - start[k]) * ease);
+      }
       displayRef.current = cur;
       setDisplay(cur);
       if (t < 1) {
@@ -83,7 +107,8 @@ export function useScoreReveal(team1: number, team2: number): ScoreRevealResult 
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [team1, team2]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signature, keySignature]);
 
-  return { team1: display.team1, team2: display.team2, leadChangeKey };
+  return { points: display, leadChangeKey };
 }

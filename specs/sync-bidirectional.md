@@ -161,7 +161,7 @@ After the NFC fix landed, a follow-up audit found additional sync-safety holes. 
 
 **Trash GC tolerates a stray `.trash` file** — `pruneTrash` now checks `statSync(trashDir).isDirectory()` before calling `readdirSync`. Pre-fix, an accidental file at `<base>/.trash` made `readdirSync` throw ENOTDIR; the generic `cannot read` warning masked the cause, and GC silently disabled itself.
 
-**Unique `runId` per run** — `makeRunId` appends a 4-character random suffix to the ISO timestamp (`2026-05-08T18-45-12-345Z-abcd`). Two sync runs starting in the same millisecond (e.g. the queue retry interval firing during a manual CLI sync) now get distinct trash folders, preserving the forensic mapping of "what was trashed by which run".
+**Unique `runId` per run** — `makeRunId` appends a 4-character random suffix to the ISO timestamp (`2026-05-08T18-45-12-345Z-abcd`). Two sync runs starting in the same millisecond (e.g. the queue retry interval firing during a manual CLI sync) now get distinct trash folders, preserving the forensic mapping of "what was trashed by which run". Within a single process the suffix is also guaranteed not to repeat for the same millisecond (the helper remembers the suffixes it issued for the current timestamp and redraws on a hit) — 36^4 is small enough that pure randomness collides in about 0.3% of 100-draw bursts, which made the CI test for it flaky. Across processes the random draw alone still applies.
 
 ### Trash-intent override (2026-05-18 follow-up)
 

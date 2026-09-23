@@ -31,6 +31,7 @@
     "whisper:download-model": "tsx scripts/whisper-download-model.ts",
     "upscaler:install": "tsx scripts/install-upscaler.ts",
     "generate:hp-spells": "tsx generate-hp-spells.ts",
+  "cities:generate": "tsx scripts/generate-city-dataset.ts",
     "bandle-sync": "node scripts/bandle-sync.cjs",
     "verify": "node scripts/verify-changed.cjs",
     "verify:staged": "node scripts/verify-changed.cjs --staged",
@@ -45,7 +46,7 @@
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc -b && tsc -p tsconfig.server.json --noEmit",
     "lint": "eslint .",
-    "contracts:lint": "npx @redocly/cli lint --config specs/api/redocly.yaml specs/api/openapi.yaml && npx @asyncapi/cli validate specs/api/asyncapi.yaml"
+    "contracts:lint": "npx @redocly/cli lint --config specs/api/redocly.yaml specs/api/openapi.yaml && npx --yes --package @asyncapi/cli@6.0.2 --package @asyncapi/studio@1.3.0 asyncapi validate specs/api/asyncapi.yaml"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.2.2",
@@ -83,6 +84,7 @@
     "@vitejs/plugin-react": "^4.3.4",
     "ajv": "^8.18.0",
     "ajv-formats": "^3.0.1",
+    "all-the-cities": "^3.1.0",
     "concurrently": "^9.1.0",
     "cross-env": "^10.1.0",
     "eslint": "^10.4.1",

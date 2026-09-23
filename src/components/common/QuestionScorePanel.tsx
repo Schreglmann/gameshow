@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { useGameContext } from '@/context/GameContext';
-import { teamName } from '@/utils/teamNames';
+import { teamName, hasNamedTeams } from '@/utils/teamNames';
 import { teamDisplayOrder } from '@/utils/teamOrder';
 import { buildTallyRows, buildPointRows, type BreakdownRow, type ScoreCell } from '@/utils/questionScores';
+import type { TeamKey } from '@/utils/teams';
+import TeamDot from './TeamDot';
 
 /**
  * Gamemaster per-question breakdown ("Wertung pro Frage"). Answers the question
@@ -41,14 +43,19 @@ export default function QuestionScorePanel({
 
   const scoredCount = rows.filter(r => r.hasData).length;
   // GM faces the crowd → mirror the frontend team order, like every other GM panel.
-  const order = teamDisplayOrder(state.teams.orderSwapped, true, state.settings.teamMirrorEnabled);
+  const order = teamDisplayOrder(
+    state.teams.orderSwapped,
+    true,
+    state.settings.teamMirrorEnabled,
+    state.settings.teamCount,
+  );
 
-  const update = (question: string, team: 'team1' | 'team2', delta: number) => {
+  const update = (question: string, team: TeamKey, delta: number) => {
     dispatch({ type: 'UPDATE_CORRECT_ANSWER', payload: { gameIndex, question, team, delta } });
   };
 
   return (
-    <div className={`gm-qscore${collapsed ? ' collapsed' : ''}`}>
+    <div className={`gm-qscore${collapsed ? ' collapsed' : ''}`} data-team-count={order.length}>
       <button
         type="button"
         className="gm-qscore-header"
@@ -71,8 +78,9 @@ export default function QuestionScorePanel({
           <div className="gm-qscore-row gm-qscore-row--head" aria-hidden="true">
             <span className="gm-qscore-label" />
             {order.map(team => (
-              <span key={team} className="gm-qscore-team">
-                {teamName(state.teams, team === 'team1' ? 1 : 2)}
+              <span key={team} className="gm-qscore-team" data-team={team}>
+                <TeamDot team={team} />
+                {hasNamedTeams(order.length) ? teamName(state.teams, team) : 'Punkte'}
               </span>
             ))}
           </div>
@@ -95,19 +103,19 @@ export default function QuestionScorePanel({
                       <button
                         type="button"
                         className="gm-btn gm-qscore-btn"
-                        aria-label={`${row.label} ${teamName(state.teams, team === 'team1' ? 1 : 2)} minus`}
-                        disabled={row[team].value === 0}
+                        aria-label={`${row.label} ${teamName(state.teams, team)} minus`}
+                        disabled={row.cells[team].value === 0}
                         onClick={() => update(row.key, team, -1)}
                       >
                         −
                       </button>
                     )}
-                    <Cell cell={row[team]} signed={inlineScored} />
+                    <Cell cell={row.cells[team]} signed={inlineScored} />
                     {row.editable && !readOnly && (
                       <button
                         type="button"
                         className="gm-btn gm-qscore-btn"
-                        aria-label={`${row.label} ${teamName(state.teams, team === 'team1' ? 1 : 2)} plus`}
+                        aria-label={`${row.label} ${teamName(state.teams, team)} plus`}
                         onClick={() => update(row.key, team, 1)}
                       >
                         +

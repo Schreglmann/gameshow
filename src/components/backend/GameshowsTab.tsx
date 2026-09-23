@@ -162,6 +162,7 @@ export default function GameshowsTab() {
           id={id}
           gameshow={gs}
           allGameshows={config.gameshows}
+          globalShowTitle={config.showTitle}
           activeGameshow={config.activeGameshow}
           isActive={config.activeGameshow === id}
           expanded={expandedIds.has(id)}

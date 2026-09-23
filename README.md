@@ -1,6 +1,6 @@
 # Gameshow
 
-A browser-based team quiz gameshow for live events. Two teams compete across multiple game rounds. The host controls the app from any device on the same network.
+A browser-based team quiz gameshow for live events. Up to four teams compete across multiple game rounds (or none at all, for a pure play-through). The host controls the app from any device on the same network.
 
 ---
 
@@ -21,7 +21,7 @@ A browser-based team quiz gameshow for live events. Two teams compete across mul
 
 ## How to Play
 
-Two teams compete across multiple rounds. The host drives the app — players just watch and answer.
+0–4 teams compete across multiple rounds — set per gameshow in the admin. The host drives the app — players just watch and answer.
 
 ### 1. Starting the Game
 
@@ -184,11 +184,15 @@ A fast-paced buzzer round. The host reads a question and taps the team that buzz
 
 The host picks a video; players see a **single random still frame** pulled from it and guess which movie/show it's from. The server extracts the frame live within a configurable time window (so it skips intros/outros) and automatically avoids near-black frames. If a frame is still bad, the gamemaster re-rolls it with one tap — and can pre-roll the next question's frame too.
 
+#### City Compass (Städte-Kompass)
+
+A compass rose with a `?` in the middle and named cities around it, each at the true compass bearing it has from the hidden city — Prague really is drawn north-west of Vienna, Budapest east of it. Teams work out which city is in the middle from those directions alone; the host can add the distance to each name to make it easier, or reveal the surrounding cities one at a time. Everything is drawn as SVG from coordinates in the game file, so it works with no network at all.
+
 ---
 
 ### 5. Awarding Points
 
-After most game types, the host sees a points screen. Click the winning team — or **Unentschieden** for a draw — to add the points and move to the next game.
+After most game types, the host sees a points screen with one card per team. Tap the winning team — or both, for a draw — and the card shows the points it would get; **Punkte vergeben & weiter** then books them and moves to the next game. Where the score is already known (the gamemaster's tally, or a game that scored itself) the winner is preselected, so it is one press.
 
 ![Award Points](./docs/screenshots/award-points.png)
 
@@ -244,3 +248,7 @@ Open `http://localhost:3000` — admin panel at `http://localhost:3000/admin`, g
 - [specs/](./specs/) — Feature specifications (including [admin-backend.md](./specs/admin-backend.md) for the `/admin` CMS)
 - [specs/api/](./specs/api/) — Formal API contracts (OpenAPI + AsyncAPI). Replace any PWA (show / admin / gamemaster) by implementing the contract for that zone.
 - [docs/replace-frontend.md](./docs/replace-frontend.md) / [replace-admin.md](./docs/replace-admin.md) / [replace-gamemaster.md](./docs/replace-gamemaster.md) — Per-zone drop-in replacement guides
+
+### Third-party data
+
+The city table behind the `city-compass` game type (`src/data/cities.generated.ts`) is derived from [GeoNames](https://www.geonames.org), licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), via the `all-the-cities` npm package. `scripts/generate-city-dataset.ts` filters it and applies German city names; run `npm run cities:generate` to rebuild it.

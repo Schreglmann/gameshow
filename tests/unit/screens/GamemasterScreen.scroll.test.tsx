@@ -23,6 +23,8 @@ vi.mock('@/services/api', () => ({
     globalRules: [],
     enabledJokers: [],
   }),
+  // GamemasterScreen renders RunOfShowPanel, which fetches the running order.
+  fetchRunOfShow: vi.fn().mockResolvedValue({ games: [] }),
   fetchTheme: vi.fn().mockResolvedValue({ frontend: 'galaxia', admin: 'galaxia' }),
   saveTheme: vi.fn().mockResolvedValue(undefined),
 }));

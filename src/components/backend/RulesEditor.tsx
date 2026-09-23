@@ -2,7 +2,8 @@ import { Fragment, useRef, useLayoutEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { RulesPreset } from '@/types/config';
 import { useDragReorder } from './useDragReorder';
-import { PLACEHOLDER_TASK_LINE } from '@/utils/rulesPreset';
+import { PLACEHOLDER_TASK_LINE, presetRulesForTeamCount, rulesTeamBand } from '@/utils/rulesPreset';
+import { DEFAULT_TEAM_COUNT } from '@/utils/teams';
 import { useConfirm } from './ConfirmContext';
 
 interface Props {
@@ -21,6 +22,12 @@ interface Props {
   activePresetId?: string;
   /** Click handler for preset buttons. Called with `undefined` when the active preset is clicked again. */
   onPresetChange?: (id: string | undefined) => void;
+  /**
+   * The active gameshow's effective team count. Decides which wording band of a linked
+   * preset is displayed, so the editor shows what the show will actually render rather
+   * than always the two-team text. See specs/rules-presets.md.
+   */
+  teamCount?: number;
 }
 
 export default function RulesEditor({
@@ -33,6 +40,7 @@ export default function RulesEditor({
   presets,
   activePresetId,
   onPresetChange,
+  teamCount = DEFAULT_TEAM_COUNT,
 }: Props) {
   const confirmDialog = useConfirm();
   const drag = useDragReorder(rules, onChange);
@@ -63,12 +71,21 @@ export default function RulesEditor({
   const activePreset = activePresetId && presets ? presets.find(p => p.id === activePresetId) : undefined;
   const hasPresets = presets && presets.length > 0;
 
+  // The band the linked preset resolves to for this show. `pair` is the historic
+  // wording and needs no explanation; the other two get a label so the author knows
+  // which variant is on screen.
+  const band = rulesTeamBand(teamCount);
+  const bandLabel = band === 'solo' ? 'Vorlagentext für 0–1 Teams'
+    : band === 'multi' ? 'Vorlagentext für 3–4 Teams'
+    : null;
+  const activePresetRules = activePreset ? presetRulesForTeamCount(activePreset, teamCount) : [];
+
   const visibleTaskLine = taskLine && activePreset ? (rules[0] ?? PLACEHOLDER_TASK_LINE) : null;
 
   // Spacers only appear in linked mode, and only when the linked rows are fewer than the
   // user's underlying custom rules. In free-form mode, the row count tracks `rules` exactly
   // so adding/removing rules leaves no residual space.
-  const linkedRowCount = activePreset ? 1 + activePreset.rules.length : 0;
+  const linkedRowCount = activePreset ? 1 + activePresetRules.length : 0;
   const spacerCount = activePreset ? Math.max(0, rules.length - linkedRowCount) : 0;
 
   return (
@@ -93,8 +110,9 @@ export default function RulesEditor({
             <span className="be-delete-btn-spacer" aria-hidden="true" />
           </div>
           <div className="be-rules-divider" />
+          {bandLabel && <div className="be-rules-band-note">{bandLabel}</div>}
           {/* Locked preset rows */}
-          {activePreset.rules.map((rule, i) => (
+          {activePresetRules.map((rule, i) => (
             <div key={`preset-${i}`} className="be-list-row be-rule-locked">
               <span className="drag-handle be-drag-disabled" aria-hidden="true">⠿</span>
               <div className="be-input be-rule-locked-text">{rule}</div>
@@ -191,7 +209,7 @@ export default function RulesEditor({
                 type="button"
                 className={`be-icon-btn${isActive ? ' is-active' : ''}`}
                 onClick={() => onPresetChange?.(isActive ? undefined : preset.id)}
-                title={preset.rules.join(' • ')}
+                title={presetRulesForTeamCount(preset, teamCount).join(' • ')}
               >
                 {preset.name}
               </button>

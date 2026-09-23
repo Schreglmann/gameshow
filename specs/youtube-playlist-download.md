@@ -11,8 +11,8 @@ Allow downloading an entire YouTube playlist as audio files, saving all tracks i
 - [ ] If the user selected a subfolder, the playlist folder is nested inside it
 - [ ] Each downloaded audio file is normalized (same pipeline as single-track downloads)
 - [ ] Files are named with playlist index prefix for correct sorting: `{index} - {title}.mp3`
-- [ ] Progress UI shows: playlist title, current track index/total, per-track download percentage
-- [ ] Processing phase shows per-track normalization progress
+- [x] Progress UI shows: playlist title, current track index/total, per-track download percentage
+- [x] Processing phase shows per-track normalization progress
 - [ ] Done phase shows total track count and playlist folder name
 - [ ] Single-video URLs continue to work exactly as before (no regression)
 - [ ] Playlist downloads are only supported for audio categories — videos category ignores playlist and downloads single video
@@ -33,18 +33,17 @@ Allow downloading an entire YouTube playlist as audio files, saving all tracks i
 - No new API endpoints — existing endpoint accepts new `playlist` field
 
 ## UI behaviour
-- Screen / component affected: `AdminScreen` (UploadOverlay), `AssetsTab` (modal)
+- Screen / component affected: `ProgressOverlay`, `AssetsTab` (modal)
 - YouTube modal: when a playlist URL is detected (audio categories only), the download button is replaced with two buttons: "Ganze Playlist" and "Einzelnes Video", with a hint text "Playlist erkannt — was soll heruntergeladen werden?"
 - For non-playlist URLs or videos category: modal unchanged (single "Herunterladen" button)
-- Progress overlay when playlist detected:
-  - Header: "YouTube Playlist: {playlistTitle}"
-  - Sub-label: "Track {trackIndex} von {trackCount}: {title}"
-  - Progress bar: per-track download percentage
-  - Phase labels:
-    - downloading: "Playlist wird heruntergeladen…"
-    - processing: "Lautstärke wird normalisiert ({trackIndex}/{trackCount})…"
-    - done: "Fertig — {trackCount} Tracks in '{playlistTitle}' gespeichert"
-- Single-video progress: unchanged
+- Progress overlay when playlist detected — one row in the shared progress panel (see
+  [admin-backend.md](admin-backend.md) "Progress overlays"):
+  - Row label: "YouTube Playlist: {playlistTitle}", status "{done} / {trackCount}"
+  - Row bar: share of tracks finished
+  - Expanding the row reveals the per-track list (title + own bar per track, still-running tracks only),
+    or "Playlist wird geladen…" / "Tracks werden vorbereitet…" before the tracks resolve
+  - done: "Fertig — {trackCount} Tracks in '{playlistTitle}' gespeichert"; an error shows its message in the row
+- Single-video progress: the same row, with a percentage instead of a track count
 
 ## Out of scope
 - Playlist download for videos category

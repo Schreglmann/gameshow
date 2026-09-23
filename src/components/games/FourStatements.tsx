@@ -10,6 +10,7 @@ import { safePlay } from '@/utils/safePlay';
 import { watchMediaLoad, MEDIA_SLOW_LOAD_MS } from '@/utils/mediaLoadTimeout';
 import { useMusicPlayer } from '@/context/MusicContext';
 import { fadeAudio } from '@/utils/fadeAudio';
+import { scrollToCardBottom } from '@/utils/scrollToCardAnchor';
 import BaseGameWrapper from './BaseGameWrapper';
 import { useFullscreen, useRegisterFullscreenMedia } from '@/context/FullscreenContext';
 import { useCoverUrl } from '@/context/AudioCoverMetaContext';
@@ -33,7 +34,6 @@ export default function FourStatements(props: GameComponentProps) {
       rules={config.rules || ['Errate die Lösung anhand von bis zu 4 Hinweisen.']}
       totalQuestions={totalQuestions}
       pointSystemEnabled={props.pointSystemEnabled}
-      pointValue={props.currentIndex + 1}
       currentIndex={props.currentIndex}
       onRulesShow={hasAudio ? () => music.fadeOut(2000) : undefined}
       onNextShow={
@@ -298,12 +298,8 @@ function CluesInner({ questions, order, resumeAtEnd, gameTitle, answerAudioRef, 
   useEffect(() => {
     if (revealedCount <= 0 || showAnswer) return;
     const timers: number[] = [];
-    const scrollToBottom = () => {
-      const target = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
-      window.scrollTo({ top: target, behavior: 'smooth' });
-    };
     [0, 80, 200].forEach(delay => {
-      timers.push(window.setTimeout(scrollToBottom, delay));
+      timers.push(window.setTimeout(scrollToCardBottom, delay));
     });
     return () => { timers.forEach(clearTimeout); };
   }, [revealedCount, showAnswer]);
@@ -311,15 +307,11 @@ function CluesInner({ questions, order, resumeAtEnd, gameTitle, answerAudioRef, 
   useEffect(() => {
     if (!showAnswer) return;
     // The image inside the answer may not have laid out yet when this effect
-    // fires, so the scrollHeight would be too small. Retry a handful of times
+    // fires, so the card height would be too small. Retry a handful of times
     // to cover the case where the image's intrinsic size arrives asynchronously.
     const timers: number[] = [];
-    const scrollToBottom = () => {
-      const target = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
-      window.scrollTo({ top: target, behavior: 'smooth' });
-    };
     [0, 80, 200, 500].forEach(delay => {
-      timers.push(window.setTimeout(scrollToBottom, delay));
+      timers.push(window.setTimeout(scrollToCardBottom, delay));
     });
     return () => { timers.forEach(clearTimeout); };
   }, [showAnswer, qKey]);
@@ -369,10 +361,7 @@ function CluesInner({ questions, order, resumeAtEnd, gameTitle, answerAudioRef, 
               className="quiz-image"
               style={{ marginTop: 'clamp(10px, 2vw, 16px)', cursor: 'pointer' }}
               onClick={() => openFullscreen({ type: 'image', src: q.answerImage! })}
-              onLoad={() => {
-                const target = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
-                window.scrollTo({ top: target, behavior: 'smooth' });
-              }}
+              onLoad={scrollToCardBottom}
             />
           )}
         </div>

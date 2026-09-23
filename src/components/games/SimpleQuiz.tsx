@@ -62,7 +62,6 @@ export default function SimpleQuiz(props: GameComponentProps) {
       rules={config.rules || ['Jede Frage wird gleichzeitig an die Teams gestellt.']}
       totalQuestions={totalQuestions}
       pointSystemEnabled={props.pointSystemEnabled}
-      pointValue={props.currentIndex + 1}
       currentIndex={props.currentIndex}
       onRulesShow={hasAudio ? () => music.fadeOut(2000) : undefined}
       onNextShow={handleNextShow}

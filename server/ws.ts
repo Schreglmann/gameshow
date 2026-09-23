@@ -15,9 +15,10 @@
  *   cache-started               — a segment encode has started
  *   cache-ready                 — a segment encode has finished
  *   gamemaster-answer           — game → gamemaster (current answer data); cached last-value
- *   gamemaster-controls         — game → gamemaster (controls + phase + gameIndex); cached last-value
+ *   gamemaster-controls         — game → gamemaster (controls + phase + gameIndex + tallyReadOnly);
+ *                                 cached last-value
  *   gamemaster-command          — gamemaster → game (control commands); ephemeral, NOT cached
- *   gamemaster-team-state       — any client → any client (team/joker state); cached last-value.
+ *   gamemaster-team-state-v2       — any client → any client (team/joker state); cached last-value.
  *                                 VERSION-GUARDED: relayed only when the payload's Lamport
  *                                 `rev` beats the cached one (decideTeamStateWrite); a rejected
  *                                 writer gets the cached value back so it converges. A `null`
@@ -62,7 +63,7 @@ export type WsChannel =
   | 'gamemaster-answer'
   | 'gamemaster-controls'
   | 'gamemaster-command'
-  | 'gamemaster-team-state'
+  | 'gamemaster-team-state-v2'
   | 'gamemaster-question-tally'
   | 'music-state'
   | 'music-command'
@@ -80,7 +81,7 @@ const CLIENT_WRITABLE: ReadonlySet<WsChannel> = new Set<WsChannel>([
   'gamemaster-answer',
   'gamemaster-controls',
   'gamemaster-command',
-  'gamemaster-team-state',
+  'gamemaster-team-state-v2',
   'gamemaster-question-tally',
   'music-state',
   'music-command',
@@ -91,7 +92,7 @@ const CLIENT_WRITABLE: ReadonlySet<WsChannel> = new Set<WsChannel>([
 const CACHED_CHANNELS: ReadonlySet<WsChannel> = new Set<WsChannel>([
   'gamemaster-answer',
   'gamemaster-controls',
-  'gamemaster-team-state',
+  'gamemaster-team-state-v2',
   'gamemaster-question-tally',
   'music-state',
   'gm-presence',
@@ -102,7 +103,7 @@ const CACHED_CHANNELS: ReadonlySet<WsChannel> = new Set<WsChannel>([
 // dropped server-side (echo-storm guard). Excludes answer/controls, which rely
 // on intentional identical re-emits for desync recovery. See handleClientMessage.
 const ECHO_DEDUP_CHANNELS: ReadonlySet<WsChannel> = new Set<WsChannel>([
-  'gamemaster-team-state',
+  'gamemaster-team-state-v2',
   'gamemaster-question-tally',
 ]);
 
@@ -171,7 +172,7 @@ export function decideShowRegister(slotOccupied: boolean, ownerId: string | null
 }
 
 /**
- * Lamport `rev` carried by a `gamemaster-team-state` payload. Missing or
+ * Lamport `rev` carried by a `gamemaster-team-state-v2` payload. Missing or
  * malformed counts as 0, so a client that predates the field can still make its
  * very first write into an empty cache but can never outrank a live show.
  */
@@ -348,7 +349,7 @@ function handleClientMessage(origin: WebSocket, raw: unknown): void {
     // An explicit `null` payload is the cache RESET (tests/e2e/_helpers
     // `clearWsState`), not a snapshot — it bypasses the guard, and a cached
     // null counts as "nothing cached" so the next real write always lands.
-    if (channel === 'gamemaster-team-state' && parsed.data !== null) {
+    if (channel === 'gamemaster-team-state-v2' && parsed.data !== null) {
       const cached = channelCache.get(channel);
       const cachedRev = cached === undefined || cached === null ? null : teamStateRev(cached);
       if (!decideTeamStateWrite(cachedRev, teamStateRev(parsed.data))) {

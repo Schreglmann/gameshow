@@ -35,6 +35,11 @@ answers are hidden.
   a neutral mask (`•••••`, `.gamemaster-answer-text--masked`). Rank chips and the
   `revealed` / `pending` states stay visible, and clicking a row still sends `rank-<n>`.
   No separate hint line is rendered in this case.
+- [ ] A **hint list** (`city-compass`, `data.hintList`) is not answer content: its
+  `revealed` rows stay legible while answers are hidden, because those cities are on the
+  projector anyway. Only the **pending** rows — clues the host has not introduced yet — get
+  the mask. The center city itself is hidden like any other answer, so the "Antworten
+  versteckt" line still appears above the block. See [games/city-compass.md](games/city-compass.md).
 - [ ] Everything that is **not** an answer stays visible: meta line, game title, the current
   question text, the current question image (`.gamemaster-question-image` — the random-frame
   still the players are guessing from), the controls panel, the correct-answers tracker, joker
@@ -62,6 +67,7 @@ answers are hidden.
 - Gating in `GamemasterView`:
   - answer: `hideAnswers ? hint : data.answer`
   - answer list text: `hideAnswers ? '•••••' : item.text`
+  - hint list text: `hideAnswers && !item.revealed ? '•••••' : item.text`
   - answer image: `data.answerImage && showAnswerImages && !hideAnswers`
   - extra info: `!hideAnswers && data.extraInfo`
   - next block: `!hideAnswers && controlsData.answerRevealed && data.nextAnswer`

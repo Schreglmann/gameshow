@@ -8,6 +8,11 @@ import { fileURLToPath } from 'url';
 import multer from 'multer';
 import type { AppConfig, GameConfig, MultiInstanceGameFile, GameFileSummary, AssetCategory, RulesPreset } from '../src/types/config.js';
 import { resolveRulesPreset } from '../src/utils/rulesPreset.js';
+import { DEFAULT_TEAM_COUNT } from '../src/utils/teams.js';
+import { normalizePointMode, pointModeRule } from '../src/utils/pointMode.js';
+import { resolveShowTitle } from '../src/utils/showTitle.js';
+import { resolveTeamColors } from '../src/utils/teamColors.js';
+import { effectiveTeamCount, gameIsScorable, listIncompatibleGames, hasTeamSplit } from './team-count.js';
 import { isAudioFile, normalizeAudioFile } from './normalize.js';
 import { fetchAndSavePoster, videoFilenameToSlug, MOVIE_POSTERS_SUBDIR } from './movie-posters.js';
 import { fetchAndSaveAudioCover, audioCoverFilename, AUDIO_COVERS_SUBDIR, audioFilenameToSearchQuery, searchItunes, type CoverSearchResult } from './audio-covers.js';
@@ -47,7 +52,7 @@ import {
 } from './random-frame-prerender.js';
 import { setupWebSocket, broadcast, broadcastThrottled } from './ws.js';
 import { startContentWatch } from './content-watch.js';
-import { isGitCryptBlob, loadConfigWithFallback, ensureConfigFile } from './clean-install.js';
+import { isGitCryptBlob, loadConfigWithFallback, ensureConfigFile, DEFAULT_GLOBAL_RULES } from './clean-install.js';
 import { pruneGameOrder, parseGameRef, isRefToGame, isRefToInstance, requalifyBareRefs } from './game-order.js';
 import { convertToMultiInstance } from './game-file.js';
 import type { RemovedGameRef } from './game-order.js';
@@ -3699,6 +3704,7 @@ async function loadGameConfig(
   gameName: string,
   instanceName: string | null,
   presets?: RulesPreset[],
+  teamCount: number = DEFAULT_TEAM_COUNT,
 ): Promise<GameConfig> {
   const filePath = path.join(GAMES_DIR, `${gameName}.json`);
   const data = await readFile(filePath, 'utf8');
@@ -3741,7 +3747,7 @@ async function loadGameConfig(
   }
 
   if (resolved.rulesPreset && presets) {
-    const merged = resolveRulesPreset(resolved, presets);
+    const merged = resolveRulesPreset(resolved, presets, teamCount);
     if (merged) {
       resolved = { ...resolved, rules: merged };
     } else {
@@ -3790,21 +3796,95 @@ app.get('/api/background-music', async (req, res) => {
   res.json(await listAudioFiles(musicDir));
 });
 
+/**
+ * Resolve the active gameOrder and report which entries cannot be scored at
+ * `teamCount`. They still play — `GET /api/game/:index` serves them
+ * `pointSystemEnabled: false` — so this only feeds the HomeScreen warning.
+ * The pure decision lives in server/team-count.ts. See specs/team-count.md.
+ */
+async function resolveIncompatibleGames(config: AppConfig, teamCount: number) {
+  if (teamCount === 0) return [];
+  const gameOrder = getActiveGameOrder(config);
+  const resolved = await Promise.all(gameOrder.map(async gameRef => {
+    const { gameName, instanceName } = parseGameRef(gameRef);
+    try {
+      const cfg = await loadGameConfig(gameName, instanceName, config.rulesPresets, teamCount);
+      return { type: cfg.type, title: cfg.title || gameName, scoringMode: (cfg as { scoringMode?: string }).scoringMode };
+    } catch {
+      return null; // a broken reference is a different problem
+    }
+  }));
+  return listIncompatibleGames(resolved, teamCount);
+}
+
+/**
+ * The active gameshow's running order, with resolved titles — the gamemaster's
+ * "Ablauf" panel. The GM zone mirrors only the CURRENT game over WebSocket and
+ * has no other source for the list. A ref that no longer resolves is kept as a
+ * `missing` entry rather than dropped, so every `index` still matches its
+ * `gameOrder` position (the jump command addresses games by index).
+ * See specs/gamemaster-run-of-show.md.
+ */
+app.get('/api/run-of-show', async (_req, res) => {
+  try {
+    const config = await loadConfig();
+    const gameOrder = getActiveGameOrder(config);
+    const games = await Promise.all(gameOrder.map(async (gameRef, index) => {
+      const { gameName, instanceName } = parseGameRef(gameRef);
+      try {
+        const cfg = await loadGameConfig(gameName, instanceName, config.rulesPresets, effectiveTeamCount(config));
+        return { index, gameId: gameRef, title: cfg.title || gameName, type: cfg.type };
+      } catch {
+        return { index, gameId: gameRef, title: gameRef, type: null, missing: true };
+      }
+    }));
+    res.json({ games });
+  } catch {
+    res.status(500).json({ error: 'Failed to load config' });
+  }
+});
+
 app.get('/api/settings', async (_req, res) => {
   try {
     const config = await loadConfig();
     const activeShow = config.gameshows?.[config.activeGameshow];
-    const pointSystemEnabled = config.pointSystemEnabled !== false;
+    const teamCount = effectiveTeamCount(config);
+    // `pointSystemEnabled` is exactly "there is at least one team". Kept on the
+    // wire so a client that predates `teamCount` still behaves correctly.
+    const pointSystemEnabled = teamCount > 0;
+    const pointMode = normalizePointMode(activeShow?.pointMode);
     res.json({
+      // How many games the show runs — what the header counter's "von N" reads,
+      // so the long-name check can size the counter its team pills share the row
+      // with. See specs/team-management.md.
+      totalGames: activeShow?.gameOrder?.length ?? 0,
+      // Landing-page heading / gamemaster label / tab title: the active gameshow's
+      // override wins over the global default, blank counts as unset at both
+      // levels. Resolved here so no client re-derives the precedence.
+      // See specs/show-title.md.
+      showTitle: resolveShowTitle(config.showTitle, activeShow?.showTitle),
       pointSystemEnabled,
-      teamRandomizationEnabled: config.teamRandomizationEnabled !== false,
+      teamCount,
+      pointMode,
+      incompatibleGames: await resolveIncompatibleGames(config, teamCount),
+      // Randomization splits players BETWEEN teams, so it needs at least two of
+      // them. Forced off at 0 and 1 teams rather than left to each client.
+      teamRandomizationEnabled: hasTeamSplit(teamCount) && config.teamRandomizationEnabled !== false,
       teamMirrorEnabled: config.teamMirrorEnabled === true,
-      globalRules: config.globalRules || [
-        'Es gibt mehrere Spiele.',
-        'Bei jedem Spiel wird am Ende entschieden welches Team das Spiel gewonnen hat.',
-        'Das erste Spiel ist 1 Punkt wert, das zweite 2 Punkte, etc.',
-        'Das Team mit den meisten Punkten gewinnt am Ende.',
-      ],
+      // Per-team accent colours, with the master switch applied HERE — an empty
+      // map already means "mark nothing", so no client re-derives the flag.
+      // See specs/team-colors.md.
+      teamColors: resolveTeamColors(config),
+      // The scoring line is never stored — it always follows the active gameshow's
+      // pointMode, appended after the operator's (or default) framing lines, so it
+      // can't drift from a gameshow whose pointMode differs from when the text was
+      // authored. Omitted entirely with the point system off. See specs/point-system.md.
+      globalRules: (() => {
+        const baseRules = config.globalRules && config.globalRules.length > 0
+          ? config.globalRules
+          : DEFAULT_GLOBAL_RULES;
+        return pointSystemEnabled ? [...baseRules, pointModeRule(pointMode, config.pointModeRules)] : baseRules;
+      })(),
       isCleanInstall: cleanInstallActive,
       // Jokers are a per-team mechanic — with the point system off the show has no
       // teams, so jokers are auto-disabled regardless of the gameshow's configured
@@ -3822,7 +3902,7 @@ app.get('/api/settings', async (_req, res) => {
 
 // ── Theme settings (server-side, gitignored) ──
 
-const VALID_THEMES = ['galaxia', 'harry-potter', 'dnd', 'deepsea', 'enterprise', 'retro', 'minecraft', 'classical-music', 'modern-music', 'movie-quiz', 'atlas', 'atlas-light'];
+const VALID_THEMES = ['galaxia', 'harry-potter', 'dnd', 'deepsea', 'enterprise', 'retro', 'minecraft', 'classical-music', 'modern-music', 'movie-quiz', 'atlas', 'atlas-light', 'pub-quiz'];
 const DEFAULT_THEME = 'atlas';
 
 interface ThemeSettings {
@@ -3918,9 +3998,13 @@ app.get('/api/game/:index', async (req, res) => {
     const gameRef = gameOrder[index]!;
     const { gameName, instanceName } = parseGameRef(gameRef);
 
+    // Drives both the scoring gate below and, inside loadGameConfig, which team-count
+    // band a linked rulesPreset resolves to. See specs/rules-presets.md.
+    const teamCount = effectiveTeamCount(config);
+
     let gameConfig: GameConfig;
     try {
-      gameConfig = await loadGameConfig(gameName, instanceName, config.rulesPresets);
+      gameConfig = await loadGameConfig(gameName, instanceName, config.rulesPresets, teamCount);
     } catch (err) {
       return res.status(404).json({ error: `Game configuration not found: ${(err as Error).message}` });
     }
@@ -3937,11 +4021,19 @@ app.get('/api/game/:index', async (req, res) => {
       gameConfig = { ...gameConfig, questions: enrichedQuestions };
     }
 
+    // Scoring is enabled for THIS game only when the show has teams AND this
+    // game's mechanic can be scored with that many. An incompatible game still
+    // plays in full — every game type implements the scoring-off path — it just
+    // never reaches an award. This one expression is the whole "disable scoring
+    // for that game" feature. See specs/team-count.md.
     const baseResponse = {
       gameId: gameRef,
       currentIndex: index,
       totalGames: gameOrder.length,
-      pointSystemEnabled: config.pointSystemEnabled !== false,
+      pointSystemEnabled: gameIsScorable(
+        { type: gameConfig.type, scoringMode: (gameConfig as { scoringMode?: string }).scoringMode },
+        teamCount,
+      ),
     };
 
     res.json({ ...baseResponse, config: gameConfig });
@@ -4021,6 +4113,20 @@ app.get('/api/backend/games', async (_req, res) => {
               .filter(k => k !== 'template' && (content.instances[k] as { disabled?: unknown })?.disabled === true);
             if (keys.length) disabledInstances = keys;
           }
+          // Effective scoring mode per instance (`''` for a single-instance file),
+          // so the admin can tell a team-count-restricted mode (`transfer`,
+          // `count-penalty`) from an unrestricted one without loading every game
+          // file. Instance value overrides the base. See specs/team-count.md.
+          let scoringModes: Record<string, string> | undefined;
+          const baseMode = typeof content.scoringMode === 'string' ? content.scoringMode : undefined;
+          if (isSingleInstance) {
+            if (baseMode) scoringModes = { '': baseMode };
+          } else if (content.instances) {
+            for (const [key, inst] of Object.entries(content.instances as Record<string, { scoringMode?: unknown }>)) {
+              const mode = typeof inst?.scoringMode === 'string' ? inst.scoringMode : baseMode;
+              if (mode) (scoringModes ??= {})[key] = mode;
+            }
+          }
           return {
             fileName,
             type: content.type,
@@ -4031,6 +4137,7 @@ app.get('/api/backend/games', async (_req, res) => {
             questionCounts,
             disabled,
             disabledInstances,
+            scoringModes,
           };
         } catch (err) {
           console.warn(`Skipping invalid game file "${file}": ${(err as Error).message}`);
@@ -4412,6 +4519,46 @@ app.get('/api/backend/bandle/catalog', async (_req, res) => {
     } catch { /* missing or malformed — skip */ }
   }
   res.json(catalog);
+});
+
+// GET /api/backend/bandle/used-songs — audio folder slugs referenced by any bandle game
+// Scans every games/*.json file of type "bandle" (base questions + all instances) and
+// collects the `/audio/bandle/<folder>/` slugs from question tracks. The admin song
+// picker uses this to optionally hide songs already used in some bandle game.
+app.get('/api/backend/bandle/used-songs', async (_req, res) => {
+  const folders = new Set<string>();
+  const collect = (questions: unknown) => {
+    if (!Array.isArray(questions)) return;
+    for (const q of questions) {
+      const tracks = (q as { tracks?: unknown })?.tracks;
+      if (!Array.isArray(tracks)) continue;
+      for (const t of tracks) {
+        const audio = (t as { audio?: unknown })?.audio;
+        const m = typeof audio === 'string' ? audio.match(/\/audio\/bandle\/([^/]+)\//) : null;
+        if (m) folders.add(m[1]!);
+      }
+    }
+  };
+  try {
+    const files = (await readdir(GAMES_DIR)).filter(f => f.endsWith('.json') && !f.startsWith('_') && !f.includes('.fingerprints.'));
+    for (const file of files) {
+      try {
+        const content = JSON.parse(await readFile(path.join(GAMES_DIR, file), 'utf8'));
+        if (content?.type !== 'bandle') continue;
+        collect(content.questions);
+        if (content.instances && typeof content.instances === 'object') {
+          for (const inst of Object.values(content.instances as Record<string, unknown>)) {
+            collect((inst as { questions?: unknown })?.questions);
+          }
+        }
+      } catch (err) {
+        console.warn(`Skipping invalid game file "${file}" during bandle usage scan: ${(err as Error).message}`);
+      }
+    }
+    res.json({ folders: [...folders].sort() });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to scan bandle usage: ${(err as Error).message}` });
+  }
 });
 
 // POST /api/backend/bandle/download-audio — download audio for a song from bandle CDN
@@ -6481,7 +6628,7 @@ app.post('/api/backend/assets/:category/upload-abort', express.json(), async (re
 // ── yt-dlp binary management (auto-downloaded standalone binary) ──
 // Binary bootstrap lives in ./yt-dlp.ts so the download flow (below) and the
 // keyword-search flow (./youtube-search.ts) share one implementation.
-import { YT_DLP_BIN, YT_DLP_JS_RUNTIME_ARGS, ensureYtDlp } from './yt-dlp.js';
+import { YT_DLP_BIN, YT_DLP_JS_RUNTIME_ARGS, YT_DLP_PLAYER_CLIENT_ARGS, ensureYtDlp } from './yt-dlp.js';
 
 function isPlaylistUrl(url: string): boolean {
   try {
@@ -6882,6 +7029,7 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
 
         const ytdlpArgs = [
           ...YT_DLP_JS_RUNTIME_ARGS,
+          ...YT_DLP_PLAYER_CLIENT_ARGS,
           '-f', 'bestaudio',
           '-x', '--audio-format', 'mp3', '--audio-quality', '0',
           '--no-playlist',
@@ -7029,7 +7177,7 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
   const singleBaseDir = subfolder ? path.join(categoryDir(category), subfolder) : categoryDir(category);
   try {
     const probedTitle = await new Promise<string>((resolve) => {
-      const proc = spawn(YT_DLP_BIN, [...YT_DLP_JS_RUNTIME_ARGS, '--skip-download', '--no-playlist', '--print', '%(title)s', url]);
+      const proc = spawn(YT_DLP_BIN, [...YT_DLP_JS_RUNTIME_ARGS, ...YT_DLP_PLAYER_CLIENT_ARGS, '--skip-download', '--no-playlist', '--print', '%(title)s', url]);
       const onAbort = () => { proc.kill('SIGTERM'); };
       jobAbort.signal.addEventListener('abort', onAbort, { once: true });
       let out = '';
@@ -7067,6 +7215,7 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
     const ytdlpArgs = isVideoDownload
       ? [
           ...YT_DLP_JS_RUNTIME_ARGS,
+          ...YT_DLP_PLAYER_CLIENT_ARGS,
           // Codec preference for the raw DAM <video> preview: H.264 → VP9 → anything
           // but AV1 → (AV1 only as an absolute last resort). Browsers can't decode
           // AV1 via a plain <video> (YouTube serves AV1 only to clients that
@@ -7087,6 +7236,7 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
         ]
       : [
           ...YT_DLP_JS_RUNTIME_ARGS,
+          ...YT_DLP_PLAYER_CLIENT_ARGS,
           '-f', 'bestaudio',             // download audio stream only (skip video)
           '-x',                          // extract audio
           '--audio-format', 'mp3',       // convert to mp3
@@ -7163,7 +7313,12 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
     });
 
     if (exitCode !== 0) {
-      send({ phase: 'error', message: `yt-dlp fehlgeschlagen (Exit Code ${exitCode}): ${downloadError.slice(0, 300)}` });
+      // yt-dlp's actual failure reason (an "ERROR:" line) sits at the end of
+      // the output, after progress noise and version-check warnings — slicing
+      // from the start showed only that noise and hid the real cause.
+      const errorLines = downloadError.split('\n').map(l => l.trim()).filter(l => /^ERROR:/i.test(l));
+      const detail = errorLines.length > 0 ? errorLines.join(' ') : downloadError.trim();
+      send({ phase: 'error', message: `yt-dlp fehlgeschlagen (Exit Code ${exitCode}): ${detail.slice(-500)}` });
       res.end();
       await rm(tmpDir, { recursive: true, force: true });
       return;

@@ -27,11 +27,11 @@ describe('tallyTotals / highestTalliedQuestion', () => {
       '1': { team1: 1, team2: 0 },
       '2': { team1: 0, team2: 1 },
       '5': { team1: 2, team2: 3 },
-    })).toEqual({ team1: 3, team2: 4 });
+    })).toEqual({ team1: 3, team2: 4, team3: 0, team4: 0 });
   });
 
   it('treats a missing map as zeroes', () => {
-    expect(tallyTotals(undefined)).toEqual({ team1: 0, team2: 0 });
+    expect(tallyTotals(undefined)).toEqual({ team1: 0, team2: 0, team3: 0, team4: 0 });
   });
 
   it('finds the highest question holding a count, ignoring the reserved bucket', () => {
@@ -93,10 +93,10 @@ describe('buildPointRows', () => {
     );
 
     expect(rows.map(r => r.key)).toEqual(['1', '2']);
-    expect(rows[0].team1).toEqual({ value: 5, entries: 1 });
-    expect(rows[0].team2).toEqual({ value: -5, entries: 1 });
-    expect(rows[1].team1).toEqual({ value: 0, entries: 0 });
-    expect(rows[1].team2).toEqual({ value: 3, entries: 1 });
+    expect(rows[0].cells.team1).toEqual({ value: 5, entries: 1 });
+    expect(rows[0].cells.team2).toEqual({ value: -5, entries: 1 });
+    expect(rows[1].cells.team1).toEqual({ value: 0, entries: 0 });
+    expect(rows[1].cells.team2).toEqual({ value: 3, entries: 1 });
   });
 
   it('ignores entries from other games', () => {
@@ -108,7 +108,7 @@ describe('buildPointRows', () => {
       0,
       1,
     );
-    expect(rows[0].team1).toEqual({ value: 5, entries: 1 });
+    expect(rows[0].cells.team1).toEqual({ value: 5, entries: 1 });
   });
 
   it('leaves the non-answering team as an untouched cell, not a gap', () => {
@@ -116,7 +116,7 @@ describe('buildPointRows', () => {
     // empty cell is normal — only a row where neither team scored is a gap.
     const rows = buildPointRows([entry({ team: 'team1', delta: 3, questionNumber: 1 })], 0, 1);
     expect(rows[0].hasData).toBe(true);
-    expect(rows[0].team2.entries).toBe(0);
+    expect(rows[0].cells.team2.entries).toBe(0);
   });
 
   it('flags a question whose net figure hides several deltas (BetQuiz re-judge)', () => {
@@ -135,8 +135,8 @@ describe('buildPointRows', () => {
     );
 
     const row = rows.find(r => r.key === '3')!;
-    expect(row.team1).toEqual({ value: 0, entries: 2 });
-    expect(row.team2).toEqual({ value: 0, entries: 2 });
+    expect(row.cells.team1).toEqual({ value: 0, entries: 2 });
+    expect(row.cells.team2).toEqual({ value: 0, entries: 2 });
     expect(row.hasData).toBe(true);
   });
 
@@ -152,7 +152,7 @@ describe('buildPointRows', () => {
       0,
       1,
     );
-    expect(rows[0].team1).toEqual({ value: 7, entries: 3 });
+    expect(rows[0].cells.team1).toEqual({ value: 7, entries: 3 });
   });
 
   it('puts question-less (positional) awards in a Gesamt row', () => {
@@ -168,9 +168,9 @@ describe('buildPointRows', () => {
     expect(rows.map(r => r.key)).toEqual(['1', TOTAL_ROW_KEY]);
     const total = rows[1];
     expect(total.label).toBe('Gesamt');
-    expect(total.team2).toEqual({ value: 6, entries: 1 });
+    expect(total.cells.team2).toEqual({ value: 6, entries: 1 });
     // Must NOT be pinned on the last question.
-    expect(rows[0].team2.entries).toBe(0);
+    expect(rows[0].cells.team2.entries).toBe(0);
   });
 
   it('marks point rows read-only', () => {

@@ -1,5 +1,5 @@
 #!/bin/sh
 # Scoped gate — runs only the checks the staged change set can affect.
-# Full-suite backstops: .githooks/pre-push (local) and .github/workflows/ci.yml (CI).
+# Full-suite backstop: .github/workflows/ci.yml (CI), on every push to every branch.
 # See AGENTS.md §7 (Verification).
 exec node scripts/verify-changed.cjs --staged

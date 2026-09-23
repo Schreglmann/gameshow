@@ -36,3 +36,9 @@ A high-stakes betting round where teams wager their own points on each question;
 - Negative total points (enforced by reducer floor at 0)
 - Timer per question
 - Teams entering bets on their own devices
+
+## Team count
+**1–4 teams.** Every active team places its own bet and is judged independently — there is no
+interaction between teams — so the betting inputs, the judgment groups
+(`<teamKey>-correct` / `<teamKey>-incorrect`) and the "all judged" gate all scale with the count.
+See [../team-count.md](../team-count.md).

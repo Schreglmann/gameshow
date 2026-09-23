@@ -28,9 +28,10 @@ Allow downloading videos from YouTube URLs directly in the AssetsTab video DAM, 
 - Screen / component affected: `AssetsTab`
 - Button placement: same drop zone YouTube button, now also shown for `videos` category
 - Modal: identical to audio — URL input, optional subfolder, submit
-- During download: same progress tracking as audio downloads
+- During download: same progress row as audio downloads, with the video phase labels (Video wird von YouTube
+  heruntergeladen… / Video wird gespeichert…)
 - On success: file list refreshes
-- On error: error shown in progress tracker
+- On error: the row opens by itself and shows the message
 - Edge cases: same as audio (invalid URL, network failure, etc.)
 
 *Note: Keyword search (find a video without knowing the URL) is provided by the "Suchen" tab — see `youtube-search.md`*

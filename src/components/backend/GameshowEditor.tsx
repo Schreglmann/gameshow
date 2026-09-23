@@ -1,8 +1,11 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { isTouchDevice } from '@/utils/isTouchDevice';
-import type { GameshowConfig, GameFileSummary, GameType } from '@/types/config';
+import type { GameshowConfig, GameFileSummary, GameType, PointMode } from '@/types/config';
 import { fetchGames } from '@/services/backendApi';
-import { gameTypeMatchesQuery } from '@/data/gameTypeInfo';
+import { gameTypeMatchesQuery, gameSupportsTeamCount, gameUsesCorrectAnswerTally, teamCountSupportLabel } from '@/data/gameTypeInfo';
+import { DEFAULT_TEAM_COUNT, normalizeTeamCount } from '@/utils/teams';
+import { DEFAULT_POINT_MODE, normalizePointMode } from '@/utils/pointMode';
+import { DEFAULT_SHOW_TITLE } from '@/utils/showTitle';
 import { useDragReorder } from './useDragReorder';
 import { JOKER_CATALOG } from '@/data/jokers';
 import JokerIcon from '@/components/common/JokerIcon';
@@ -363,6 +366,15 @@ function ProvenanceList({ refValue, ctx, gameshows }: { refValue: string; ctx: O
   );
 }
 
+/**
+ * The effective scoring mode of one `gameOrder` entry. Single-instance files
+ * store it under `''`; multi-instance files under the instance key.
+ */
+function scoringModeOf(game: GameFileSummary | undefined, instance: string): string | undefined {
+  if (!game?.scoringModes) return undefined;
+  return game.isSingleInstance ? game.scoringModes[''] : game.scoringModes[instance];
+}
+
 function PlanningOverview({ games, ctx, gameshows, addedRefs, onAdd, showBadges }: PlanningProps) {
   const [search, setSearch] = useState('');
 
@@ -448,6 +460,8 @@ interface Props {
   id: string;
   gameshow: GameshowConfig;
   allGameshows: Record<string, GameshowConfig>;
+  /** Global `AppConfig.showTitle` — shown as the placeholder this gameshow inherits. */
+  globalShowTitle?: string;
   /** Id of the active gameshow — the "now" divider for played vs. upcoming. */
   activeGameshow: string;
   isActive: boolean;
@@ -460,7 +474,7 @@ interface Props {
   onNavigateToGameshow: (gameshowId: string) => void;
 }
 
-export default function GameshowEditor({ id, gameshow, allGameshows, activeGameshow, isActive, expanded, onToggleExpand, onSetActive, onChange, onRename, onDelete, onNavigateToGameshow }: Props) {
+export default function GameshowEditor({ id, gameshow, allGameshows, globalShowTitle, activeGameshow, isActive, expanded, onToggleExpand, onSetActive, onChange, onRename, onDelete, onNavigateToGameshow }: Props) {
   const confirmDialog = useConfirm();
   const [availableGames, setAvailableGames] = useState<GameFileSummary[]>([]);
   const [pickGame, setPickGame] = useState('');
@@ -508,6 +522,47 @@ export default function GameshowEditor({ id, gameshow, allGameshows, activeGames
     return ai >= 0 && ci >= 0 && ci < ai;
   }, [allGameshows, id, activeGameshow]);
   const badgeCtx = isPlayedShow ? undefined : overlapCtx;
+
+  // Which gameOrder entries can't be scored at this gameshow's team count. They
+  // still play — the server serves them `pointSystemEnabled: false` — so this
+  // only drives the warnings. See specs/team-count.md.
+  const teamCount = normalizeTeamCount(gameshow.teamCount ?? DEFAULT_TEAM_COUNT);
+  const unscorableRefs = useMemo(() => {
+    const refs = new Set<string>();
+    // At 0 teams nothing scores anyway, so there is nothing to warn about.
+    if (teamCount === 0) return refs;
+    for (const ref of gameshow.gameOrder) {
+      const slash = ref.indexOf('/');
+      const name = slash >= 0 ? ref.slice(0, slash) : ref;
+      const inst = slash >= 0 ? ref.slice(slash + 1) : '';
+      const data = availableGames.find(g => g.fileName === name);
+      if (!data) continue; // a broken reference is a different problem
+      if (!gameSupportsTeamCount(data.type, teamCount, scoringModeOf(data, inst))) refs.add(ref);
+    }
+    return refs;
+  }, [gameshow.gameOrder, availableGames, teamCount]);
+
+  // In `per-correct-answer`, games without a correct-answer tally keep their own
+  // scoring instead. They still play and still score, so this is a hint, not a
+  // conflict — EXCEPT when `unscorableRefs` already claims the ref: a game that
+  // doesn't score at all at this team count has nothing to say about "keeping its
+  // own scoring", and showing both badges reads as a contradiction ("doesn't
+  // score" next to "scores its own way"). `unscorableRefs` wins. See
+  // specs/point-system.md.
+  const pointMode = normalizePointMode(gameshow.pointMode);
+  const ownScoringRefs = useMemo(() => {
+    const refs = new Set<string>();
+    if (teamCount === 0 || pointMode !== 'per-correct-answer') return refs;
+    for (const ref of gameshow.gameOrder) {
+      if (unscorableRefs.has(ref)) continue;
+      const slash = ref.indexOf('/');
+      const name = slash >= 0 ? ref.slice(0, slash) : ref;
+      const data = availableGames.find(g => g.fileName === name);
+      if (data && !gameUsesCorrectAnswerTally(data.type)) refs.add(ref);
+    }
+    return refs;
+  }, [gameshow.gameOrder, availableGames, teamCount, pointMode, unscorableRefs]);
+
   const addedRefs = useMemo(() => new Set(gameshow.gameOrder), [gameshow.gameOrder]);
   const pickerGames = useMemo(() => availableGames.filter(g => {
     if (g.disabled) return false; // whole game disabled — never offered (specs/game-disable.md)
@@ -620,23 +675,84 @@ export default function GameshowEditor({ id, gameshow, allGameshows, activeGames
         &nbsp;·&nbsp; {totalQuestions} Frage{totalQuestions !== 1 ? 'n' : ''}
       </div>
 
-      {/* Players field */}
+      {/* Show title override — blank inherits the global title from the Konfiguration
+          tab (shown as the placeholder). See specs/show-title.md. */}
       <div className="gs-players-row">
-        <label className="gs-players-label">Spieler</label>
-        <PlayersCombobox
-          selected={currentPlayers}
-          knownPlayers={knownPlayers}
-          onChange={players => onChange({ ...gameshow, players })}
-          onPlayerClick={setStatsPlayer}
+        <label className="gs-players-label" htmlFor={`show-title-${id}`}>Titel</label>
+        <input
+          id={`show-title-${id}`}
+          className="be-input gs-show-title"
+          value={gameshow.showTitle ?? ''}
+          placeholder={globalShowTitle?.trim() || DEFAULT_SHOW_TITLE}
+          onChange={e => {
+            const next = e.target.value;
+            // Empty is stored as absent, so untouched gameshows keep a clean
+            // config.json — exactly like teamCount and pointMode.
+            onChange({ ...gameshow, showTitle: next === '' ? undefined : next });
+          }}
+          title="Überschrift auf der Startseite, wenn diese Gameshow aktiv ist. Leer = globaler Titel aus dem Tab „Konfiguration“."
         />
-        <button
-          className={`be-icon-btn ${showPlanning ? 'active' : ''}`}
-          onClick={() => setShowPlanning(v => !v)}
-          title="Spielplanung"
-          style={{ flexShrink: 0 }}
+      </div>
+
+      {/* Team count, point mode, and the roster group — one row, wraps as needed */}
+      <div className="gs-players-row">
+        <label className="gs-players-label" htmlFor={`teams-${id}`}>Teams</label>
+        <select
+          id={`teams-${id}`}
+          className="be-select gs-team-count"
+          value={gameshow.teamCount ?? DEFAULT_TEAM_COUNT}
+          onChange={e => {
+            const next = Number(e.target.value);
+            // 2 is the default — store it as absent so untouched gameshows keep
+            // a clean config.json, exactly like scoringMode's "Standard".
+            onChange({ ...gameshow, teamCount: next === DEFAULT_TEAM_COUNT ? undefined : next as 0 | 1 | 3 | 4 });
+          }}
+          title="Mit wie vielen Teams diese Gameshow gespielt wird. 0 = ohne Wertung, 1 = Publikum gegen die Show (Punkte, aber keine Teameinteilung)."
         >
-          {showPlanning ? '▲ Planung' : '▼ Planung'}
-        </button>
+          <option value={0}>0 – ohne Wertung</option>
+          <option value={1}>1 – Publikum gegen die Show</option>
+          <option value={2}>2 Teams</option>
+          <option value={3}>3 Teams</option>
+          <option value={4}>4 Teams</option>
+        </select>
+        <label className="gs-players-label" htmlFor={`point-mode-${id}`}>Punkte</label>
+        <select
+          id={`point-mode-${id}`}
+          className="be-select gs-point-mode"
+          value={pointMode}
+          onChange={e => {
+            const next = normalizePointMode(e.target.value);
+            // The default is stored as absent, so untouched gameshows keep a clean
+            // config.json — exactly like teamCount and scoringMode.
+            onChange({ ...gameshow, pointMode: next === DEFAULT_POINT_MODE ? undefined : next as PointMode });
+          }}
+          title="Wie diese Gameshow Punkte vergibt."
+        >
+          {/* Short labels — the full mode names live in the tooltips. */}
+          <option value="positional" title="Spiel 1 ist 1 Punkt wert, Spiel 2 zwei Punkte, usw.">Nach Reihenfolge</option>
+          <option value="flat" title="Jedes Spiel ist genau 1 Punkt wert, unabhängig von seiner Position.">Jedes Spiel 1 Punkt</option>
+          <option value="per-correct-answer" title="Jedes Team bekommt einen Punkt pro richtiger Antwort — gezählt über die Richtig-Zähler des Gamemasters.">Pro richtige Antwort</option>
+        </select>
+        {/* Grouped so the roster wraps to its own line as a WHOLE when the row runs
+            out of room, instead of the combobox getting squeezed until its input
+            drops below the tags. See specs/point-system.md. */}
+        <div className="gs-roster-group">
+          <label className="gs-players-label">Spieler</label>
+          <PlayersCombobox
+            selected={currentPlayers}
+            knownPlayers={knownPlayers}
+            onChange={players => onChange({ ...gameshow, players })}
+            onPlayerClick={setStatsPlayer}
+          />
+          <button
+            className={`be-icon-btn ${showPlanning ? 'active' : ''}`}
+            onClick={() => setShowPlanning(v => !v)}
+            title="Spielplanung"
+            style={{ flexShrink: 0 }}
+          >
+            {showPlanning ? '▲ Planung' : '▼ Planung'}
+          </button>
+        </div>
       </div>
 
       {/* Planning overview */}
@@ -652,6 +768,27 @@ export default function GameshowEditor({ id, gameshow, allGameshows, activeGames
       )}
 
       {/* Game order list */}
+      {unscorableRefs.size > 0 && (
+        <div className="be-conflict-banner" role="status" style={{ marginBottom: 10 }}>
+          <span className="be-conflict-banner-icon" aria-hidden="true">⚠</span>
+          <span className="be-conflict-banner-text">
+            {unscorableRefs.size === 1 ? '1 Spiel passt' : `${unscorableRefs.size} Spiele passen`} nicht zu{' '}
+            {teamCount} {teamCount === 1 ? 'Team' : 'Teams'} und {unscorableRefs.size === 1 ? 'wird' : 'werden'}{' '}
+            ohne Wertung gespielt.
+          </span>
+        </div>
+      )}
+
+      {ownScoringRefs.size > 0 && (
+        <div className="be-conflict-banner" role="status" style={{ marginBottom: 10 }}>
+          <span className="be-conflict-banner-icon" aria-hidden="true">⚠</span>
+          <span className="be-conflict-banner-text">
+            {ownScoringRefs.size === 1 ? '1 Spiel zählt' : `${ownScoringRefs.size} Spiele zählen`} keine richtigen
+            Antworten mit und {ownScoringRefs.size === 1 ? 'vergibt' : 'vergeben'} weiterhin Punkte nach eigener Logik.
+          </span>
+        </div>
+      )}
+
       {gameshow.gameOrder.length === 0 ? (
         <div className="be-empty" style={{ padding: '12px 0' }}>Keine Spiele — füge unten welche hinzu</div>
       ) : (
@@ -668,6 +805,11 @@ export default function GameshowEditor({ id, gameshow, allGameshows, activeGames
           // in this gameshow. Mark it so the operator can see it's disabled. See
           // specs/game-disable.md.
           const isRefDisabled = !!gameData && (gameData.disabled === true || (!isSingle && (gameData.disabledInstances ?? []).includes(instance)));
+          // This game's mechanic can't be scored at the configured team count, so
+          // it will play without scoring. It still runs — this is a heads-up, not
+          // an error. See specs/team-count.md.
+          const isUnscorable = unscorableRefs.has(ref);
+          const isOwnScoring = ownScoringRefs.has(ref);
 
           return (
             <div
@@ -712,6 +854,36 @@ export default function GameshowEditor({ id, gameshow, allGameshows, activeGames
                   gameData={gameData}
                   ctx={badgeCtx}
                 />
+              )}
+              {isUnscorable && (
+                <span
+                  title={`"${gameData?.title ?? gameName}" unterstützt ${teamCountSupportLabel(gameData!.type, scoringModeOf(gameData, instance))} — bei ${teamCount} Teams wird diese Runde ohne Wertung gespielt.`}
+                  style={{
+                    flexShrink: 0,
+                    fontSize: 'var(--admin-sz-11, 11px)',
+                    padding: '2px 7px',
+                    borderRadius: 6,
+                    whiteSpace: 'nowrap',
+                    background: 'rgba(var(--warning-rgb), 0.14)',
+                    color: 'var(--warning)',
+                    border: '1px solid rgba(var(--warning-rgb), 0.45)',
+                  }}
+                >Ohne Wertung</span>
+              )}
+              {isOwnScoring && (
+                <span
+                  title={`"${gameData?.title ?? gameName}" führt keine Richtig-Zähler und vergibt seine Punkte selbst — der Modus "1 Punkt pro richtiger Antwort" greift hier nicht.`}
+                  style={{
+                    flexShrink: 0,
+                    fontSize: 'var(--admin-sz-11, 11px)',
+                    padding: '2px 7px',
+                    borderRadius: 6,
+                    whiteSpace: 'nowrap',
+                    background: 'rgba(var(--warning-rgb), 0.14)',
+                    color: 'var(--warning)',
+                    border: '1px solid rgba(var(--warning-rgb), 0.45)',
+                  }}
+                >Eigene Wertung</span>
               )}
               {isRefDisabled && (
                 <span
