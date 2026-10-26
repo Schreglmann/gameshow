@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateQuizjagd } from '../../../validate-config';
+import { validateQuizjagd, validateQuestion } from '../../../validate-config';
 
 /**
  * quizjagd holds three difficulty pools rather than a flat `questions` array,
@@ -122,5 +122,33 @@ describe('validateQuizjagd', () => {
       questions: { easy: pool(2), medium: pool(2), hard: pool(2) },
     }, undefined, warnings);
     expect(warnings.some(w => w.includes('needs 20'))).toBe(true);
+  });
+});
+
+describe('gmInfo validation', () => {
+  it('rejects a non-string gmInfo on a quizjagd question', () => {
+    const errors = validateQuizjagd('quizjagd', {
+      questionsPerTeam: 1,
+      questions: { easy: [{ ...q(0), gmInfo: 5 }, q(1)], medium: pool(1), hard: pool(1) },
+    });
+    expect(errors).toContain('Game "quizjagd", easy question 0: "gmInfo" must be a string');
+  });
+
+  it('accepts a string gmInfo on a quizjagd question', () => {
+    const errors = validateQuizjagd('quizjagd', {
+      questionsPerTeam: 1,
+      questions: { easy: [{ ...q(0), gmInfo: 'Hinweis' }, q(1)], medium: pool(1), hard: pool(1) },
+    });
+    expect(errors).toEqual([]);
+  });
+
+  it('rejects a non-string gmInfo on a regular question type', () => {
+    const errors = validateQuestion('g', 'simple-quiz', { question: 'F', answer: 'A', gmInfo: ['x'] }, 2);
+    expect(errors).toContain('Game "g", question 2: "gmInfo" must be a string');
+  });
+
+  it('accepts a string or absent gmInfo on a regular question type', () => {
+    expect(validateQuestion('g', 'simple-quiz', { question: 'F', answer: 'A', gmInfo: 'ok' }, 0)).toEqual([]);
+    expect(validateQuestion('g', 'simple-quiz', { question: 'F', answer: 'A' }, 0)).toEqual([]);
   });
 });

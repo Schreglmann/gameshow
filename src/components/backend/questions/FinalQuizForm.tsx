@@ -1,6 +1,7 @@
 import type { FinalQuizQuestion } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
 import SpellField from '../SpellField';
+import GmInfoField from './GmInfoField';
 import { AssetField } from '../AssetPicker';
 import MoveQuestionButton from './MoveQuestionButton';
 import { stripTrailingEmpty } from './ghostRow';
@@ -15,7 +16,7 @@ interface Props {
 
 const empty = (): FinalQuizQuestion => ({ question: '', answer: '' });
 const isEmpty = (q: FinalQuizQuestion) =>
-  !q.question.trim() && !q.answer.trim() && !q.answerImage;
+  !q.question.trim() && !q.answer.trim() && !q.answerImage && !q.gmInfo?.trim();
 
 export default function FinalQuizForm({ questions, onChange, otherInstances, onMoveQuestion }: Props) {
   const confirmDialog = useConfirm();
@@ -77,6 +78,7 @@ export default function FinalQuizForm({ questions, onChange, otherInstances, onM
                 />
               </div>
             )}
+            {!isVirtual && <GmInfoField segKey={`q${i}.gmInfo`} value={q.gmInfo} onChange={v => update(i, { gmInfo: v })} />}
           </div>
         </div>
         );

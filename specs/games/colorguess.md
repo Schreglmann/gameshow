@@ -40,6 +40,8 @@ Teams guess what an image (photo or logo, including SVG) shows by looking only a
   - Atomic write (`.tmp` then `rename`), same pattern as [server/asset-alias-map.ts](../../server/asset-alias-map.ts)
 - Images continue to be served from the existing `/images/` static mount
 
+Every question also accepts the optional `gmInfo` (host-only note, shown in the GM card only) — see [gamemaster-info.md](../gamemaster-info.md).
+
 ## UI behaviour
 - Component: [src/components/games/ColorGuess.tsx](../../src/components/games/ColorGuess.tsx), mirrors [src/components/games/ImageGuess.tsx](../../src/components/games/ImageGuess.tsx) structure
 - `<ColorPie>` sub-component:

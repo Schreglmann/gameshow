@@ -3905,6 +3905,7 @@ components:
       type: object
       required: [center, neighbors]
       properties:
+        gmInfo: { type: string, description: "Gamemaster-only note, shown in the GM card under the answer and never rendered on the show. Not secret: it is part of the game config the show receives." }
         center: { $ref: "#/components/schemas/CompassCity" }
         neighbors:
           type: array
@@ -3938,6 +3939,7 @@ components:
       type: object
       required: [question, answer]
       properties:
+        gmInfo: { type: string, description: "Gamemaster-only note, shown in the GM card under the answer and never rendered on the show. Not secret: it is part of the game config the show receives." }
         question: { type: string }
         answer: { type: string }
         info: { type: string, description: "Optional subtitle shown in small font above the question text (simple-quiz only)." }
@@ -3962,6 +3964,7 @@ components:
       type: object
       required: [question, answer]
       properties:
+        gmInfo: { type: string, description: "Gamemaster-only note, shown in the GM card under the answer and never rendered on the show. Not secret: it is part of the game config the show receives." }
         question: { type: string }
         answer: { type: number }
         answerImage: { type: string }
@@ -3975,6 +3978,7 @@ components:
       type: object
       required: [question, answer]
       properties:
+        gmInfo: { type: string, description: "Gamemaster-only note, shown in the GM card under the answer and never rendered on the show. Not secret: it is part of the game config the show receives." }
         question: { type: string }
         answer: { type: string }
         answerImage: { type: string }
@@ -3984,6 +3988,7 @@ components:
       type: object
       required: [answer, audio]
       properties:
+        gmInfo: { type: string, description: "Gamemaster-only note, shown in the GM card under the answer and never rendered on the show. Not secret: it is part of the game config the show receives." }
         answer: { type: string }
         audio: { type: string }
         audioStart: { type: number }
@@ -4003,6 +4008,7 @@ components:
       type: object
       required: [answer, tracks]
       properties:
+        gmInfo: { type: string, description: "Gamemaster-only note, shown in the GM card under the answer and never rendered on the show. Not secret: it is part of the game config the show receives." }
         answer: { type: string }
         tracks:
           type: array
@@ -4057,6 +4063,7 @@ components:
       type: object
       required: [answer, video]
       properties:
+        gmInfo: { type: string, description: "Gamemaster-only note, shown in the GM card under the answer and never rendered on the show. Not secret: it is part of the game config the show receives." }
         answer: { type: string }
         video: { type: string }
         question: { type: string }
@@ -4071,6 +4078,7 @@ components:
       type: object
       required: [image, answer]
       properties:
+        gmInfo: { type: string, description: "Gamemaster-only note, shown in the GM card under the answer and never rendered on the show. Not secret: it is part of the game config the show receives." }
         image: { type: string }
         answer: { type: string }
         obfuscation:
@@ -4099,6 +4107,7 @@ components:
       type: object
       required: [image, answer]
       properties:
+        gmInfo: { type: string, description: "Gamemaster-only note, shown in the GM card under the answer and never rendered on the show. Not secret: it is part of the game config the show receives." }
         image: { type: string }
         answer: { type: string }
         disabled: { type: boolean }
@@ -4111,6 +4120,7 @@ components:
       type: object
       required: [Frage, trueStatements, wrongStatement]
       properties:
+        gmInfo: { type: string, description: "Gamemaster-only note, shown in the GM card under the answer and never rendered on the show. Not secret: it is part of the game config the show receives." }
         Frage: { type: string }
         trueStatements: { type: array, items: { type: string } }
         wrongStatement: { type: string }
@@ -4121,6 +4131,7 @@ components:
       type: object
       required: [topic, statements]
       properties:
+        gmInfo: { type: string, description: "Gamemaster-only note, shown in the GM card under the answer and never rendered on the show. Not secret: it is part of the game config the show receives." }
         topic: { type: string }
         statements: { type: array, items: { type: string } }
         answer: { type: string }
@@ -4131,6 +4142,7 @@ components:
       type: object
       required: [question, answers]
       properties:
+        gmInfo: { type: string, description: "Gamemaster-only note, shown in the GM card under the answer and never rendered on the show. Not secret: it is part of the game config the show receives." }
         question: { type: string }
         answers: { type: array, items: { type: string } }
         items:
@@ -4152,6 +4164,7 @@ components:
         There is no correct answer for this type — `answer` and `answerList` are
         optional host-side examples and neither is validated.
       properties:
+        gmInfo: { type: string, description: "Gamemaster-only note, shown in the GM card under the answer and never rendered on the show. Not secret: it is part of the game config the show receives." }
         question: { type: string }
         info: { type: string, description: "Optional subtitle rendered above the question." }
         questionImage: { type: string, description: "Optional question image (no answer image for this type)." }
@@ -4167,6 +4180,7 @@ components:
         A video whose single random still frame players must place. The frame is
         extracted at runtime via `GET /api/random-frame`.
       properties:
+        gmInfo: { type: string, description: "Gamemaster-only note, shown in the GM card under the answer and never rendered on the show. Not secret: it is part of the game config the show receives." }
         video: { type: string, description: "DAM video path the frame is extracted from." }
         answer: { type: string, description: "Movie/show title — the answer." }
         question: { type: string, description: "Optional prompt shown above the frame (default: 'Aus welchem Film stammt dieses Bild?')." }
@@ -4179,6 +4193,7 @@ components:
       type: object
       required: [statement, description]
       properties:
+        gmInfo: { type: string, description: "Gamemaster-only note, shown in the GM card under the answer and never rendered on the show. Not secret: it is part of the game config the show receives." }
         statement: { type: string }
         answer: { type: string, enum: [FAKT, FAKE] }
         isFact: { type: boolean }
@@ -4199,6 +4214,7 @@ components:
       type: object
       required: [question, answer]
       properties:
+        gmInfo: { type: string, description: "Gamemaster-only note, shown in the GM card under the answer and never rendered on the show. Not secret: it is part of the game config the show receives." }
         question: { type: string }
         answer: { type: string }
         difficulty: { type: integer, enum: [3, 5, 7] }

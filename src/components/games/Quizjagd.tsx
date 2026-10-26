@@ -16,6 +16,7 @@ type Phase = 'betting' | 'question';
 interface QuizjagdQ {
   question: string;
   answer: string;
+  gmInfo?: string;
 }
 
 interface TurnState {
@@ -172,6 +173,7 @@ function QuizjagdInner({ config, gameId, pointSystemEnabled, onGameComplete, set
         gameTitle: config.title,
         questionNumber: totalAsked + (isCurrentExample ? 0 : 1),
         totalQuestions: questionsPerTeam * Math.max(1, activeTeams.length),
+        gmInfo: currentQuestion.gmInfo,
         question: currentQuestion.question,
         answer: currentQuestion.answer,
         extraInfo: diffLabel,

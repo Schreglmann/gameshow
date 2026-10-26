@@ -232,6 +232,10 @@ Games that aren't good enough to keep offering — but that you don't want to de
 
 A disabled game no longer appears when you add games to a gameshow (neither in the picker nor in the Planung overview). Gameshows that **already** use it keep working unchanged — the game still plays, and its row shows a small **"Deaktiviert"** marker so you can see it's still in use. The game also stays in the **Spiele** list so you can re-enable it any time.
 
+### Notes for the gamemaster
+
+Every question editor, for every game type, has an **"Info für Gamemaster (nur GM-Ansicht)"** field. Use it for background facts, pronunciation or "accept also X". The text appears only in the gamemaster view, under the answer, and is never shown on the projector. It is hidden while **"Antworten verstecken"** is on. Anything players should see above the question belongs in the question's regular info field instead. The note is not secret: it is part of the game data the show loads, it is only not displayed there.
+
 ---
 
 ### Simple Quiz

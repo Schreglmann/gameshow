@@ -36,6 +36,8 @@ A previous game type named `four-statements` (find the false statement out of 3-
   - `disabled?: boolean`
   - Invariant: at least one of `answer` / `answerImage` must be set (`answerAudio` is supplementary, not a substitute)
 
+Every question also accepts the optional `gmInfo` (host-only note, shown in the GM card only) — see [gamemaster-info.md](../gamemaster-info.md).
+
 ## UI behaviour
 - Component: [`src/components/games/FourStatements.tsx`](../../src/components/games/FourStatements.tsx)
 - Topic displayed at top with `.quiz-question` styling

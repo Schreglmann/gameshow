@@ -112,6 +112,8 @@ The data is GeoNames under CC BY 4.0. The attribution belongs in the generated f
 - `formatDistanceKm`, `LABEL_FONT_SIZE`, `DISTANCE_FONT_SIZE`, `UNKNOWN_FONT_SIZE`, `LABEL_LINE_HEIGHT` — the type sizes live here, not in the stylesheet, because the crop is computed from the text extents. Text cannot be measured without a DOM, so the crop estimates the advance width generously: underestimating cuts a name off, overestimating only leaves a little air
 - `pickNeighbors(center, cities, opts)` — the Auto selection described above
 
+Every question also accepts the optional `gmInfo` (host-only note, shown in the GM card only) — see [gamemaster-info.md](../gamemaster-info.md).
+
 ## UI behaviour
 - Component: `src/components/games/CityCompass.tsx`, wrapping `BaseGameWrapper`, modeled on `Q1.tsx` for the progressive reveal and on `ImageGuess.tsx` for the question-order handling
 - The outer component calls `useQuestionOrder(...)` and passes `order` to both the wrapper and the inner component; the inner one uses `useLiveQuestionIndex(order, resumeAtEnd)`. Per-question effects key on `qKey`, the gamemaster payload on `qIdx`. Without this, editing the game's questions mid-show re-deals the deck — see [live-question-order.md](../live-question-order.md)

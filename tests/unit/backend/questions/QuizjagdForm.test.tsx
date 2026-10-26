@@ -148,4 +148,19 @@ describe('QuizjagdForm', () => {
     render(<QuizjagdForm questions={[]} questionsPerTeam={10} onChange={vi.fn()} onChangeQuestionsPerTeam={vi.fn()} />);
     expect(screen.getByText('Fragen/Team:')).toBeInTheDocument();
   });
+  it('writes gmInfo when typing into the GM field of a real question', () => {
+    const onChange = vi.fn();
+    render(<QuizjagdForm questions={[q1]} questionsPerTeam={10} onChange={onChange} onChangeQuestionsPerTeam={vi.fn()} />);
+    const fields = screen.getAllByPlaceholderText(/Nur für den Gamemaster sichtbar/);
+    expect(fields).toHaveLength(1); // ghost row has none
+    fireEvent.change(fields[0]!, { target: { value: 'Notiz' } });
+    expect(onChange).toHaveBeenLastCalledWith([{ ...q1, gmInfo: 'Notiz' }]);
+  });
+
+  it('does not strip a trailing question that only has gmInfo', () => {
+    const onChange = vi.fn();
+    render(<QuizjagdForm questions={[q1, { question: '', answer: '', difficulty: 5, gmInfo: 'x' }]} questionsPerTeam={10} onChange={onChange} onChangeQuestionsPerTeam={vi.fn()} />);
+    fireEvent.change(screen.getAllByDisplayValue('Easy Q')[0]!, { target: { value: 'Easy Q2' } });
+    expect(onChange.mock.calls.at(-1)![0]).toHaveLength(2);
+  });
 });

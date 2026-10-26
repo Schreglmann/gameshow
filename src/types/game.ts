@@ -271,6 +271,8 @@ export interface GamemasterAnswerData {
    */
   questionImage?: string;
   extraInfo?: string;
+  /** The question's `gmInfo`: a host-only note, rendered under the answer and hidden with it. */
+  gmInfo?: string;
   /**
    * The question a tally or point award made *right now* belongs to. Omitted
    * whenever nothing is attributable: the example question, any non-`game`

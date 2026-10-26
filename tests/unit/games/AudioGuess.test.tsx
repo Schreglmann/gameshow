@@ -16,6 +16,19 @@ vi.mock('@/services/api', () => ({
   fetchBackgroundMusic: vi.fn().mockResolvedValue([]),
 }));
 
+// Capture what the game hands to the gamemaster sync, without replacing the real hook.
+const gmPayloads = vi.hoisted(() => [] as Array<Record<string, unknown> | null>);
+vi.mock('@/hooks/useGamemasterSync', async () => {
+  const actual = await vi.importActual<typeof import('@/hooks/useGamemasterSync')>('@/hooks/useGamemasterSync');
+  return {
+    ...actual,
+    useGamemasterSync: (data: Parameters<typeof actual.useGamemasterSync>[0]) => {
+      gmPayloads.push(data as Record<string, unknown> | null);
+      actual.useGamemasterSync(data);
+    },
+  };
+});
+
 const defaultProps = {
   gameId: 'game-1',
   currentIndex: 0,
@@ -169,5 +182,34 @@ describe('AudioGuess', () => {
       expect(screen.queryByText(/Ganzer Song/)).not.toBeInTheDocument();
       expect(screen.queryByText(/Ausschnitt wiederholen/)).not.toBeInTheDocument();
     });
+  });
+});
+
+describe('AudioGuess — gmInfo', () => {
+  beforeEach(() => {
+    gmPayloads.length = 0;
+  });
+
+  it('hands gmInfo to the gamemaster payload and never renders it on the show', async () => {
+    const user = userEvent.setup();
+    renderGame(makeConfig({
+      questions: [
+        { answer: 'Example Song', audio: '/audio/example.m4a', isExample: true, gmInfo: 'Nur für den Host' },
+        { answer: 'Song 1', audio: '/audio/song1.m4a', gmInfo: 'Nur für den Host' },
+      ],
+    }));
+    await waitFor(() => expect(screen.getByText('Audio Quiz')).toBeInTheDocument());
+    await advanceToGame(user);
+    await waitFor(() => expect(screen.getByText('Beispiel')).toBeInTheDocument());
+
+    expect(gmPayloads.some(p => p?.gmInfo === 'Nur für den Host')).toBe(true);
+
+    const div = document.createElement('div');
+    document.body.appendChild(div);
+    await user.click(div);
+    document.body.removeChild(div);
+    await waitFor(() => expect(screen.getByText('Example Song')).toBeInTheDocument());
+
+    expect(document.body.textContent).not.toContain('Nur für den Host');
   });
 });

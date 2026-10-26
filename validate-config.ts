@@ -595,6 +595,8 @@ export function validateQuizjagd(
     for (const [idx, q] of pool.entries()) {
       if (!q.question) errors.push(`Game "${gameRef}", ${poolName} question ${idx}: missing "question"`);
       if (!q.answer) errors.push(`Game "${gameRef}", ${poolName} question ${idx}: missing "answer"`);
+      if (q.gmInfo !== undefined && typeof q.gmInfo !== 'string')
+        errors.push(`Game "${gameRef}", ${poolName} question ${idx}: "gmInfo" must be a string`);
     }
   }
 
@@ -618,7 +620,7 @@ export function validateQuizjagd(
   return errors;
 }
 
-function validateQuestion(
+export function validateQuestion(
   gameRef: string,
   gameType: GameType,
   question: Record<string, unknown>,
@@ -628,6 +630,10 @@ function validateQuestion(
 
   const hasQuestionPrompt =
     Boolean(question.question) || Boolean(question.questionImage) || Boolean(question.questionAudio);
+
+  // Gamemaster-only note, valid on every question type. See specs/gamemaster-info.md.
+  if (question.gmInfo !== undefined && typeof question.gmInfo !== 'string')
+    errors.push(`Game "${gameRef}", question ${index}: "gmInfo" must be a string`);
 
   switch (gameType) {
     case 'simple-quiz':

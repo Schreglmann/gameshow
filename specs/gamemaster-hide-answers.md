@@ -26,6 +26,7 @@ answers are hidden.
     simple-quiz / bet-quiz and `'Falsch: …'` in q1, so it is treated as answer content in
     full, accepting that its harmless parts ("Kategorie: …", "Platz 2/5", "Hinweis 3/4")
     disappear too,
+  - the host-only note (`.gamemaster-gm-info`, `gmInfo`) — see [gamemaster-info.md](gamemaster-info.md),
   - the whole next-question preview block (`.gamemaster-next`, incl. its question text and
     image).
 - [ ] Where the plain answer would be, a **dimmed hint line** reads "Antworten versteckt"
@@ -70,6 +71,7 @@ answers are hidden.
   - hint list text: `hideAnswers && !item.revealed ? '•••••' : item.text`
   - answer image: `data.answerImage && showAnswerImages && !hideAnswers`
   - extra info: `!hideAnswers && data.extraInfo`
+  - GM note: `!hideAnswers && data.gmInfo` (`.gamemaster-gm-info`) — see [gamemaster-info.md](gamemaster-info.md)
   - next block: `!hideAnswers && controlsData.answerRevealed && data.nextAnswer`
 
 ## Out of scope

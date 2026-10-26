@@ -187,6 +187,14 @@ export default function GamemasterView({ showAnswerImages = false, hideAnswers =
                 ))}
               </div>
             )}
+            {/* Host-only note (spec: specs/gamemaster-info.md). Not answer-shaped, but the host
+                may have the card turned towards the players, so it hides with the answer. */}
+            {data.gmInfo && !hideAnswers && (
+              <div className="gamemaster-gm-info">
+                <div className="gamemaster-gm-info-label">Info für Gamemaster</div>
+                <div className="gamemaster-gm-info-text">{data.gmInfo}</div>
+              </div>
+            )}
             {!hideAnswers && controlsData?.answerRevealed && data.nextAnswer && (
               <div className="gamemaster-next">
                 <div className="gamemaster-next-label">Nächste Frage</div>

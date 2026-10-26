@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { getSegments, segmentsForCurrentInstance, segmentsForGameFile, applyReplacement } from '@/utils/spellcheckFields';
+import { GAME_TYPE_INFO } from '@/data/gameTypeInfo';
 
 describe('spellcheckFields — getSegments', () => {
   it('extracts prose from a single-instance simple-quiz, excluding non-prose', () => {
@@ -163,5 +164,17 @@ describe('spellcheckFields — applyReplacement', () => {
     const obj = { questions: [{ answer: 'Pariss' }] };
     const next = applyReplacement(obj, ['questions', 0, 'answer'], 0, 6, 'Paris');
     expect(next.questions[0].answer).toBe('Paris');
+  });
+});
+
+describe('spellcheckFields — gmInfo', () => {
+  it('proofreads the gamemaster note on every game type', () => {
+    for (const type of Object.keys(GAME_TYPE_INFO)) {
+      const game = { type, title: 'T', questions: [{ gmInfo: 'Hinweis für den Gamemaster', difficulty: 3 }] };
+      const seg = getSegments(game, null).find(s => s.key === 'q0.gmInfo');
+      expect(seg, `type ${type}`).toBeDefined();
+      expect(seg?.text).toBe('Hinweis für den Gamemaster');
+      expect(seg?.label).toContain('GM-Info');
+    }
   });
 });

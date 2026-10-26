@@ -15,6 +15,7 @@ import {
 import CompassRose from '@/components/common/CompassRose';
 import { useDragReorder } from '../useDragReorder';
 import SpellField from '../SpellField';
+import GmInfoField from './GmInfoField';
 import { AssetField } from '../AssetPicker';
 import MoveQuestionButton from './MoveQuestionButton';
 import { stripTrailingEmpty as stripTrailingEmptyQuestions } from './ghostRow';
@@ -38,7 +39,7 @@ const EMPTY_CITY: CompassCity = { name: '', lat: 0, lon: 0 };
 
 const empty = (): CityCompassQuestion => ({ center: { ...EMPTY_CITY }, neighbors: [] });
 const isEmptyQuestion = (q: CityCompassQuestion) =>
-  !q.center?.name?.trim() && (q.neighbors?.length ?? 0) === 0 && !q.question?.trim() && !q.info?.trim();
+  !q.center?.name?.trim() && (q.neighbors?.length ?? 0) === 0 && !q.question?.trim() && !q.info?.trim() && !q.gmInfo?.trim();
 
 /**
  * The 3138-city table is ~115 KB and only the compass editor needs it, so it is
@@ -434,6 +435,7 @@ export default function CityCompassForm({
                     <label className="be-label">Zusatzinfo (optional, über der Frage)</label>
                     <SpellField segKey={`q${i}.info`} className="be-input" value={q.info ?? ''} placeholder="Darf die Lösung nicht verraten" onChange={e => update(i, { info: e.target.value || undefined })} />
                   </div>
+                  <GmInfoField segKey={`q${i}.gmInfo`} value={q.gmInfo} onChange={v => update(i, { gmInfo: v })} />
                   <div>
                     <AssetField
                       label="Bild zur Auflösung (optional)"

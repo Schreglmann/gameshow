@@ -101,12 +101,13 @@ function FinalQuizInner({ questions, order, gameTitle, pointSystemEnabled, onGam
       gameTitle,
       questionNumber: qIdx,
       totalQuestions: questions.length - 1,
+      gmInfo: q.gmInfo,
       question: q.question,
       answer: q.answer,
       answerImage: q.answerImage,
       nextAnswer: nextQ ? { question: nextQ.question, answer: nextQ.answer } : undefined,
     });
-  }, [qIdx, gameTitle, questions, setGamemasterData]);
+  }, [qIdx, gameTitle, questions, q, setGamemasterData]);
 
   const showAnswerFn = useCallback(() => {
     setPhase('answer');

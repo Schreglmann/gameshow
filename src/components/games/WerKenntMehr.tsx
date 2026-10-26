@@ -221,6 +221,7 @@ function WerKenntMehrInner({
       gameTitle,
       questionNumber: qIdx,
       totalQuestions: questions.length - 1,
+      gmInfo: q.gmInfo,
       question: q.question,
       answer: exampleItems ? '' : (q.answer ?? ''),
       answerList: exampleItems,

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import type { WerKenntMehrQuestion } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
 import SpellField from '../SpellField';
+import GmInfoField from './GmInfoField';
 import { AssetField } from '../AssetPicker';
 import MoveQuestionButton from './MoveQuestionButton';
 import { stripTrailingEmpty as stripTrailingEmptyQuestions } from './ghostRow';
@@ -51,6 +52,7 @@ const isEmptyQuestion = (q: WerKenntMehrQuestion) =>
   !q.question.trim() &&
   !q.answer?.trim() &&
   !q.info?.trim() &&
+  !q.gmInfo?.trim() &&
   !q.questionImage &&
   (!q.answerList || q.answerList.length === 0) &&
   q.timer === undefined;
@@ -150,6 +152,7 @@ export default function WerKenntMehrForm({ questions, onChange, otherInstances, 
                     onChange={list => update(i, { answerList: list.length > 0 ? list : undefined })}
                   />
                 </div>
+                <GmInfoField segKey={`q${i}.gmInfo`} value={q.gmInfo} onChange={v => update(i, { gmInfo: v })} />
               </>
             )}
           </div>
