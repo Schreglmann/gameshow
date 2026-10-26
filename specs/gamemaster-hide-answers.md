@@ -26,6 +26,7 @@ answers are hidden.
     simple-quiz / bet-quiz and `'Falsch: …'` in q1, so it is treated as answer content in
     full, accepting that its harmless parts ("Kategorie: …", "Platz 2/5", "Hinweis 3/4")
     disappear too,
+  - the host-only note (`.gamemaster-gm-info`, `gmInfo`) — see [gamemaster-info.md](gamemaster-info.md),
   - the whole next-question preview block (`.gamemaster-next`, incl. its question text and
     image).
 - [ ] Where the plain answer would be, a **dimmed hint line** reads "Antworten versteckt"
@@ -35,10 +36,11 @@ answers are hidden.
   a neutral mask (`•••••`, `.gamemaster-answer-text--masked`). Rank chips and the
   `revealed` / `pending` states stay visible, and clicking a row still sends `rank-<n>`.
   No separate hint line is rendered in this case.
-- [ ] A **hint list** (`city-compass`, `data.hintList`) is not answer content: its
-  `revealed` rows stay legible while answers are hidden, because those cities are on the
-  projector anyway. Only the **pending** rows — clues the host has not introduced yet — get
-  the mask. The center city itself is hidden like any other answer, so the "Antworten
+- [ ] A **hint list** (`city-compass`, `four-statements`, `data.hintList`) is not answer
+  content: its `revealed` rows stay legible while answers are hidden, because those cities /
+  clues are on the projector anyway. Only the **pending** rows — clues the host has not
+  introduced yet — get the mask. Clickable hint rows (`hintListClickable`) stay clickable
+  while masked, like the rank rows. The center city itself is hidden like any other answer, so the "Antworten
   versteckt" line still appears above the block. See [games/city-compass.md](games/city-compass.md).
 - [ ] Everything that is **not** an answer stays visible: meta line, game title, the current
   question text, the current question image (`.gamemaster-question-image` — the random-frame
@@ -70,6 +72,7 @@ answers are hidden.
   - hint list text: `hideAnswers && !item.revealed ? '•••••' : item.text`
   - answer image: `data.answerImage && showAnswerImages && !hideAnswers`
   - extra info: `!hideAnswers && data.extraInfo`
+  - GM note: `!hideAnswers && data.gmInfo` (`.gamemaster-gm-info`) — see [gamemaster-info.md](gamemaster-info.md)
   - next block: `!hideAnswers && controlsData.answerRevealed && data.nextAnswer`
 
 ## Out of scope

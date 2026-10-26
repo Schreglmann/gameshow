@@ -25,6 +25,7 @@ All gameshow content — which games run, in what order, with what questions —
   - `teamColors?: Partial<Record<TeamKey, string>>` — the four `#rrggbb` colours; an absent key means the default palette, a blank one means "use the active theme's colour"
   - `jokersInLastGame: boolean` (top-level `AppConfig` flag, default `false`; when `true`, jokers stay available in the last game)
   - `jokerUsageScope: 'per-gameshow' | 'per-game'` (top-level `AppConfig` flag, default `'per-gameshow'`; `'per-game'` refreshes all jokers except the Aufholjoker at the start of each game — see [jokers.md](jokers.md))
+  - `backgroundMusicSource: 'theme' | 'default'` (top-level `AppConfig` flag, default `'theme'`; `'default'` always plays the root `background-music/` playlist instead of the active theme's soundtrack — see [background-music.md](background-music.md))
   - `globalRules: string[]` — as stored in `config.json`, holds only the pointMode-agnostic framing
     lines; `GET /api/settings` always appends one more line, the active gameshow's scoring sentence
     (`pointModeRule(pointMode, config.pointModeRules)`, omitted when `pointSystemEnabled` is false) —

@@ -208,12 +208,13 @@ function GuessingInner({ questions, order, gameTitle, autoScoring, gameIndex, ga
       gameTitle,
       questionNumber: qIdx,
       totalQuestions: questions.length - 1,
+      gmInfo: q.gmInfo,
       question: q.question,
       answer: formatNumber(q.answer),
       answerImage: q.answerImage,
       nextAnswer: nextQ ? { question: nextQ.question, answer: formatNumber(nextQ.answer) } : undefined,
     });
-  }, [qIdx, gameTitle, questions, setGamemasterData]);
+  }, [qIdx, gameTitle, questions, q, setGamemasterData]);
 
   // GuessingGame's "answer revealed" maps to the result phase. Signal the
   // wrapper so an active deadline timer hides as soon as the answer shows.

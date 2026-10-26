@@ -180,11 +180,12 @@ function BandleInner({ questions, order, resumeAtEnd, gameTitle, audioRef, onGam
       gameTitle,
       questionNumber: qIdx,
       totalQuestions: questions.length - 1,
+      gmInfo: q.gmInfo,
       answer: q.answer,
       answerImage: q.answerImage,
       nextAnswer: nextQ ? { answer: nextQ.answer } : undefined,
     });
-  }, [qIdx, gameTitle, questions, setGamemasterData]);
+  }, [qIdx, gameTitle, questions, q, setGamemasterData]);
 
   const formatTime = (s: number) => {
     const m = Math.floor(s / 60);

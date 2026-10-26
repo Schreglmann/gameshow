@@ -46,6 +46,8 @@ A game where both teams compete to name *more* of a given thing than the other t
   - `disabled?: boolean`
 - Points awarded via `onAwardPoints(team, n)` (the standard `AWARD_POINTS` action; balance clamped at 0). In `count` mode `n` is the entered count per round; in `count-penalty` mode the winner gets `+count` and the loser `-count` (clamped at 0), tie = no calls; in `standard` mode `n` is `pointValue` (`currentIndex + 1`) — or `pointValue * 2` for the Aufholjoker-armed team — awarded once on the summary reward screen. `BaseGameWrapper` keeps `skipPointsScreen` in all modes — `standard` mode renders its own summary/reward screen inside the game (so it sits on the light game card with legible on-card text), and its `finishGame` applies the Aufholjoker ×2 itself (the wrapper's `handleComplete` multiplier is never reached under `skipPointsScreen`)
 
+Every question also accepts the optional `gmInfo` (host-only note, shown in the GM card only) — see [gamemaster-info.md](../gamemaster-info.md).
+
 ## UI behaviour
 - Component: [`src/components/games/WerKenntMehr.tsx`](../../src/components/games/WerKenntMehr.tsx)
 - Phase machine: `question → answer` (`count` mode), or `question → answer → … → summary` (`standard` mode, summary after the last round). Reuses [`QuizQuestionView`](../../src/components/games/QuizQuestionView.tsx) for the question render (info, emoji scaling, `questionImage` via `RetryImage` + lightbox, `Timer` portal) with `showAnswer={false}`; the examples are rendered by this component on reveal

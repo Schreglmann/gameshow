@@ -6,6 +6,9 @@ import { GameProvider } from '@/context/GameContext';
 import { MusicProvider } from '@/context/MusicContext';
 import FourStatements from '@/components/games/FourStatements';
 import type { FourStatementsConfig, FourStatementsQuestion } from '@/types/config';
+import type { GamemasterAnswerData } from '@/types/game';
+import * as backendSocket from '@/services/useBackendSocket';
+import { __emitChannelForTests } from '@/services/useBackendSocket';
 
 vi.mock('@/services/api', () => ({
   fetchSettings: vi.fn().mockResolvedValue({
@@ -349,5 +352,66 @@ describe('FourStatements (clue-based)', () => {
       expect(screen.queryByText('Lösung')).not.toBeInTheDocument();
       expect(played.pause).toHaveBeenCalled();
     });
+  });
+
+  it('sends every clue to the gamemaster as a hint, marking the revealed ones', async () => {
+    const sendWsSpy = vi.spyOn(backendSocket, 'sendWs');
+    const user = userEvent.setup();
+    renderGame(makeConfig({
+      questions: [makeQuestion({ topic: 'Beispiel-Thema', statements: ['Hinweis A', '', 'Hinweis C'] })],
+    }));
+    await waitFor(() => expect(screen.getByText('Hinweise')).toBeInTheDocument());
+    advanceToGame();
+    const lastGmData = () => {
+      const calls = sendWsSpy.mock.calls.filter(([ch]) => ch === 'gamemaster-answer');
+      return calls[calls.length - 1]?.[1] as GamemasterAnswerData | undefined;
+    };
+
+    await waitFor(() => {
+      expect(lastGmData()?.question).toBe('Beispiel-Thema');
+      // Empty slots are skipped, exactly as on the show.
+      expect(lastGmData()?.hintList).toEqual([
+        { rank: 1, text: 'Hinweis A', revealed: false },
+        { rank: 2, text: 'Hinweis C', revealed: false },
+      ]);
+      expect(lastGmData()?.hintListClickable).toBe(true);
+      expect(lastGmData()?.answer).toBe('Edison');
+    });
+
+    await clickForward(user);
+    await waitFor(() => expect(lastGmData()?.hintList?.map(h => h.revealed)).toEqual([true, false]));
+    sendWsSpy.mockRestore();
+  });
+
+  it('jumps to exactly hints 1…N on a gamemaster hint click, hiding the answer', async () => {
+    renderGame();
+    await waitFor(() => expect(screen.getByText('Hinweise')).toBeInTheDocument());
+    advanceToGame();
+    await waitFor(() => expect(screen.getByText('Beispiel-Thema')).toBeInTheDocument());
+    const sendHint = (n: number) => act(async () => {
+      __emitChannelForTests('gamemaster-command', { controlId: `hint-${n}`, timestamp: Date.now() + Math.random() });
+    });
+
+    await sendHint(3);
+    await waitFor(() => expect(document.querySelectorAll('.statement')).toHaveLength(3));
+
+    await sendHint(1);
+    await waitFor(() => expect(document.querySelectorAll('.statement')).toHaveLength(1));
+
+    // From the solution back to a clue: the answer is hidden again.
+    await act(async () => {
+      __emitChannelForTests('gamemaster-command', { controlId: 'four-statements-reveal', timestamp: Date.now() + Math.random() });
+    });
+    await waitFor(() => expect(screen.getByText('Lösung')).toBeInTheDocument());
+    await sendHint(2);
+    await waitFor(() => {
+      expect(screen.queryByText('Lösung')).not.toBeInTheDocument();
+      expect(document.querySelectorAll('.statement')).toHaveLength(2);
+    });
+
+    // Out-of-range clicks clamp to the clue count.
+    await sendHint(9);
+    await waitFor(() => expect(document.querySelectorAll('.statement')).toHaveLength(4));
+    expect(screen.queryByText('Lösung')).not.toBeInTheDocument();
   });
 });

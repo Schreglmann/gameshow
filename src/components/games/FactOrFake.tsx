@@ -74,12 +74,13 @@ function FactOrFakeInner({ questions, order, gameTitle, onGameComplete, setNavHa
       gameTitle,
       questionNumber: qIdx,
       totalQuestions: questions.length - 1,
+      gmInfo: q.gmInfo,
       question: q.statement,
       answer: isFakt ? 'FAKT' : 'FAKE',
       extraInfo: q.description,
       nextAnswer: nextQ ? { answer: nextIsFakt ? 'FAKT' : 'FAKE' } : undefined,
     });
-  }, [qIdx, gameTitle, questions, setGamemasterData]);
+  }, [qIdx, gameTitle, questions, q, setGamemasterData]);
 
   // Signal answer-reveal so the GM-triggered deadline timer hides immediately.
   useEffect(() => {

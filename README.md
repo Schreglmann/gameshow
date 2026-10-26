@@ -212,6 +212,8 @@ A music panel is available on the right edge of the screen. Click the tab to ope
 
 From here you can play/pause, skip tracks, and adjust volume. Music crossfades smoothly between tracks (3-second fade).
 
+By default the active theme's soundtrack plays (falling back to the general playlist). The admin toggle **Theme-Hintergrundmusik verwenden** switches to the general playlist for every theme.
+
 ---
 
 ### 7. End of the Gameshow

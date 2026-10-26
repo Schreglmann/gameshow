@@ -231,6 +231,26 @@ describe('ConfigTab', () => {
     }, { timeout: 5000 });
   });
 
+  // Background-music source — see specs/background-music.md.
+  it('switching off Theme-Hintergrundmusik autosaves backgroundMusicSource "default"', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderConfigTab();
+    // Unset means "theme", so the toggle starts checked.
+    await waitFor(() => {
+      expect(screen.getByRole('checkbox', { name: 'Theme-Hintergrundmusik verwenden' })).toBeChecked();
+    });
+
+    await user.click(screen.getByRole('checkbox', { name: 'Theme-Hintergrundmusik verwenden' }));
+
+    act(() => { vi.advanceTimersByTime(800); });
+
+    await waitFor(() => {
+      expect(mockSaveConfig).toHaveBeenCalledWith(
+        expect.objectContaining({ backgroundMusicSource: 'default' })
+      );
+    }, { timeout: 5000 });
+  });
+
   it('editing one colour persists only that team — the others stay absent', async () => {
     // An untouched team must NOT be materialized: absent means "use the default",
     // which is a different stored state from an explicit value.
@@ -428,7 +448,7 @@ describe('ConfigTab', () => {
     await waitFor(() => expect(getStatus().state).toBe('idle'));
   });
 
-  it('Gameshow theme selector renders all 13 themes', async () => {
+  it('Gameshow theme selector renders all 14 themes', async () => {
     const { container } = renderConfigTab();
     await waitFor(() => {
       expect(screen.getByText('Themes')).toBeInTheDocument();
@@ -437,7 +457,7 @@ describe('ConfigTab', () => {
     expect(selectors).toHaveLength(2);
     // First selector = Gameshow (frontend) → every theme available.
     expect(selectors[0].querySelectorAll('.theme-option')).toHaveLength(THEMES.length);
-    expect(THEMES.length).toBe(13);
+    expect(THEMES.length).toBe(14);
   });
 
   it('Admin theme selector renders only the curated admin subset', async () => {
@@ -455,7 +475,7 @@ describe('ConfigTab', () => {
     expect(adminText).toContain('Galaxia');
     expect(adminText).toContain('Tiefsee');
     expect(adminText).toContain('Enterprise');
-    for (const removed of ['Harry Potter', 'D&D', 'Retro', 'Minecraft', 'Classical Music', 'Modern Music', 'Filme', 'Pub Quiz']) {
+    for (const removed of ['Harry Potter', 'D&D', 'Retro', 'Minecraft', 'Classical Music', 'Modern Music', 'Filme', 'Pub Quiz', 'Halloween']) {
       expect(adminText).not.toContain(removed);
     }
   });

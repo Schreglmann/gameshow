@@ -29,7 +29,7 @@ A hidden city sits at the center of a compass rose and the named cities around i
 - [x] Swapping a city in the admin redraws the rose on the running show without a reload and without moving the host to a different question
 - [x] After the last question and its answer, calls `onGameComplete()`
 - [x] Points awarded by the host via `AwardPoints`, value = `currentIndex + 1`
-- [x] Gamemaster screen shows the center city as the answer **and**, below it, the neighbor list with a `revealed` flag per entry. The neighbors travel on `hintList`, not `answerList`: the GM card renders `answerList` *instead of* the plain answer (it is the answer for `ranking`), which left the host looking at the clues the players already see and no solution while asking. `hintList` is rendered as its own labelled "Hinweise" block, with static rows — no game listens for a hint-jump command
+- [x] Gamemaster screen shows the center city as the answer **and**, below it, the neighbor list with a `revealed` flag per entry. The neighbors travel on `hintList`, not `answerList`: the GM card renders `answerList` *instead of* the plain answer (it is the answer for `ranking`), which left the host looking at the clues the players already see and no solution while asking. `hintList` is rendered as its own labelled "Hinweise" block, with static rows — city-compass does not set `hintListClickable`, because its progressive mode never shows fewer than two cities, so a jump to hint N has no clean meaning there
 - [x] Under "Antworten verstecken" the revealed hints stay legible (they are on the projector anyway) and only the pending ones are masked, while the center city is hidden like any other answer
 - [x] The rose has no background of its own: it inherits the card text color and paints every part with `currentColor` at its own opacity, so it reads on every theme, light or dark. The solved center reuses the answer colour of `.quiz-answer` — which every theme already picks to contrast with its card — as a bright outline, a soft halo and the name itself
 - [x] Validator requires `center` and at least 3 `neighbors`, each with a name and coordinates in range, and `reveal` / `showDistances` only on this game type
@@ -111,6 +111,8 @@ The data is GeoNames under CC BY 4.0. The attribution belongs in the generated f
 - `layoutCompass(center, neighbors, opts)` — positioned nodes for the SVG: dot, spoke (inner end clear of the middle) and label per neighbor, the crop box, the crosshair insets, and the solution pill's size and font size. `neighbors` is always the full list even when the caller draws only the first few, so a progressive reveal adds cities to a rose that stays exactly where it is
 - `formatDistanceKm`, `LABEL_FONT_SIZE`, `DISTANCE_FONT_SIZE`, `UNKNOWN_FONT_SIZE`, `LABEL_LINE_HEIGHT` — the type sizes live here, not in the stylesheet, because the crop is computed from the text extents. Text cannot be measured without a DOM, so the crop estimates the advance width generously: underestimating cuts a name off, overestimating only leaves a little air
 - `pickNeighbors(center, cities, opts)` — the Auto selection described above
+
+Every question also accepts the optional `gmInfo` (host-only note, shown in the GM card only) — see [gamemaster-info.md](../gamemaster-info.md).
 
 ## UI behaviour
 - Component: `src/components/games/CityCompass.tsx`, wrapping `BaseGameWrapper`, modeled on `Q1.tsx` for the progressive reveal and on `ImageGuess.tsx` for the question-order handling

@@ -10,6 +10,7 @@ import { isValidHex } from '@/utils/hexColor';
 import AudioTrimTimeline from '../AudioTrimTimeline';
 import MoveQuestionButton from './MoveQuestionButton';
 import SpellField from '../SpellField';
+import GmInfoField from './GmInfoField';
 import { stripTrailingEmpty } from './ghostRow';
 import { useConfirm } from '../ConfirmContext';
 
@@ -31,6 +32,7 @@ const isEmpty = (q: SimpleQuizQuestion) =>
   !q.questionAudio &&
   !q.answerAudio &&
   !q.info?.trim() &&
+  !q.gmInfo?.trim() &&
   !q.category?.trim() &&
   (!q.answerList || q.answerList.length === 0) &&
   (!q.questionColors || q.questionColors.length === 0) &&
@@ -139,7 +141,7 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
     });
 
   const hasOptional = (q: SimpleQuizQuestion) =>
-    q.info || q.questionImage || q.answerImage || q.questionAudio || q.answerAudio ||
+    q.info || q.gmInfo || q.questionImage || q.answerImage || q.questionAudio || q.answerAudio ||
     q.replaceImage || q.timer !== undefined || (q.answerList && q.answerList.length > 0) ||
     (q.questionColors && q.questionColors.length > 0);
 
@@ -270,6 +272,7 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
                   </label>
                 </div>
               </div>
+              <GmInfoField segKey={`q${i}.gmInfo`} value={q.gmInfo} onChange={v => update(i, { gmInfo: v })} />
               {/* Left column: question fields */}
               <div className="question-fields-col">
                 {(() => {

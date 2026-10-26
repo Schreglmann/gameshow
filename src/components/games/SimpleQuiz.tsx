@@ -185,13 +185,14 @@ function QuizInner({ questions, order, resumeAtEnd, gameTitle, answerAudioRef, q
       gameTitle,
       questionNumber: qIdx,
       totalQuestions: questions.length - 1,
+      gmInfo: q.gmInfo,
       question: q.question,
       answer: q.answer,
       answerImage: q.answerImage,
       extraInfo: q.answerList?.join('\n'),
       nextAnswer: nextQ ? { question: nextQ.question, answer: nextQ.answer } : undefined,
     });
-  }, [qIdx, gameTitle, questions, setGamemasterData]);
+  }, [qIdx, gameTitle, questions, q, setGamemasterData]);
 
   const handleAudioPlayPause = useCallback(() => {
     const audio = questionAudioRef.current;

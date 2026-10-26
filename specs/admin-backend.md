@@ -67,7 +67,7 @@ All question forms support Add, Delete, Move Up, Move Down.
 ### Config
 Global app configuration only — gameshow management lives in its own **Gameshows** tab (see below).
 - Themes: Gameshow theme + Admin theme selectors (gradient previews)
-- Global settings: `pointSystemEnabled`, `teamRandomizationEnabled`, `teamMirrorEnabled`, `teamColorsEnabled` ("Team-Farben"), `jokersInLastGame`, `jokerUsageScope` ("Joker pro Spiel zurücksetzen" toggle: on = `per-game`, off = `per-gameshow`) — all rendered as toggles
+- Global settings: `pointSystemEnabled`, `teamRandomizationEnabled`, `teamMirrorEnabled`, `teamColorsEnabled` ("Team-Farben"), `jokersInLastGame`, `jokerUsageScope` ("Joker pro Spiel zurücksetzen" toggle: on = `per-game`, off = `per-gameshow`), `backgroundMusicSource` ("Theme-Hintergrundmusik verwenden" toggle: on = `theme`, off = `default`) — all rendered as toggles
 - **Team-Farben** card: four `ColorPickerField`s (swatch opening the native picker + a validated `#rrggbb` text field + a ✕ that clears to `''`), one per team, prefilled with the default palette. All four stay editable whatever the active gameshow's team count is — picking in advance is the point — with an italic hint on the ones above it. An invalid hex is rejected with a German message and never reaches `config.json`. See [team-colors.md](team-colors.md)
 - Global rules: add/remove/reorder string list
 - Save writes `config.json` atomically via `PUT /api/backend/config`, debounced 800 ms through the module-scope save queue — it survives the pane unmounting on a tab switch and retries a failed write with backoff. See [admin-save-queue.md](admin-save-queue.md)
@@ -165,11 +165,15 @@ Note: the `local-assets/audio-guess/` directory on disk is not exposed as a DAM 
 - `audio/bandle/*` and `audio/backup/*` are hidden from the DAM and rejected server-side as sources
 - Game references are rewritten from `/<fromCategory>/<from>` → `/<toCategory>/<to>` by the same code path used for intra-category moves. Audio covers (`/images/Audio-Covers/<basename>.jpg`) are filename-keyed and remain valid
 
-#### Usage filter (Verwendet / Unbenutzt)
+#### Usage filter (In Gameshow / Verwendet / Unbenutzt)
 
-The sort popover hosts a second section, **Verwendung**, with two togglable buttons: **Verwendet** and **Unbenutzt**. Neither active = show all (default). Selecting one filters the folder tree and search results to only files that are referenced by any game JSON (Verwendet) or that are not (Unbenutzt). Clicking the active button again clears the filter; the two buttons are mutually exclusive.
+The sort popover hosts a second section, **Verwendung**, with three togglable buttons. Neither active = show all (default). Clicking the active button again clears the filter; the buttons are mutually exclusive. Each one filters the folder tree and search results:
 
-- Backed by `GET /api/backend/asset-category-usages?category=…` (lazy-fetched on first activation per category), which returns `{ usedFiles: string[], imageGuessFiles: string[], truncated: boolean }` — `usedFiles` are category-relative paths (e.g. `audio-2024/song.mp3`); `imageGuessFiles` is the subset referenced by any `image-guess`-typed game and powers the "Niedrige Auflösung" filter below
+- **In Gameshow** — only files referenced by a question that some gameshow plays: a game (single-instance) or game instance (multi-instance) referenced in the `gameOrder` of **any** gameshow in `config.json`, not only the active one. Other instances of the same game don't count. An `archive` instance counts only when a gameshow references it (possible when it is the game's fallback instance)
+- **Verwendet** — files referenced by any question in any game JSON, whether or not a gameshow plays it (archive instances included)
+- **Unbenutzt** — the exact complement of **Verwendet**: files not referenced by any game JSON
+
+- Backed by `GET /api/backend/asset-category-usages?category=…` (lazy-fetched on first activation per category), which returns `{ usedFiles: string[], gameshowFiles: string[], imageGuessFiles: string[], truncated: boolean }` — `usedFiles` are category-relative paths (e.g. `audio-2024/song.mp3`); `gameshowFiles` is the subset played by a gameshow (backs **In Gameshow**); `imageGuessFiles` is the subset referenced by any `image-guess`-typed game and powers the "Niedrige Auflösung" filter below
 - When the filter is active the folder tree is filtered: files not matching the predicate are hidden, folders with no surviving descendants are dropped. Surviving folders keep their user-controlled expansion state — the filter never auto-expands. The "Alle" bulk-select still reaches into collapsed surviving folders so it picks up every visible-after-filter file across the tree
 - Search and filter compose — when both are active the result set is the intersection
 - The cache is invalidated when the active category changes or after mutations that can change game refs (move, rename, delete, merge, undo-delete)
@@ -288,7 +292,7 @@ POST   /api/backend/assets/:category/trash/purge     → { batchId?, items? } �
 GET    /api/backend/assets/:category/trash/stream    → ?batchId=&path= → binary stream of a trashed file (Cache-Control: no-store), for preview modals
 GET    /api/backend/asset-usages          → ?category=&file= → { games[] } — games referencing this asset
 GET    /api/backend/asset-folder-usages   → ?category=&folder= → { truncated, files[] } — per-file usages for delete-confirm
-GET    /api/backend/asset-category-usages → ?category= → { truncated, usedFiles[], imageGuessFiles[] } — files referenced by any game; imageGuessFiles is the subset used in image-guess-typed games (backs Verwendet/Unbenutzt + Niedrige Auflösung filters)
+GET    /api/backend/asset-category-usages → ?category= → { truncated, usedFiles[], gameshowFiles[], imageGuessFiles[] } — files referenced by any game; gameshowFiles is the subset played by any gameshow's gameOrder; imageGuessFiles is the subset used in image-guess-typed games (backs In Gameshow/Verwendet/Unbenutzt + Niedrige Auflösung filters)
 ```
 
 #### Delete / undo-delete semantics

@@ -3,6 +3,7 @@ import type { BandleQuestion, BandleCatalogEntry } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
 import { AssetField } from '../AssetPicker';
 import MoveQuestionButton from './MoveQuestionButton';
+import GmInfoField from './GmInfoField';
 import { fetchBandleCatalog, fetchBandleUsedSongs } from '@/services/backendApi';
 
 interface Props {
@@ -701,6 +702,7 @@ export default function BandleForm({ questions, onChange, otherInstances, onMove
                       onChange={v => update(i, { answerImage: v })}
                     />
                   </div>
+                  <GmInfoField segKey={`q${i}.gmInfo`} value={q.gmInfo} onChange={v => update(i, { gmInfo: v })} />
                 </div>
               </div>
             )}

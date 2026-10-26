@@ -158,6 +158,7 @@ function RankingInner({ questions, order, resumeAtEnd, gameTitle, audioRef, onGa
       gameTitle,
       questionNumber: qIdx,
       totalQuestions: questions.length - 1,
+      gmInfo: q.gmInfo,
       question: q.question,
       answer: fallback,
       answerList: list,

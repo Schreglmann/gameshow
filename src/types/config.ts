@@ -23,7 +23,13 @@ export type GameType =
 
 // ── Question types per game ──
 
-export interface SimpleQuizQuestion {
+/** Shared by every question type. */
+export interface GmInfoField {
+  /** Gamemaster-only note, shown in the GM card under the answer; never rendered on the show. */
+  gmInfo?: string;
+}
+
+export interface SimpleQuizQuestion extends GmInfoField {
   question: string;
   answer: string;
   /** Optional small-font subtitle rendered above the question text (simple-quiz only). */
@@ -47,7 +53,7 @@ export interface SimpleQuizQuestion {
   disabled?: boolean;
 }
 
-export interface WerKenntMehrQuestion {
+export interface WerKenntMehrQuestion extends GmInfoField {
   /** The prompt, e.g. "Nennt so viele europäische Hauptstädte wie möglich". */
   question: string;
   /** Optional small-font subtitle rendered above the question text. */
@@ -63,7 +69,7 @@ export interface WerKenntMehrQuestion {
   disabled?: boolean;
 }
 
-export interface GuessingGameQuestion {
+export interface GuessingGameQuestion extends GmInfoField {
   question: string;
   answer: number;
   answerImage?: string;
@@ -78,14 +84,14 @@ export interface GuessingGameQuestion {
   disabled?: boolean;
 }
 
-export interface FinalQuizQuestion {
+export interface FinalQuizQuestion extends GmInfoField {
   question: string;
   answer: string;
   answerImage?: string;
   disabled?: boolean;
 }
 
-export interface AudioGuessQuestion {
+export interface AudioGuessQuestion extends GmInfoField {
   answer: string;
   audio: string;
   audioStart?: number;
@@ -100,7 +106,7 @@ export interface BandleTrack {
   audio: string;
 }
 
-export interface BandleQuestion {
+export interface BandleQuestion extends GmInfoField {
   answer: string;
   tracks: BandleTrack[];
   hint?: string;
@@ -146,7 +152,7 @@ export interface BandleCatalogEntry {
   dailyDate?: string;
 }
 
-export interface VideoGuessQuestion {
+export interface VideoGuessQuestion extends GmInfoField {
   answer: string;
   video: string;
   /** Optional prompt shown above the video, e.g. "Welcher Film ist das?". */
@@ -160,7 +166,7 @@ export interface VideoGuessQuestion {
   disabled?: boolean;
 }
 
-export interface ImageGuessQuestion {
+export interface ImageGuessQuestion extends GmInfoField {
   image: string;
   answer: string;
   obfuscation?: 'blur' | 'pixelate' | 'zoom' | 'swirl' | 'noise' | 'scatter' | 'random';
@@ -168,7 +174,7 @@ export interface ImageGuessQuestion {
   disabled?: boolean;
 }
 
-export interface RandomFrameQuestion {
+export interface RandomFrameQuestion extends GmInfoField {
   /** DAM video path, e.g. "/videos/Movies/Film.mkv". The frame is extracted from this. */
   video: string;
   /** The movie/show title — the answer players must guess. */
@@ -191,7 +197,7 @@ export interface ColorSlice {
   percent: number;
 }
 
-export interface ColorGuessQuestion {
+export interface ColorGuessQuestion extends GmInfoField {
   image: string;
   answer: string;
   disabled?: boolean;
@@ -210,7 +216,7 @@ export interface CompassCity {
   country?: string;
 }
 
-export interface CityCompassQuestion {
+export interface CityCompassQuestion extends GmInfoField {
   /** The city teams have to name. Never rendered before the reveal. */
   center: CompassCity;
   /** 3-8 cities around it, in reveal order. */
@@ -223,7 +229,7 @@ export interface CityCompassQuestion {
   disabled?: boolean;
 }
 
-export interface Q1Question {
+export interface Q1Question extends GmInfoField {
   Frage: string;
   trueStatements: string[];
   wrongStatement: string;
@@ -231,7 +237,7 @@ export interface Q1Question {
   disabled?: boolean;
 }
 
-export interface FourStatementsQuestion {
+export interface FourStatementsQuestion extends GmInfoField {
   topic: string;
   statements: string[];
   answer?: string;
@@ -243,7 +249,7 @@ export interface FourStatementsQuestion {
   disabled?: boolean;
 }
 
-export interface RankingQuestion {
+export interface RankingQuestion extends GmInfoField {
   /** Prompt shown at the top. May be empty when `items` provide the on-screen prompt instead. */
   question: string;
   answers: string[];
@@ -268,7 +274,7 @@ export interface RankingQuestion {
   disabled?: boolean;
 }
 
-export interface FactOrFakeQuestion {
+export interface FactOrFakeQuestion extends GmInfoField {
   statement: string;
   answer?: 'FAKT' | 'FAKE';
   isFact?: boolean;
@@ -284,7 +290,7 @@ export interface QuizjagdQuestionSet {
   hard: QuizjagdQuestion[];
 }
 
-export interface QuizjagdQuestion {
+export interface QuizjagdQuestion extends GmInfoField {
   question: string;
   answer: string;
   disabled?: boolean;
@@ -555,6 +561,15 @@ export interface RulesPreset {
 export type JokerUsageScope = 'per-gameshow' | 'per-game';
 
 /**
+ * Which playlist the show's background music plays.
+ *
+ * `theme` (default) — the active theme's `background-music/<theme>/` folder,
+ * falling back to the root folder when the theme has none. `default` — always
+ * the root folder, whatever the theme. See specs/background-music.md.
+ */
+export type BackgroundMusicSource = 'theme' | 'default';
+
+/**
  * The operator's colour per team, as `#rrggbb`.
  *
  * Three states per team, and the middle one is the subtle one: an ABSENT key
@@ -611,6 +626,12 @@ export interface AppConfig {
    * Aufholjoker (`comeback`) is exempt and always per-gameshow. See specs/jokers.md.
    */
   jokerUsageScope?: JokerUsageScope;
+  /**
+   * Whether the background music follows the active theme (`theme`, default)
+   * or always plays the default playlist (`default`).
+   * See specs/background-music.md.
+   */
+  backgroundMusicSource?: BackgroundMusicSource;
   globalRules?: string[];
   /**
    * Generic joker explanation shown on the global rules screen when the active
@@ -658,7 +679,7 @@ export interface GameFileSummary {
 }
 
 // Flat format used in actual quizjagd JSON files
-export interface QuizjagdFlatQuestion {
+export interface QuizjagdFlatQuestion extends GmInfoField {
   question: string;
   answer: string;
   difficulty: 3 | 5 | 7;
@@ -783,6 +804,13 @@ export interface SettingsResponse {
    * don't need to provide it. See specs/jokers.md.
    */
   jokerUsageScope?: JokerUsageScope;
+  /**
+   * Which playlist the background music plays (`AppConfig.backgroundMusicSource`,
+   * normalised server-side). Optional so existing test fixtures don't need it —
+   * a client that gets no value plays the theme soundtrack.
+   * See specs/background-music.md.
+   */
+  backgroundMusicSource?: BackgroundMusicSource;
   /**
    * Roster of the active gameshow (`GameshowConfig.players`), configured in the
    * admin Gameshows tab. Prefills the HomeScreen randomization textarea. Empty

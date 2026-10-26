@@ -4,11 +4,11 @@ You are helping the user add a new visual theme to the gameshow project. A theme
 
 ### Frontend vs. admin — new themes are FRONTEND-ONLY by default
 
-The **frontend** (player-facing gameshow) offers **every** theme in `THEMES`. The **admin** backend offers only a **curated subset** — `ADMIN_THEME_IDS` in [src/context/ThemeContext.tsx](src/context/ThemeContext.tsx) (currently `galaxia`, `deepsea`, `enterprise`). The immersive themes make a poor CMS work surface, so the admin picker (`ConfigTab`) and the admin row of the theme showcase only list `ADMIN_THEMES`, and `setAdminTheme()` rejects anything not in `ADMIN_THEME_IDS`.
+The **frontend** (player-facing gameshow) offers **every** theme in `THEMES`. The **admin** backend offers only a **curated subset** — `ADMIN_THEME_IDS` in [src/context/ThemeContext.tsx](src/context/ThemeContext.tsx) (currently `atlas`, `atlas-light`, `galaxia`, `deepsea`, `enterprise`). The immersive themes make a poor CMS work surface, so the admin picker (`ConfigTab`) and the admin row of the theme showcase only list `ADMIN_THEMES`, and `setAdminTheme()` rejects anything not in `ADMIN_THEME_IDS`.
 
 **Therefore: a new theme is a frontend theme. Do NOT add it to `ADMIN_THEME_IDS`.** Only make it an admin theme when the user *explicitly* asks for one. When in doubt, build frontend-only and mention that admin availability is opt-in. Throughout this skill, steps marked **(admin theme only)** are skipped for the default frontend-only case.
 
-Existing themes to use as reference: `galaxia` (default, minimal — also an admin theme), `harry-potter` (immersive: stars + shimmer), `dnd` (immersive: torches), `deepsea` (immersive: caustic light rays + plankton — also an admin theme), `enterprise` (minimal professional — also an admin theme).
+Existing themes to use as reference: `atlas` (the default, on `:root` — calm, static, also an admin theme), `enterprise` (minimal professional — also an admin theme), `pub-quiz` (compact static immersive theme: opaque cards + a framed atmosphere), `harry-potter` / `dnd` / `maerchen` (fully immersive: a baked SVG scene from a generator script + a JS mover driver), `deepsea` (immersive: caustic light rays + plankton — also an admin theme).
 
 ---
 
@@ -28,7 +28,7 @@ Before writing anything, ask the user for:
    - Primary text color (must have **≥4.5:1** contrast against background)
    - Secondary/muted text color (≥3.0:1)
    - Success / error / gold colors (used across game states)
-6. **Font family** — serif (e.g. Cinzel for Harry Potter / D&D) vs. sans-serif (e.g. Inter / DM Sans). If new, must be added to [index.html](index.html) preloads.
+6. **Font family** — serif (e.g. Cinzel for Harry Potter / D&D) vs. sans-serif (e.g. Inter / DM Sans). If new, it must be added to the Google Fonts links in all three entries: `show/index.html`, `admin/index.html`, `gamemaster/index.html`.
 7. **Button style** — rounded pills vs. sharp rectangles, `text-transform` (uppercase/none), `letter-spacing`, `font-weight`, glow intensity.
 8. **Atmosphere effects** (only if immersive) — describe the visual: twinkling stars, torch flicker, rising smoke, animated mist, shimmer drift, etc. Agent must plan the `@keyframes` and decide which layer (`::before` vs `::after`) each effect uses.
 9. **Admin theme?** — ask explicitly: *"Should this theme also be selectable for the admin backend, or frontend-only?"* **Default to frontend-only** — only treat it as an admin theme if the user clearly asks. The answer gates every step marked **(admin theme only)** below.
@@ -64,27 +64,27 @@ Only proceed after the user confirms the spec.
 
 ### Step 1 — Register the theme ID ([src/context/ThemeContext.tsx](src/context/ThemeContext.tsx))
 
-1. Add `'<slug>'` to the `ThemeId` union (line 6):
+1. Add `'<slug>'` to the `ThemeId` union:
    ```typescript
    export type ThemeId = 'galaxia' | 'harry-potter' | … | '<slug>';
    ```
-2. Append to the `THEMES` array (lines 8–19) — this alone makes the theme available on the **frontend**:
+2. Append to the `THEMES` array — this alone makes the theme available on the **frontend**:
    ```typescript
    { id: '<slug>', label: '<Label>', description: '<Deutsche Beschreibung>' },
    ```
-3. **(admin theme only)** Add `'<slug>'` to `ADMIN_THEME_IDS` (line 24). **Skip this for a frontend-only theme** — leaving it out is exactly what keeps the theme out of the admin picker, the admin showcase row, and `setAdminTheme()`:
+3. **(admin theme only)** Add `'<slug>'` to `ADMIN_THEME_IDS`. **Skip this for a frontend-only theme** — leaving it out is exactly what keeps the theme out of the admin picker, the admin showcase row, and `setAdminTheme()`:
    ```typescript
-   export const ADMIN_THEME_IDS: ThemeId[] = ['galaxia', 'deepsea', 'enterprise', '<slug>'];
+   export const ADMIN_THEME_IDS: ThemeId[] = ['atlas', 'atlas-light', 'galaxia', 'deepsea', 'enterprise', '<slug>'];
    ```
 
-`VALID_THEMES` (line 28) and `ADMIN_THEMES` (line 25) are both derived from these — no further edits in this file.
+`VALID_THEMES` and `ADMIN_THEMES` are both derived from these — no further edits in this file except the swatch (Step 7).
 
 ### Step 2 — CSS variables ([src/styles/themes.css](src/styles/themes.css))
 
-Append a `[data-theme="<slug>"] { … }` block at the end of the file. **Every** variable defined in the Galaxia block (lines 19–137) must be overridden — missing overrides silently inherit from Galaxia and produce inconsistency.
+Add a `[data-theme="<slug>"] { … }` block after the last theme block and **before** the iOS `@supports (-webkit-touch-callout: none)` block, which must stay last (see Step 7b). **Every** variable defined in the default `:root, [data-theme="atlas"]` block (the first block in the file) must be overridden — missing overrides silently inherit Atlas's values on `<html>` and produce inconsistency.
 
 Mandatory variable categories:
-- **Colors** — `--bg-gradient-from/to`, `--glass-rgb`, `--text-primary`, `--text-rgb`, `--text-secondary`, `--text-muted`, `--accent-from/to`, `--accent-rgb`, `--primary-*`, `--success-*`, `--error-*`, `--gold-*`
+- **Colors** — `--bg-gradient-from/to`, `--glass-rgb`, `--text-primary`, `--text-rgb`, `--text-on-accent`, `--text-heading-from/to`, `--accent-from/to`, `--accent-rgb`, `--primary-*`, `--success-*`, `--error-*`, `--gold-*`
 - **Structural** — `--radius-sm/md/lg/xl`, `--glass-blur`, `--glass-opacity`, `--glass-border-opacity`
 - **Buttons** — `--btn-text-transform`, `--btn-letter-spacing`, `--btn-font-weight`, `--btn-glow`, `--btn-glow-hover`
 - **Animations** — `--bg-animate`, `--orb-animate`, `--entrance-animate`, `--hover-lift`
@@ -92,8 +92,10 @@ Mandatory variable categories:
 - **(admin theme only)** **Admin** — `--admin-accent`, `--admin-accent-rgb`, `--admin-accent-deep`, `--admin-sidebar-bg`, `--admin-input-bg`, `--admin-msg-success`, `--admin-msg-error`. For a **frontend-only** theme the admin shell never carries this `data-theme`, so these are not consumed in the admin — but the theme-showcase frontend row uses `--admin-accent` for the active-swatch border, so still set at least `--admin-accent` / `--admin-accent-rgb` (a sensible value, no audit needed).
 
 Reference blocks:
-- Immersive template: `[data-theme="harry-potter"]` at line 143, `[data-theme="dnd"]` at line 295, `[data-theme="deepsea"]` at line 2281 (frosted-glass immersive — light rays + plankton).
-- Minimal template: `[data-theme="enterprise"]` at line 468.
+- Immersive templates: `[data-theme="maerchen"]` (the most recent full-scale one: baked scene + JS movers + `@property`-animated glow layers), `[data-theme="harry-potter"]`, `[data-theme="dnd"]`, `[data-theme="deepsea"]` (frosted-glass immersive — light rays + plankton). Compact static immersive: `[data-theme="pub-quiz"]`.
+- Minimal template: `[data-theme="enterprise"]`.
+
+Search `themes.css` for the selector rather than trusting line numbers — the file is several thousand lines long and shifts with every theme.
 
 **No descendant selectors that cross `[data-theme]` islands.** A rule like `[data-theme="<slug>"] .quiz-container { background: … }` or `[data-theme="<slug>"] h1 { font-size: … }` matches every descendant under an `html[data-theme="<slug>"]` root — **including** descendants inside a nested `[data-theme="galaxia"]` admin shell or ThemeShowcase preview panel. That's a silent leak. Retro's original implementation had this exact bug and needed a rewrite.
 
@@ -112,36 +114,39 @@ Forbidden patterns (will leak):
 
 In the same file, after the variable block:
 
-1. Add `[data-theme="<slug>"]::before { … }` and optionally `::after { … }` with gradients, SVG data-URIs, or radial-gradient star fields. Reference: Harry Potter `::before` at line 255, D&D `::after` at line 433.
+1. Add `[data-theme="<slug>"]::before { … }` and optionally `::after { … }` with gradients, SVG data-URIs, or radial-gradient star fields. References: the Harry Potter, D&D and Märchen `::before` / `::after` rules. `html::after` defaults to `opacity: 0` in `base.css` — set `opacity: 1`.
+   - **Big scenes** are baked by a generator script (`scripts/generate-<scene>.cjs --write-css`: flat vector + SVG gradients, no SVG filters, deterministic PRNG) into a `100% auto`, bottom-anchored layer — scene px then map to vw, which lets other layers line up with scene features.
+   - **Random motion** (flyers, creatures) is a JS driver like `src/utils/maerchenCreatures.ts`: extra `::after` layers whose `background-position` it writes to a custom property every frame, self-gated on the theme + viewport > 576 px + no reduced motion, installed from `src/entries/frontend.tsx`, with unit tests for its pure helpers.
+   - **Glows / flicker over the scene** go INTO the `::after` layer list (animated `@property` numbers multiplied into each gradient's alpha), not onto a `body::after` overlay: an overlay must sit at `z-index: 1` to clear the scene and then paints over the content cards. `body::before` is also taken on iOS (the fake fixed background in the last block of the file).
 2. Add new `@keyframes` for any animations (twinkle, drift, flicker).
 3. Respect the responsive pattern: hide or simplify atmosphere below 576px (see D&D media queries inside the `::before`/`::after` region for the exact pattern).
 4. Keep the DOM untouched — every visual must come from pseudo-elements, never from new markup.
 
-### Step 4 — Font preload (only if using a new font) ([index.html](index.html))
+### Step 4 — Font links (only if using a new font) (`show/index.html`, `admin/index.html`, `gamemaster/index.html`)
 
-If the chosen `--font-primary` isn't already loaded, add Google Fonts links before the closing `</head>`:
+If the chosen `--font-primary` isn't already loaded, add a Google Fonts link next to the existing ones in **all three** entry HTML files (with a one-line `<!-- <Theme> theme: <Font> (…) -->` comment, like the others):
 ```html
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=<Name>:wght@400;600;700&display=swap">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=<Name>:wght@400;600;700&display=swap">
 ```
-Use `display=swap` to avoid blocking rendering.
+Use `display=swap` to avoid blocking rendering. Fonts come from the CDN, so a venue without internet falls back to the CSS fallback stack — keep it sensible.
 
 ### Step 5 — Server validation ([server/index.ts](server/index.ts))
 
-Line 3044 — add `'<slug>'` to the literal `VALID_THEMES` array:
+Add `'<slug>'` to the literal `VALID_THEMES` array (search for `const VALID_THEMES`):
 ```typescript
 const VALID_THEMES = ['galaxia', 'harry-potter', 'dnd', 'deepsea', 'enterprise', …, '<slug>'];
 ```
 
-This is required for **every** theme (frontend-only included): `POST /api/theme` validates *both* the `frontend` and `admin` fields against this single list (server/index.ts:3080-3084), `GET /api/background-music?theme=<slug>` checks it, and the background-music folder auto-creation loop at line 8070 iterates over it so `local-assets/background-music/<slug>/` is created on next server start. Note the server has **no** separate admin allow-list — the frontend-only curation lives purely in the client's `ADMIN_THEME_IDS` (Step 1).
+This is required for **every** theme (frontend-only included): `PUT /api/theme` validates *both* the `frontend` and `admin` fields against this single list, `GET /api/background-music?theme=<slug>` checks it, and the background-music folder auto-creation loop at server start iterates over it so `local-assets/background-music/<slug>/` is created on next server start. Note the server has **no** separate admin allow-list — the frontend-only curation lives purely in the client's `ADMIN_THEME_IDS` (Step 1).
 
 ### Step 6 — Config validator ([validate-config.ts](validate-config.ts))
 
-Line 35 — add `'<slug>'` to the literal `VALID_THEMES` array used by per-game `theme` override validation.
+Add `'<slug>'` to the literal `VALID_THEMES` array used by per-game `theme` override validation.
 
-**Three VALID_THEMES locations total** must include the slug: `ThemeContext.tsx` (derived from `THEMES`), `server/index.ts:3044`, `validate-config.ts:35`. Missing any one causes silent validation failures or 400 errors on `POST /api/theme`. (These three are independent of whether the theme is an admin theme — that distinction is `ADMIN_THEME_IDS` only.)
+**Three VALID_THEMES locations total** must include the slug: `ThemeContext.tsx` (derived from `THEMES`), `server/index.ts`, `validate-config.ts`. Missing any one causes silent validation failures or 400 errors on `PUT /api/theme`. (These three are independent of whether the theme is an admin theme — that distinction is `ADMIN_THEME_IDS` only.)
 
 ### Step 7 — Picker preview swatch
 
@@ -161,17 +166,13 @@ Block order matters: the default `:root, [data-theme="atlas"]` block must stay *
 
 ### Step 8 — Background-music folder
 
-Restart the dev server once so [server/index.ts:8070](server/index.ts#L8070) materializes `local-assets/background-music/<slug>/`. Then, depending on the choice in Phase 1:
+Restart the dev server once so the `VALID_THEMES` loop in [server/index.ts](server/index.ts) materializes `local-assets/background-music/<slug>/`. Then, depending on the choice in Phase 1:
 
-- **Seed via YouTube:** append an entry to [scripts/theme-music-urls.json](scripts/theme-music-urls.json) following the Harry Potter / D&D shape (objects with `url` + optional `take`). Then run:
-  ```bash
-  npm run download-theme-music -- --theme <slug>
-  ```
-  The script (`scripts/batch-download-theme-music.ts`) enumerates playlists via `yt-dlp` and posts each video to the server endpoint, which handles MP3 extraction, −16 LUFS normalization, and NAS mirroring.
+- **Seed via YouTube:** there is no batch script — download track by track. With the dev server running outside the sandbox, use the DAM routes (they own yt-dlp, normalize to −16 LUFS and mirror to the NAS): `POST /api/backend/assets/youtube/search` `{query, limit}` to find candidates (filter on `duration` — generic queries return hour-long compilations), then `POST /api/backend/assets/background-music/youtube-download` `{url, subfolder: "<slug>"}` per track. Inside a sandbox the server's yt-dlp binary cannot run; use the nightly yt-dlp zipapp with Homebrew Python and the same two-pass `loudnorm` (−16 LUFS, TP −1.5, LRA 11, 192k) as `server/normalize.ts`.
 
 - **Manual drop:** place `.mp3` files directly in `local-assets/background-music/<slug>/`.
 
-- **Skip:** leave the folder empty. [src/hooks/useBackgroundMusic.ts:183-188](src/hooks/useBackgroundMusic.ts#L183-L188) and [server/index.ts:3006-3017](server/index.ts#L3006-L3017) fall back to the root `background-music/` folder automatically.
+- **Skip:** leave the folder empty. [src/hooks/useBackgroundMusic.ts](src/hooks/useBackgroundMusic.ts) and `GET /api/background-music` in [server/index.ts](server/index.ts) fall back to the root `background-music/` folder automatically.
 
 ### Step 9 — Tests
 
@@ -203,24 +204,24 @@ Never delete or skip a failing test to make the suite green — fix the code or 
 
 ## Phase 4 — Playwright MCP visual + contrast verification
 
-**Do not skip this phase — it is the acceptance gate.** WCAG 2.1 AA contrast is a hard requirement per [specs/themes.md:27-36](specs/themes.md#L27-L36).
+**Do not skip this phase — it is the acceptance gate.** WCAG 2.1 AA contrast is a hard requirement per the *Accessibility* section of [specs/themes.md](specs/themes.md).
 
 1. **Start the dev server** via `npm run dev` in the background (if not already running).
 
 2. **Switch to the new theme** using Playwright MCP:
-   - `mcp__playwright__browser_navigate` → `http://localhost:5173/theme-showcase`
+   - `mcp__playwright__browser_navigate` → `http://localhost:5173/show/theme-showcase`
    - `mcp__playwright__browser_click` → the new theme button in the **Gameshow** selector row
    - **(admin theme only)** `mcp__playwright__browser_click` → the new theme button in the **Admin** selector row. For a frontend-only theme this button does not exist (the admin row lists only `ADMIN_THEMES`) — that absence is the correct, expected behaviour, not a bug.
 
 3. **Screenshot at every breakpoint.** For each viewport width in `[375, 768, 1024, 1920]`:
    - `mcp__playwright__browser_resize` to `width × 900`
    - `mcp__playwright__browser_take_screenshot` for each of:
-     - `/theme-showcase` (frontend section at top)
-     - `/` (landing screen)
-     - One active game screen (e.g. `/games/0`) to confirm in-game styling
+     - `/show/theme-showcase` (frontend section at top)
+     - `/show/` (landing screen)
+     - One active game screen (e.g. `/show/game?index=0`) to confirm in-game styling. The show takes its theme from the server, so set `document.documentElement.dataset.theme = '<slug>'` after load instead of changing the shared `theme-settings.json`
      - **(admin theme only)** `/theme-showcase` (admin section, scrolled into view), `/admin` Config tab (theme pickers visible), and `/admin` Games list (or any other content-heavy admin screen)
 
-4. **Contrast audit** via `mcp__playwright__browser_evaluate`. Inject a script that reads `getComputedStyle(el).color` and backgrounds for the representative pairs in [specs/themes.md:27-36](specs/themes.md#L27-L36), computes WCAG contrast ratios, and returns them:
+4. **Contrast audit** via `mcp__playwright__browser_evaluate`. Inject a script that reads `getComputedStyle(el).color` and backgrounds for the representative pairs in the *Accessibility* section of [specs/themes.md](specs/themes.md), computes WCAG contrast ratios, and returns them:
    - Primary text on background — **≥4.5:1**
    - Secondary text (70% opacity) on background — **≥3.0:1**
    - Muted text (50% opacity) on background — **≥3.0:1**
@@ -305,9 +306,9 @@ Only proceed to Phase 5 after all seven checks pass.
 |------|--------|
 | Spec first | Update [specs/themes.md](specs/themes.md) → user confirms → then code. Never the reverse. |
 | Frontend-only by default | A new theme goes in `THEMES` only. **Do not** add it to `ADMIN_THEME_IDS` unless the user explicitly asks for an admin theme. Steps marked **(admin theme only)** are skipped otherwise. |
-| All CSS variables | Every variable in the Galaxia `:root` block must be overridden. Missing overrides are silent bugs. |
-| Three `VALID_THEMES` | `ThemeContext.tsx` (derived), `server/index.ts:3044` (literal), `validate-config.ts:35` (literal). All three must include the slug — regardless of frontend/admin. |
-| `THEME_GRADIENTS` sync | [ConfigTab.tsx](src/components/backend/ConfigTab.tsx) and [ThemeShowcase.tsx](src/components/screens/ThemeShowcase.tsx) must have identical entries. |
+| All CSS variables | Every variable in the default `:root, [data-theme="atlas"]` block must be overridden. Missing overrides are silent bugs. |
+| Three `VALID_THEMES` | `ThemeContext.tsx` (derived), `server/index.ts` (literal), `validate-config.ts` (literal). All three must include the slug — regardless of frontend/admin. |
+| `THEME_SWATCHES` | One entry per theme in [ThemeContext.tsx](src/context/ThemeContext.tsx) — the only copy; `ConfigTab` and `ThemeShowcase` import it. |
 | German UI | All player-facing text in German. Labels and descriptions in the picker included. |
 | WCAG AA is a gate | Contrast audit in Phase 4 step 4 is blocking. No hand-waving. |
 | No cross-theme leaks | Phase 4 step 7 leak audit is blocking. New theme rules may only target itself via vars, `::before`/`::after`, `body`, or narrow whitelisted class chains — never via `[data-theme="<slug>"] h1/button/input/.quiz-container/…`. |

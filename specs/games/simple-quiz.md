@@ -44,6 +44,8 @@ A standard question-and-answer game where the host reads a question aloud, then 
   - `timer?: number`
   - `replaceImage?: boolean`
 
+Every question also accepts the optional `gmInfo` (host-only note, shown in the GM card only) — see [gamemaster-info.md](../gamemaster-info.md).
+
 ## UI behaviour
 - Component: `src/components/games/SimpleQuiz.tsx`
 - Question card with reveal button; clicking/pressing Space reveals answer

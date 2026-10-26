@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RandomFrameQuestion } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
 import SpellField from '../SpellField';
+import GmInfoField from './GmInfoField';
 import { AssetField } from '../AssetPicker';
 import MoveQuestionButton from './MoveQuestionButton';
 import { stripTrailingEmpty } from './ghostRow';
@@ -20,7 +21,7 @@ interface Props {
 }
 
 const empty = (): RandomFrameQuestion => ({ video: '', answer: '' });
-const isEmpty = (q: RandomFrameQuestion) => !q.answer.trim() && !q.video;
+const isEmpty = (q: RandomFrameQuestion) => !q.answer.trim() && !q.video && !q.gmInfo?.trim();
 
 const filenameToAnswer = (path: string): string => {
   try {
@@ -257,6 +258,7 @@ export default function RandomFrameForm({ questions, onChange, otherInstances, o
                 </div>
               </>
             )}
+            {!isVirtual && <GmInfoField segKey={`q${i}.gmInfo`} value={q.gmInfo} onChange={v => update(i, { gmInfo: v })} />}
           </div>
         </div>
         );

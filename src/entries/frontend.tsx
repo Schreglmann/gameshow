@@ -2,7 +2,7 @@ import { StrictMode, Suspense, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { ThemeProvider } from '@/context/ThemeContext';
-import { GameProvider } from '@/context/GameContext';
+import { GameProvider, useGameContext } from '@/context/GameContext';
 import { MusicProvider, useMusicPlayer } from '@/context/MusicContext';
 import { useMusicStateSync, useMusicCommandListener } from '@/hooks/useMusicSync';
 import { useShowNavigationCommands } from '@/hooks/useShowNavigationCommands';
@@ -20,6 +20,7 @@ import { useShowPresence } from '@/hooks/useShowPresence';
 import { lazyWithRetry } from '@/utils/lazyWithRetry';
 import { installHpFlyers } from '@/utils/hpFlyers';
 import { installDndCreatures } from '@/utils/dndCreatures';
+import { installMaerchenCreatures } from '@/utils/maerchenCreatures';
 import '@/index.css';
 
 // Harry Potter theme: drive the randomised easter-egg flyers (self-gates on the active
@@ -28,6 +29,9 @@ installHpFlyers();
 // D&D theme: drive the randomised will-o'-wisp + bats (same self-gating — see
 // src/utils/dndCreatures.ts and specs/themes.md).
 installDndCreatures();
+// Halloween theme: drive the will-o'-the-wisps, red eyes, witch + bats (same
+// self-gating — see src/utils/maerchenCreatures.ts and specs/themes.md).
+installMaerchenCreatures();
 // GameScreen and SummaryScreen are loaded eagerly: lazy-loading them delayed
 // useGamemasterSync's first emit until the code-split bundle had loaded
 // (seconds on a slow LAN) — which the gamemaster view experienced as a long
@@ -41,6 +45,13 @@ function PageLayout({ children, showGameNumber, showHeader = true }: { children:
       <main>{children}</main>
     </>
   );
+}
+
+// The music source is a global setting (theme soundtrack vs. default playlist),
+// so the player is fed it from GameContext. See specs/background-music.md.
+function ShowMusicProvider({ children }: { children: ReactNode }) {
+  const { state } = useGameContext();
+  return <MusicProvider source={state.settings.backgroundMusicSource}>{children}</MusicProvider>;
 }
 
 function AppContent() {
@@ -86,9 +97,9 @@ createRoot(document.getElementById('root')!).render(
       <ThemeProvider>
         <GameProvider>
           <AudioCoverMetaProvider>
-            <MusicProvider>
+            <ShowMusicProvider>
               <AppContent />
-            </MusicProvider>
+            </ShowMusicProvider>
           </AudioCoverMetaProvider>
         </GameProvider>
       </ThemeProvider>

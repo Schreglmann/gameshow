@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import type { VideoGuessQuestion } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
 import SpellField from '../SpellField';
+import GmInfoField from './GmInfoField';
 import { AssetField } from '../AssetPicker';
 import { probeVideo, warmupSdr, checkSdrCache, fetchCachedTracks, type VideoTrackInfo, type SystemStatusResponse } from '@/services/backendApi';
 import { checkVideoHdr } from '@/services/api';
@@ -1185,6 +1186,7 @@ const QuestionBlock = memo(function QuestionBlock({
     if (v === undefined) onClearExpanded(i);
   }, [i, onUpdate, onClearExpanded]);
   const handleAnswerImageChange = useCallback((v: string | undefined) => onUpdate(i, { answerImage: v }), [i, onUpdate]);
+  const handleGmInfoChange = useCallback((v: string | undefined) => onUpdate(i, { gmInfo: v }), [i, onUpdate]);
   const handleMarkerPatch = useCallback((patch: Partial<VideoGuessQuestion>) => onUpdate(i, patch), [i, onUpdate]);
 
   return (
@@ -1341,6 +1343,7 @@ const QuestionBlock = memo(function QuestionBlock({
             readOnly={readOnly}
           />
         </div>
+        <GmInfoField segKey={`q${i}.gmInfo`} value={q.gmInfo} onChange={handleGmInfoChange} readOnly={readOnly} />
       </div>
     </div>
   );

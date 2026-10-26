@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { FourStatementsQuestion } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
 import SpellField from '../SpellField';
+import GmInfoField from './GmInfoField';
 import { AssetField } from '../AssetPicker';
 import AudioTrimTimeline from '../AudioTrimTimeline';
 import { toMediaSrc } from '@/utils/assetUrl';
@@ -24,7 +25,8 @@ const isEmpty = (q: FourStatementsQuestion) =>
   q.statements.every(s => !s.trim()) &&
   !q.answer?.trim() &&
   !q.answerImage &&
-  !q.answerAudio;
+  !q.answerAudio &&
+  !q.gmInfo?.trim();
 
 /** Pad to SLOT_COUNT for editing. Preserves existing order so typed content stays in its slot. */
 function padSlots(statements: string[]): string[] {
@@ -182,6 +184,7 @@ export default function FourStatementsForm({ questions, onChange, otherInstances
                   )}
                 </div>
               </>}
+              {!isVirtual && <GmInfoField segKey={`q${i}.gmInfo`} value={q.gmInfo} onChange={v => update(i, { gmInfo: v })} />}
             </div>
           </div>
         );

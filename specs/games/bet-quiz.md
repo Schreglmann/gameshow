@@ -47,6 +47,8 @@ Two selectable scoring modes (config `scoringMode`, default `standard`), chosen 
 - `GameType` union extended with `'bet-quiz'`
 - `GameConfig` discriminated union extended with `BetQuizConfig`
 
+Every question also accepts the optional `gmInfo` (host-only note, shown in the GM card only) — see [gamemaster-info.md](../gamemaster-info.md).
+
 ## UI behaviour
 - Component: `src/components/games/BetQuiz.tsx`
 - Shared presentational component: `src/components/games/QuizQuestionView.tsx` — extracted from `SimpleQuiz` so both `SimpleQuiz` and `BetQuiz` render questions identically (images, audio controls, lists, timer, colors, emoji-only large text, lightbox)
