@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { GameComponentProps } from './types';
 import type { FourStatementsConfig, FourStatementsQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterCommand, GamemasterControl } from '@/types/game';
@@ -112,7 +112,9 @@ function CluesInner({ questions, order, resumeAtEnd, gameTitle, answerAudioRef, 
   // The answer image appears only on reveal — expose it to fullscreen then.
   // Pass the raw path; the overlay (Lightbox) encodes it itself.
   useRegisterFullscreenMedia(showAnswer && q?.answerImage ? { type: 'image', src: q.answerImage } : null);
-  const statements = (q?.statements ?? []).filter(s => s && s.trim());
+  // Memoised: it is a dependency of the gamemaster-sync effect, and the show
+  // re-renders every 100 ms while background music plays.
+  const statements = useMemo(() => (q?.statements ?? []).filter(s => s && s.trim()), [q?.statements]);
 
   useEffect(() => {
     if (!q) return;
@@ -125,10 +127,13 @@ function CluesInner({ questions, order, resumeAtEnd, gameTitle, answerAudioRef, 
       question: q.topic,
       answer: q.answer || '—',
       answerImage: q.answerImage,
-      extraInfo: `Hinweis ${Math.min(revealedCount, statements.length)}/${statements.length}`,
-      nextAnswer: nextQ ? { answer: nextQ.answer || '—' } : undefined,
+      // All clues, so the host can read the next one aloud; `revealed` marks the
+      // ones already on the projector.
+      hintList: statements.map((text, i) => ({ rank: i + 1, text, revealed: i < revealedCount })),
+      hintListClickable: true,
+      nextAnswer: nextQ ? { question: nextQ.topic, answer: nextQ.answer || '—' } : undefined,
     });
-  }, [qIdx, revealedCount, gameTitle, questions, setGamemasterData, q, statements.length]);
+  }, [qIdx, revealedCount, gameTitle, questions, setGamemasterData, q, statements]);
 
   // Signal answer-reveal so the GM-triggered deadline timer hides immediately.
   useEffect(() => {
@@ -275,13 +280,22 @@ function CluesInner({ questions, order, resumeAtEnd, gameTitle, answerAudioRef, 
 
   // A long-press ArrowRight on the gamemaster arrives as `nav-forward-long`; the
   // "Auflösung" button arrives as `four-statements-reveal`. Both reveal all.
+  // Clicking hint N in the GM card arrives as `hint-<N>`: show exactly hints
+  // 1…N and hide the answer again (like ranking's `rank-<N>`).
   const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
     if (cmd.controlId === 'four-statements-reveal') {
       revealAll();
     } else if (cmd.controlId === 'nav-forward-long' && !showAnswer) {
       revealAll();
+    } else {
+      const m = cmd.controlId.match(/^hint-(\d+)$/);
+      if (!m) return;
+      const target = parseInt(m[1]!, 10);
+      if (Number.isNaN(target)) return;
+      setRevealedCount(Math.max(0, Math.min(statements.length, target)));
+      setShowAnswer(false);
     }
-  }, [revealAll, showAnswer]);
+  }, [revealAll, showAnswer, statements.length]);
 
   useEffect(() => {
     setCommandHandler(commandHandlerFn);

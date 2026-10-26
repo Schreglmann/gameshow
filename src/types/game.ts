@@ -304,12 +304,18 @@ export interface GamemasterAnswerData {
   /**
    * Structured list of the *hints* the audience is looking at, for games whose
    * puzzle is a set of clues around a single hidden answer (city-compass: the
-   * neighbor cities on the rose). Rendered as its own labelled block, so unlike
-   * `answerList` it does NOT replace `answer` — the host still needs the
-   * solution while asking. `revealed` reflects what the audience can see; a
+   * neighbor cities on the rose; four-statements: the clues). Rendered as its
+   * own labelled block, so unlike `answerList` it does NOT replace `answer` —
+   * the host still needs the solution while asking. `revealed` reflects what the audience can see; a
    * pending row is an upcoming clue, not the answer.
    */
   hintList?: { rank: number; text: string; revealed: boolean }[];
+  /**
+   * When true, the `hintList` rows are reveal controls: clicking row N sends
+   * `hint-<N>` and the game shows exactly hints 1…N (four-statements). Absent,
+   * the rows are static (city-compass).
+   */
+  hintListClickable?: boolean;
   /**
    * Preview of the NEXT question's answer, shown in the gamemaster card while
    * the current answer is revealed in the frontend (`answerRevealed`), gated by

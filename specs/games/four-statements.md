@@ -20,7 +20,8 @@ A previous game type named `four-statements` (find the false statement out of 3-
 - [ ] Auto-scroll: each new clue reveal scrolls to the bottom so the freshly-revealed clue is visible even when clues are long (guarded so it never fights the scroll-to-top on question change); revealing the answer scrolls to the bottom (retried a few times to cover the answer image laying out asynchronously); a question change resets the scroll to the top
 - [ ] Works across multiple questions; after the last answer, advance calls `onGameComplete()`
 - [ ] Uses `BaseGameWrapper`; points awarded via `AwardPoints` (host picks winner) — point value = `currentIndex + 1`
-- [ ] Gamemaster sync publishes `answer`, `answerImage`, and `extraInfo: "Hinweis N/M"`
+- [x] Gamemaster sync publishes `question` (the topic), `answer`, `answerImage`, and every non-empty clue as `hintList` (`revealed` = already on the projector), so the host can read the next clue aloud from the GM card. The next-question preview carries the next topic and answer
+- [x] The GM card's hint rows are reveal controls (`hintListClickable: true`): clicking hint N sends `hint-<N>`, and the show then displays exactly clues 1…N — revealing forward, hiding later clues, and hiding the answer if it was shown. Out-of-range values clamp to the clue count (same model as ranking's `rank-<N>`). Going below one clue is left to ArrowLeft
 
 ## State / data changes
 - No `AppState` changes

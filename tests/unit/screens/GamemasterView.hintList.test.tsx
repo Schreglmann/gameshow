@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render } from '@testing-library/react';
+import { render, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { GameProvider } from '@/context/GameContext';
 import { ThemeProvider } from '@/context/ThemeContext';
@@ -88,6 +88,25 @@ describe('GamemasterView — hint list', () => {
 
     expect(document.querySelectorAll('.gamemaster-hints button')).toHaveLength(0);
     expect(document.querySelectorAll('.gamemaster-answer-item--static')).toHaveLength(3);
+  });
+
+  it('renders the rows as reveal controls when the game opts in', () => {
+    mockAnswer.current = { ...mockAnswer.current!, hintListClickable: true };
+    renderView();
+
+    const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>('.gamemaster-hints button'));
+    expect(buttons).toHaveLength(3);
+    expect(document.querySelectorAll('.gamemaster-answer-item--static')).toHaveLength(0);
+    fireEvent.click(buttons[2]!);
+    expect(sendCommandMock).toHaveBeenCalledWith('hint-3');
+  });
+
+  it('keeps clickable pending hints masked while answers are hidden', () => {
+    mockAnswer.current = { ...mockAnswer.current!, hintListClickable: true };
+    renderView(true);
+
+    expect(hintTexts()).toEqual(['Budapest · 210 km', 'Prag · 250 km', '•••••']);
+    expect(document.querySelectorAll('.gamemaster-hints button')).toHaveLength(3);
   });
 
   it('masks only the pending hints while answers are hidden', () => {

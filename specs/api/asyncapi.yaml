@@ -814,9 +814,10 @@ components:
           description: >-
             The clues the audience is looking at, for a game whose puzzle is a set
             of hints around one hidden answer (`city-compass`: the neighbor cities
-            on the rose). Rendered as its own labelled block IN ADDITION to
-            `answer` — the host needs the solution while asking — and the rows are
-            not controls. See specs/games/city-compass.md.
+            on the rose; `four-statements`: the clues). Rendered as its own
+            labelled block IN ADDITION to `answer` — the host needs the solution
+            while asking. The rows are static unless `hintListClickable` is set.
+            See specs/games/city-compass.md and specs/games/four-statements.md.
           items:
             type: object
             required: [rank, text, revealed]
@@ -826,6 +827,12 @@ components:
               revealed:
                 type: boolean
                 description: Whether the audience can already see this hint.
+        hintListClickable:
+          type: boolean
+          description: >-
+            When true, the `hintList` rows are reveal controls: clicking row N sends
+            the `hint-<n>` control on `gamemaster-command`, and the game shows
+            exactly hints 1…N (`four-statements`). Absent, the rows are static.
         nextAnswer:
           type: object
           description: >-
