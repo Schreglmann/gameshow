@@ -3884,6 +3884,7 @@ app.get('/api/settings', async (_req, res) => {
       jokerRules: config.jokerRules ?? [],
       jokersInLastGame: config.jokersInLastGame === true,
       jokerUsageScope: config.jokerUsageScope === 'per-game' ? 'per-game' : 'per-gameshow',
+      backgroundMusicSource: config.backgroundMusicSource === 'default' ? 'default' : 'theme',
       players: activeShow?.players ?? [],
     });
   } catch {

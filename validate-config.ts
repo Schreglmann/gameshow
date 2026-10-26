@@ -192,6 +192,11 @@ function validateConfig(): void {
     errors.push('"jokerUsageScope" must be "per-gameshow" or "per-game"');
   }
 
+  // Validate backgroundMusicSource (optional) — theme soundtrack vs. default playlist
+  if (config.backgroundMusicSource !== undefined && config.backgroundMusicSource !== 'theme' && config.backgroundMusicSource !== 'default') {
+    errors.push('"backgroundMusicSource" must be "theme" or "default"');
+  }
+
   // Show title (optional, both levels). A blank value silently falls through to
   // the next level, which is easy to mistake for a broken field — warn.
   // See specs/show-title.md.

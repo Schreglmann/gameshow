@@ -231,6 +231,26 @@ describe('ConfigTab', () => {
     }, { timeout: 5000 });
   });
 
+  // Background-music source — see specs/background-music.md.
+  it('switching off Theme-Hintergrundmusik autosaves backgroundMusicSource "default"', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderConfigTab();
+    // Unset means "theme", so the toggle starts checked.
+    await waitFor(() => {
+      expect(screen.getByRole('checkbox', { name: 'Theme-Hintergrundmusik verwenden' })).toBeChecked();
+    });
+
+    await user.click(screen.getByRole('checkbox', { name: 'Theme-Hintergrundmusik verwenden' }));
+
+    act(() => { vi.advanceTimersByTime(800); });
+
+    await waitFor(() => {
+      expect(mockSaveConfig).toHaveBeenCalledWith(
+        expect.objectContaining({ backgroundMusicSource: 'default' })
+      );
+    }, { timeout: 5000 });
+  });
+
   it('editing one colour persists only that team — the others stay absent', async () => {
     // An untouched team must NOT be materialized: absent means "use the default",
     // which is a different stored state from an explicit value.

@@ -566,6 +566,8 @@ In the Simple Quiz editor, click the image field and pick an uploaded image from
 
 Upload audio files to **Hintergrundmusik**. They play continuously during the gameshow with 3-second crossfades between tracks.
 
+Tracks in a theme subfolder (e.g. `Hintergrundmusik/maerchen/`) play while that theme is active; a theme without its own folder content falls back to the root-level tracks. To always play the root-level tracks regardless of the theme, switch off **Theme-Hintergrundmusik verwenden** (Config tab → "Globale Einstellungen"). The change reaches a running show without a reload.
+
 ---
 
 ## 6. Global Settings

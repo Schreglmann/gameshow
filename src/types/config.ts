@@ -561,6 +561,15 @@ export interface RulesPreset {
 export type JokerUsageScope = 'per-gameshow' | 'per-game';
 
 /**
+ * Which playlist the show's background music plays.
+ *
+ * `theme` (default) — the active theme's `background-music/<theme>/` folder,
+ * falling back to the root folder when the theme has none. `default` — always
+ * the root folder, whatever the theme. See specs/background-music.md.
+ */
+export type BackgroundMusicSource = 'theme' | 'default';
+
+/**
  * The operator's colour per team, as `#rrggbb`.
  *
  * Three states per team, and the middle one is the subtle one: an ABSENT key
@@ -617,6 +626,12 @@ export interface AppConfig {
    * Aufholjoker (`comeback`) is exempt and always per-gameshow. See specs/jokers.md.
    */
   jokerUsageScope?: JokerUsageScope;
+  /**
+   * Whether the background music follows the active theme (`theme`, default)
+   * or always plays the default playlist (`default`).
+   * See specs/background-music.md.
+   */
+  backgroundMusicSource?: BackgroundMusicSource;
   globalRules?: string[];
   /**
    * Generic joker explanation shown on the global rules screen when the active
@@ -789,6 +804,13 @@ export interface SettingsResponse {
    * don't need to provide it. See specs/jokers.md.
    */
   jokerUsageScope?: JokerUsageScope;
+  /**
+   * Which playlist the background music plays (`AppConfig.backgroundMusicSource`,
+   * normalised server-side). Optional so existing test fixtures don't need it —
+   * a client that gets no value plays the theme soundtrack.
+   * See specs/background-music.md.
+   */
+  backgroundMusicSource?: BackgroundMusicSource;
   /**
    * Roster of the active gameshow (`GameshowConfig.players`), configured in the
    * admin Gameshows tab. Prefills the HomeScreen randomization textarea. Empty

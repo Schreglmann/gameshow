@@ -1,4 +1,4 @@
-import type { PointMode, TeamColors } from './config.js';
+import type { BackgroundMusicSource, PointMode, TeamColors } from './config.js';
 import type { TeamKey } from '../utils/teams.js';
 
 /**
@@ -224,6 +224,12 @@ export interface GlobalSettings {
    * Mirrors `JokerUsageScope` in config.ts. See specs/jokers.md.
    */
   jokerUsageScope: 'per-gameshow' | 'per-game';
+  /**
+   * Whether the background music plays the active theme's soundtrack (`theme`,
+   * default) or always the default playlist (`default`).
+   * See specs/background-music.md.
+   */
+  backgroundMusicSource: BackgroundMusicSource;
   /**
    * Roster of the active gameshow (`GameshowConfig.players`), configured in the
    * admin Gameshows tab. Prefills the HomeScreen randomization textarea so the

@@ -3329,6 +3329,14 @@ components:
             Whether a used joker persists for the whole show (`per-gameshow`, default) or
             refreshes at the start of each game (`per-game`). The Aufholjoker (`comeback`) is
             always per-gameshow.
+        backgroundMusicSource:
+          type: string
+          enum: [theme, default]
+          description: >-
+            Which playlist the show's background music plays, normalised from
+            `AppConfig.backgroundMusicSource` (anything but `default` is `theme`). With
+            `default` the client fetches `GET /api/background-music` without the `theme`
+            param. See specs/background-music.md.
         players:
           type: array
           items: { type: string }
@@ -3455,6 +3463,14 @@ components:
             Whether used jokers persist for the whole show (`per-gameshow`, default) or refresh at
             the start of each game (`per-game`). The Aufholjoker (`comeback`) is always
             per-gameshow. See [specs/jokers.md](../jokers.md).
+        backgroundMusicSource:
+          type: string
+          enum: [theme, default]
+          description: >-
+            Which playlist the background music plays: `theme` (default when omitted) — the
+            active theme's `background-music/<theme>/` folder, falling back to the root folder;
+            `default` — always the root folder. Edited in the admin ConfigTab
+            ("Theme-Hintergrundmusik verwenden"). See [specs/background-music.md](../background-music.md).
         rulesPresets:
           type: array
           items: { $ref: "#/components/schemas/RulesPreset" }

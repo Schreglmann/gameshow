@@ -193,6 +193,18 @@ export default function ConfigTab() {
             <span className="be-toggle-track" />
             <span className="be-toggle-label">Joker pro Spiel zurücksetzen</span>
           </label>
+          <label
+            className="be-toggle"
+            title="Standardmäßig an. Spielt die Hintergrundmusik aus dem Ordner des aktiven Themes (Hintergrundmusik/<Theme>) – hat das Theme keine eigene Musik, läuft die Standard-Playlist. Ist die Option aus, läuft immer die Standard-Playlist, unabhängig vom Theme."
+          >
+            <input
+              type="checkbox"
+              checked={config.backgroundMusicSource !== 'default'}
+              onChange={e => setConfig({ ...config, backgroundMusicSource: e.target.checked ? 'theme' : 'default' })}
+            />
+            <span className="be-toggle-track" />
+            <span className="be-toggle-label">Theme-Hintergrundmusik verwenden</span>
+          </label>
         </div>
       </div>
 

@@ -2,7 +2,7 @@ import { StrictMode, Suspense, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { ThemeProvider } from '@/context/ThemeContext';
-import { GameProvider } from '@/context/GameContext';
+import { GameProvider, useGameContext } from '@/context/GameContext';
 import { MusicProvider, useMusicPlayer } from '@/context/MusicContext';
 import { useMusicStateSync, useMusicCommandListener } from '@/hooks/useMusicSync';
 import { useShowNavigationCommands } from '@/hooks/useShowNavigationCommands';
@@ -45,6 +45,13 @@ function PageLayout({ children, showGameNumber, showHeader = true }: { children:
       <main>{children}</main>
     </>
   );
+}
+
+// The music source is a global setting (theme soundtrack vs. default playlist),
+// so the player is fed it from GameContext. See specs/background-music.md.
+function ShowMusicProvider({ children }: { children: ReactNode }) {
+  const { state } = useGameContext();
+  return <MusicProvider source={state.settings.backgroundMusicSource}>{children}</MusicProvider>;
 }
 
 function AppContent() {
@@ -90,9 +97,9 @@ createRoot(document.getElementById('root')!).render(
       <ThemeProvider>
         <GameProvider>
           <AudioCoverMetaProvider>
-            <MusicProvider>
+            <ShowMusicProvider>
               <AppContent />
-            </MusicProvider>
+            </ShowMusicProvider>
           </AudioCoverMetaProvider>
         </GameProvider>
       </ThemeProvider>
