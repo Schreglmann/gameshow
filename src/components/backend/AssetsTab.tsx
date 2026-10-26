@@ -687,6 +687,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     baseFolderSelectionRef.current = new Set();
     // Usage cache is per-category; drop it so the next active filter refetches.
     setUsedFiles(null);
+    setGameshowFiles(null);
     setImageGuessFiles(null);
     setImageDimensions(null);
     // Image-only sort/filter state must reset when leaving the images category.
@@ -840,12 +841,13 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   const [imageSearchModal, setImageSearchModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSort, setShowSort] = useState(false);
-  // "Verwendet / Unbenutzt" filter. `null` = show all; the two filter values are mutually
-  // exclusive in the popover. Backed by `usedFiles`, which is lazy-fetched per category
-  // on first activation and invalidated on category switch + any mutation that changes
-  // game refs. See specs/admin-backend.md "Usage filter".
-  const [usageFilter, setUsageFilter] = useState<'used' | 'unused' | null>(null);
+  // "In Gameshow / Verwendet / Unbenutzt" filter. `null` = show all; the filter values are
+  // mutually exclusive in the popover. Backed by `usedFiles` + `gameshowFiles`, which are
+  // lazy-fetched per category on first activation and invalidated on category switch + any
+  // mutation that changes game refs. See specs/admin-backend.md "Usage filter".
+  const [usageFilter, setUsageFilter] = useState<'gameshow' | 'used' | 'unused' | null>(null);
   const [usedFiles, setUsedFiles] = useState<Set<string> | null>(null);
+  const [gameshowFiles, setGameshowFiles] = useState<Set<string> | null>(null);
   const [imageGuessFiles, setImageGuessFiles] = useState<Set<string> | null>(null);
   const [usageLoading, setUsageLoading] = useState(false);
   // "Niedrige Auflösung" filter — images smaller than the bounding box of the game they
@@ -1122,6 +1124,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
     // entry into the existing maps.
     if (!keepCaches) {
       setUsedFiles(null);
+      setGameshowFiles(null);
       setImageGuessFiles(null);
       setImageDimensions(null);
     }
@@ -1224,7 +1227,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   // the deps — including it would cause the in-flight fetch's cleanup to fire on the
   // setUsageLoading(true) render, cancelling its own .then.
   useEffect(() => {
-    // The "Verwendet/Unbenutzt" and "Niedrige Auflösung" filters share the same backing
+    // The "In Gameshow/Verwendet/Unbenutzt" and "Niedrige Auflösung" filters share the same backing
     // call. Fetch when either is active and the cache is empty. `imageGuessFiles` is
     // only meaningful in the images category, but the server emits an empty array for
     // other categories so the type stays uniform.
@@ -1243,6 +1246,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
           return;
         }
         setUsedFiles(new Set(result.usedFiles));
+        setGameshowFiles(new Set(result.gameshowFiles));
         setImageGuessFiles(new Set(result.imageGuessFiles));
       })
       .catch((err: Error) => {
@@ -1448,18 +1452,15 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       for (const d of deletedPaths) if (p.startsWith(d + '/')) return true;
       return false;
     };
-    setUsedFiles(prev => {
+    const dropDeleted = (prev: Set<string> | null): Set<string> | null => {
       if (!prev) return prev;
       const next = new Set(prev);
       for (const p of prev) if (isInDeleted(p)) next.delete(p);
       return next.size === prev.size ? prev : next;
-    });
-    setImageGuessFiles(prev => {
-      if (!prev) return prev;
-      const next = new Set(prev);
-      for (const p of prev) if (isInDeleted(p)) next.delete(p);
-      return next.size === prev.size ? prev : next;
-    });
+    };
+    setUsedFiles(dropDeleted);
+    setGameshowFiles(dropDeleted);
+    setImageGuessFiles(dropDeleted);
     setImageDimensions(prev => {
       if (!prev) return prev;
       const next = new Map(prev);
@@ -2781,6 +2782,10 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   // SVGs and unprobed files have no `.dimensions` → never flagged.
   // RENDER_BOX_QUIZ / RENDER_BOX_IMAGE_GUESS are module-level (see top of file).
   const usageFilterActive = usageFilter !== null && usedFiles !== null;
+  const usageEmptyLabel = (noun: string) =>
+    usageFilter === 'gameshow' ? `Keine in Gameshows verwendeten ${noun}`
+      : usageFilter === 'used' ? `Keine verwendeten ${noun}`
+        : `Keine unbenutzten ${noun}`;
   const metaByPath = useMemo(
     () => new Map(collectAllFiles(files, fileMeta, subfolders).map(e => [e.filePath, e.meta])),
     [files, fileMeta, subfolders],
@@ -2793,6 +2798,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
   const visibilityPredicate = useCallback((p: string): boolean => {
     if (usageFilterActive) {
       const used = usedFiles!.has(p);
+      if (usageFilter === 'gameshow' && !gameshowFiles?.has(p)) return false;
       if (usageFilter === 'used' && !used) return false;
       if (usageFilter === 'unused' && used) return false;
     }
@@ -2803,7 +2809,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       if (!(meta.dimensions.width < box.w && meta.dimensions.height < box.h)) return false;
     }
     return true;
-  }, [usageFilterActive, usageFilter, usedFiles, lowResActive, imageGuessFiles, metaByPath]);
+  }, [usageFilterActive, usageFilter, usedFiles, gameshowFiles, lowResActive, imageGuessFiles, metaByPath]);
   visibilityPredicateRef.current = visibilityPredicate;
 
   const filteredTree = useMemo(() => {
@@ -3042,7 +3048,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                     })}
                     <div className="asset-sort-divider" />
                     <div className="asset-sort-section-label">Verwendung</div>
-                    {([['used', 'Verwendet'], ['unused', 'Unbenutzt']] as const).map(([value, label]) => (
+                    {([['gameshow', 'In Gameshow'], ['used', 'Verwendet'], ['unused', 'Unbenutzt']] as const).map(([value, label]) => (
                       <button
                         key={value}
                         className={`asset-sort-btn${usageFilter === value ? ' active' : ''}`}
@@ -3151,9 +3157,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                 <div className="be-empty">
                   {lowResActive && !usageFilterActive
                     ? 'Keine niedrig auflösenden Bilder gefunden'
-                    : usageFilter === 'used'
-                      ? 'Keine verwendeten Dateien in dieser Kategorie'
-                      : 'Keine unbenutzten Dateien in dieser Kategorie'}
+                    : usageEmptyLabel('Dateien in dieser Kategorie')}
                 </div>
               )}
             </DropZone>
@@ -3197,7 +3201,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
               <>
                 {currentCat.mediaType === 'image' && (
                   displayFiles.length === 0
-                    ? <div className="be-empty">{usageFilterActive ? (usageFilter === 'used' ? 'Keine verwendeten Bilder' : 'Keine unbenutzten Bilder') : 'Keine Bilder vorhanden'}</div>
+                    ? <div className="be-empty">{usageFilterActive ? usageEmptyLabel('Bilder') : 'Keine Bilder vorhanden'}</div>
                     : (
                       <div className="asset-image-grid">
                         {sortedFiles(displayFiles, fileMeta).map(file => renderImageCard(file, file))}
@@ -3206,12 +3210,12 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                 )}
                 {currentCat.mediaType === 'audio' && (
                   displayFiles.length === 0
-                    ? <div className="be-empty">{usageFilterActive ? (usageFilter === 'used' ? 'Keine verwendeten Audiodateien' : 'Keine unbenutzten Audiodateien') : 'Keine Audiodateien vorhanden'}</div>
+                    ? <div className="be-empty">{usageFilterActive ? usageEmptyLabel('Audiodateien') : 'Keine Audiodateien vorhanden'}</div>
                     : <div className="asset-file-list">{sortedFiles(displayFiles, fileMeta).map(file => renderAudioItem(file, file, assetUrl(activeCategory, file)))}</div>
                 )}
                 {currentCat.mediaType === 'video' && (
                   displayFiles.length === 0
-                    ? <div className="be-empty">{usageFilterActive ? (usageFilter === 'used' ? 'Keine verwendeten Videos' : 'Keine unbenutzten Videos') : 'Keine Videos vorhanden'}</div>
+                    ? <div className="be-empty">{usageFilterActive ? usageEmptyLabel('Videos') : 'Keine Videos vorhanden'}</div>
                     : <div className="asset-file-list">{sortedFiles(displayFiles, fileMeta).map(file => renderVideoItem(file, file, assetUrl(activeCategory, file)))}</div>
                 )}
               </>
@@ -3762,7 +3766,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
               next.set(result.newFilename, { width: result.newDims.w, height: result.newDims.h });
               return next;
             });
-            // Same patch for usedFiles + imageGuessFiles when extension changed
+            // Same patch for usedFiles + gameshowFiles + imageGuessFiles when extension changed
             // (so the new filename inherits the old's game-ref membership and
             // the old key is dropped). For same-extension replaces these caches
             // don't change at all.
@@ -3775,6 +3779,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
                 return next;
               };
               setUsedFiles(renameInSet);
+              setGameshowFiles(renameInSet);
               setImageGuessFiles(renameInSet);
             }
             setReplaceTarget(null);

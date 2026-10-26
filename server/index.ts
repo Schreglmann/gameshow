@@ -54,7 +54,7 @@ import { setupWebSocket, broadcast, broadcastThrottled } from './ws.js';
 import { startContentWatch } from './content-watch.js';
 import { isGitCryptBlob, loadConfigWithFallback, ensureConfigFile, DEFAULT_GLOBAL_RULES } from './clean-install.js';
 import { pruneGameOrder, parseGameRef, isRefToGame, isRefToInstance, requalifyBareRefs } from './game-order.js';
-import { convertToMultiInstance } from './game-file.js';
+import { convertToMultiInstance, countQuestions, selectableInstanceKeys, gameshowPlayedContent } from './game-file.js';
 import type { RemovedGameRef } from './game-order.js';
 import { materializeExamples } from './example-games.js';
 import { setupWhisperJobs, type WhisperLanguage } from './whisper-jobs.js';
@@ -3714,23 +3714,14 @@ async function loadGameConfig(
   if ('instances' in fileContent && fileContent.instances) {
     // Multi-instance game file
     const { instances, ...base } = fileContent as MultiInstanceGameFile & Record<string, unknown>;
-    const allKeys = Object.keys(instances);
-    const nonArchiveKeys = allKeys.filter(k => k.toLowerCase() !== 'archive');
-    const archiveKey = allKeys.find(k => k.toLowerCase() === 'archive');
     // Archive is normally hidden from gameOrder, but when no non-archive
     // instance has any questions, the editor exposes archive as a fallback —
     // so we accept it here under the same condition.
-    const hasNonEmptyNonArchive = nonArchiveKeys.some(k => {
-      const inst = instances[k] as { questions?: unknown } | undefined;
-      return countQuestions(inst?.questions) > 0;
-    });
-    const selectableKeys = (archiveKey && !hasNonEmptyNonArchive)
-      ? [...nonArchiveKeys, archiveKey]
-      : nonArchiveKeys;
+    const selectableKeys = selectableInstanceKeys(instances);
     if (!instanceName) {
       throw new Error(`Game "${gameName}" has multiple instances but no instance was specified. Available: ${selectableKeys.join(', ')}`);
     }
-    if (instanceName.toLowerCase() === 'archive' && hasNonEmptyNonArchive) {
+    if (instanceName.toLowerCase() === 'archive' && instances[instanceName] && !selectableKeys.includes(instanceName)) {
       throw new Error(`Instance "${instanceName}" in "${gameName}" is reserved for archived questions and cannot be used in gameOrder`);
     }
     const instance = instances[instanceName];
@@ -4044,20 +4035,6 @@ app.get('/api/game/:index', async (req, res) => {
 
 // ── Admin Backend API ──
 
-// Count questions in a game's `questions` field. Most game types store a flat
-// array; quizjagd stores `{ easy, medium, hard }` arrays. Returns 0 for any
-// other/missing shape.
-function countQuestions(questions: unknown): number {
-  if (Array.isArray(questions)) return questions.length;
-  if (questions && typeof questions === 'object') {
-    return Object.values(questions as Record<string, unknown>).reduce<number>(
-      (sum, v) => sum + (Array.isArray(v) ? v.length : 0),
-      0,
-    );
-  }
-  return 0;
-}
-
 // GET /api/backend/games — list all game files
 // Silently skips git-crypt encrypted blobs — a fresh clone of an encrypted
 // repo should look empty (the admin then offers "Beispiele erstellen"), not
@@ -4075,23 +4052,9 @@ app.get('/api/backend/games', async (_req, res) => {
           if (isGitCryptBlob(raw)) return null;
           const content = JSON.parse(raw.toString('utf8'));
           const isSingleInstance = !('instances' in content && content.instances);
-          // Archive normally hides from the gameshow editor's instance picker.
-          // Exception: when no non-archive instance has any questions yet, expose
-          // the archive so the user has something selectable. An empty `v1`
-          // (questions: []) counts the same as v1 not existing.
-          let instances: string[] = [];
-          if (!isSingleInstance) {
-            const allKeys = Object.keys(content.instances);
-            const archiveKey = allKeys.find(k => k.toLowerCase() === 'archive');
-            const nonArchiveKeys = allKeys.filter(k => k.toLowerCase() !== 'archive');
-            const hasNonEmptyNonArchive = nonArchiveKeys.some(k => {
-              const inst = content.instances[k] as { questions?: unknown } | undefined;
-              return countQuestions(inst?.questions) > 0;
-            });
-            instances = archiveKey && !hasNonEmptyNonArchive
-              ? [...nonArchiveKeys, archiveKey]
-              : nonArchiveKeys;
-          }
+          // Archive normally hides from the gameshow editor's instance picker,
+          // except as the fallback when no other instance has questions.
+          const instances: string[] = isSingleInstance ? [] : selectableInstanceKeys(content.instances);
           let questionCount: number | undefined;
           let questionCounts: Record<string, number> | undefined;
           if (isSingleInstance) {
@@ -4944,13 +4907,14 @@ app.post('/api/backend/asset-usages-bulk', async (req, res) => {
 });
 
 // GET /api/backend/asset-category-usages — list every file in a category that is referenced
-// by any game JSON. Used by the DAM "Verwendet / Unbenutzt" filter to hide files based on
-// whether they appear in any game. Walks the whole category root in one pass; aborts at
+// by any game JSON (archive included), plus the subset played by any gameshow. Used by the
+// DAM "In Gameshow / Verwendet / Unbenutzt" filter to hide files based on whether they
+// appear in any game. Walks the whole category root in one pass; aborts at
 // FOLDER_USAGE_FILE_CAP to keep work bounded on pathological dumps.
 app.get('/api/backend/asset-category-usages', async (req, res) => {
   const { category } = req.query as { category?: string };
   if (!category || !isSafeCategory(category)) {
-    return res.json({ truncated: false, usedFiles: [], imageGuessFiles: [] });
+    return res.json({ truncated: false, usedFiles: [], imageGuessFiles: [], gameshowFiles: [] });
   }
   const catDir = categoryDir(category);
 
@@ -4980,7 +4944,7 @@ app.get('/api/backend/asset-category-usages', async (req, res) => {
     return res.status(500).json({ error: `Failed to walk category: ${(err as Error).message}` });
   }
   if (truncated) {
-    return res.json({ truncated: true, usedFiles: [], imageGuessFiles: [] });
+    return res.json({ truncated: true, usedFiles: [], imageGuessFiles: [], gameshowFiles: [] });
   }
 
   const used = new Set<string>();
@@ -4990,17 +4954,42 @@ app.get('/api/backend/asset-category-usages', async (req, res) => {
   // uniform. The top-level `type` field on a game JSON is the discriminator — multi-
   // instance games inherit the same type across instances.
   const imageGuess = new Set<string>();
+  // Subset of `used` referenced by a game part some gameshow's gameOrder plays (any
+  // gameshow, not just the active one); backs the "In Gameshow" filter. An instance only
+  // counts when a gameshow references it, so an archive counts only when referenced.
+  const inGameshow = new Set<string>();
   try {
+    // gameName → instance names referenced across all gameshows (null = bare ref).
+    const playedInstances = new Map<string, Set<string | null>>();
+    try {
+      const config = await loadConfig();
+      for (const show of Object.values(config.gameshows ?? {})) {
+        for (const ref of show.gameOrder ?? []) {
+          const { gameName, instanceName } = parseGameRef(ref);
+          const names = playedInstances.get(gameName) ?? new Set<string | null>();
+          names.add(instanceName);
+          playedInstances.set(gameName, names);
+        }
+      }
+    } catch (err) {
+      console.warn(`Could not read gameshows for category usage search: ${(err as Error).message}`);
+    }
     const gameFiles = (await readdir(GAMES_DIR)).filter(f => f.endsWith('.json') && !f.startsWith('_') && !f.includes('.fingerprints.'));
-    const gameContents: { type: string; data: string }[] = [];
+    const gameContents: { type: string; data: string; playedData: string | null }[] = [];
     for (const gf of gameFiles) {
       try {
         const data = await readFile(path.join(GAMES_DIR, gf), 'utf8');
         if (!includesRefCI(data, `${category}/`)) continue;
         let type = '';
-        try { type = ((JSON.parse(data) as { type?: unknown }).type as string | undefined) ?? ''; }
+        let playedData: string | null = null;
+        try {
+          const content = JSON.parse(data) as Record<string, unknown>;
+          type = (content.type as string | undefined) ?? '';
+          const played = gameshowPlayedContent(content, playedInstances.get(gf.replace('.json', '')) ?? []);
+          if (played) playedData = played === content ? data : JSON.stringify(played);
+        }
         catch { /* malformed JSON — still match by substring, just no type info */ }
-        gameContents.push({ type, data });
+        gameContents.push({ type, data, playedData });
       } catch (err) {
         console.warn(`Skipping unreadable game file "${gf}" during category usage search: ${(err as Error).message}`);
       }
@@ -5008,17 +4997,18 @@ app.get('/api/backend/asset-category-usages', async (req, res) => {
     const trackImageGuess = category === 'images';
     for (const rel of allFiles) {
       const relPath = `${category}/${rel}`;
-      for (const { type, data } of gameContents) {
+      for (const { type, data, playedData } of gameContents) {
         if (!includesRefCI(data, relPath)) continue;
         used.add(rel);
         if (trackImageGuess && type === 'image-guess') imageGuess.add(rel);
+        if (playedData !== null && includesRefCI(playedData, relPath)) inGameshow.add(rel);
       }
     }
   } catch (err) {
     return res.status(500).json({ error: `Failed to search category usages: ${(err as Error).message}` });
   }
 
-  res.json({ truncated: false, usedFiles: Array.from(used), imageGuessFiles: Array.from(imageGuess) });
+  res.json({ truncated: false, usedFiles: Array.from(used), imageGuessFiles: Array.from(imageGuess), gameshowFiles: Array.from(inGameshow) });
 });
 
 // POST /api/backend/assets/:category/move — rename/move file/folder and rewrite game references.

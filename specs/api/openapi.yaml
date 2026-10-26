@@ -1641,8 +1641,10 @@ paths:
       summary: Which files in this category are referenced by any game?
       description: |
         Walks the whole category root once and returns the set of file paths that appear
-        in any game JSON. Used by the DAM "Verwendet / Unbenutzt" filter to hide files
-        based on whether they are referenced by a game.
+        in any game JSON (archive instances included), plus the subset referenced by a game
+        or instance that any gameshow's `gameOrder` plays. Used by the DAM
+        "In Gameshow / Verwendet / Unbenutzt" filter to hide files based on whether they
+        are referenced by a game.
 
         If the category contains more than the server's file cap (currently 5000 files), the
         response sets `truncated: true` and `usedFiles` is empty — the caller should disable
@@ -4327,7 +4329,7 @@ components:
 
     AssetCategoryUsages:
       type: object
-      required: [truncated, usedFiles, imageGuessFiles]
+      required: [truncated, usedFiles, imageGuessFiles, gameshowFiles]
       properties:
         truncated:
           type: boolean
@@ -4335,6 +4337,13 @@ components:
         usedFiles:
           type: array
           description: Category-relative paths of files referenced by any game, e.g. `audio-2024/song.mp3`.
+          items: { type: string }
+        gameshowFiles:
+          type: array
+          description: |
+            Subset of `usedFiles` referenced by a game (single-instance) or game instance
+            (multi-instance) that the `gameOrder` of any gameshow references. An `archive`
+            instance counts only when a gameshow references it. Backs the DAM "In Gameshow" filter.
           items: { type: string }
         imageGuessFiles:
           type: array

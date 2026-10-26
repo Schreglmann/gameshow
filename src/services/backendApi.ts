@@ -1617,6 +1617,10 @@ export interface AssetCategoryUsagesResult {
    *  the DAM "Niedrige Auflösung" filter — image-guess images are rendered at 1920×648
    *  on the projector, every other game at 1920×540. */
   imageGuessFiles: string[];
+  /** Subset of `usedFiles` referenced by a game instance that any gameshow's `gameOrder`
+   *  plays (an `archive` instance only when a gameshow references it). Backs the DAM
+   *  "In Gameshow" filter. */
+  gameshowFiles: string[];
 }
 
 export async function fetchAssetCategoryUsages(
