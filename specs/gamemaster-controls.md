@@ -12,8 +12,8 @@ Duplicate all interactive game controls (award points, navigation, difficulty se
 - [x] GuessingGame: guess inputs and "Tipp Abgeben" button appear on the gamemaster screen
 - [x] AudioGuess: "Ausschnitt wiederholen" and "Ganzer Song" buttons appear on the gamemaster screen
 - [x] Bandle: track reveal pills, hint, Auflösung, and audio play/pause/restart appear on the gamemaster screen
-- [x] FourStatements (4 Hinweise): an "Auflösung" button appears on the gamemaster screen that reveals all clues and the answer at once
-- [x] SimpleQuiz: audio play/pause and restart controls appear when question audio is active
+- [x] FourStatements (4 Hinweise): an "Auflösung" button appears on the gamemaster screen that reveals all clues and the answer at once, plus audio play/pause and restart controls while the answer audio is active
+- [x] SimpleQuiz / BetQuiz: audio play/pause and restart controls (`audio-controls` group, shared `audioControlGroup()` in [src/utils/gmAudioControls.ts](../src/utils/gmAudioControls.ts)) follow the clip that is playing — the question audio before the reveal, the answer audio once it has started. A question with only `answerAudio` gets the controls on reveal; a clip that already stopped at its trim end resumes from its trim start. When the question audio is stopped at the reveal, its controls (and the show's player bar) disappear instead of acting on the stopped clip
 - [x] Keyboard shortcuts (ArrowRight/Space → advance, ArrowLeft → back) work on the gamemaster screen. Holding the forward key (ArrowRight or Space) sends `nav-forward-long` — detected via OS key-repeat or a ≥500 ms hold, whichever comes first (robust against presenter clickers that send an early keyup) — which reveals everything at once in Bandle / Ranking / FourStatements (mirrors the show frontend's `useArrowRightLongPress`). The lock toggle suppresses all of these.
 - [x] The existing game screen (`/game`) continues to work exactly as before — all controls remain on the player-facing screen
 - [x] Running a gameshow without opening `/gamemaster` has zero impact on game behavior

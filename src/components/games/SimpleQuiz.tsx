@@ -12,6 +12,8 @@ import { watchMediaLoad, MEDIA_SLOW_LOAD_MS } from '@/utils/mediaLoadTimeout';
 import { usePreloadAsset } from '@/hooks/usePreloadAsset';
 import { useGmConnected } from '@/hooks/useGmConnected';
 import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
+import { useAudioPlaying } from '@/hooks/useAudioPlaying';
+import { audioControlGroup, restartTrimmedAudio, toggleTrimmedAudio } from '@/utils/gmAudioControls';
 import AssetReloadButton from '@/components/common/AssetReloadButton';
 import BaseGameWrapper from './BaseGameWrapper';
 import QuizQuestionView from './QuizQuestionView';
@@ -138,6 +140,10 @@ function QuizInner({ questions, order, resumeAtEnd, gameTitle, answerAudioRef, q
   // state into the next question.
   const questionAudioCleanupRef = useRef<(() => void) | null>(null);
   const answerAudioCleanupRef = useRef<(() => void) | null>(null);
+  // The answer-audio element mirrored into state, so the GM audio controls
+  // re-render when it starts/stops. Set/cleared wherever answerAudioRef is.
+  const [answerAudioEl, setAnswerAudioEl] = useState<HTMLAudioElement | null>(null);
+  const answerAudioPlaying = useAudioPlaying(answerAudioEl);
   const q = questions[qIdx];
 
   // Eagerly prefetch the next question's audio + answer image so a network
@@ -207,6 +213,18 @@ function QuizInner({ questions, order, resumeAtEnd, gameTitle, answerAudioRef, q
     audio.currentTime = q?.questionAudioStart ?? 0;
     void safePlay(audio, { onError: onPlayError });
   }, [questionAudioRef, q?.questionAudioStart, onPlayError]);
+
+  const handleAnswerAudioPlayPause = useCallback(() => {
+    const audio = answerAudioRef.current;
+    if (!audio) return;
+    toggleTrimmedAudio(audio, { start: q?.answerAudioStart, end: q?.answerAudioEnd, onError: onPlayError });
+  }, [answerAudioRef, q?.answerAudioStart, q?.answerAudioEnd, onPlayError]);
+
+  const handleAnswerAudioRestart = useCallback(() => {
+    const audio = answerAudioRef.current;
+    if (!audio) return;
+    restartTrimmedAudio(audio, { start: q?.answerAudioStart, onError: onPlayError });
+  }, [answerAudioRef, q?.answerAudioStart, onPlayError]);
   const questionLabel = qIdx === 0 ? 'Beispiel Frage' : `Frage ${qIdx} von ${questions.length - 1}`;
 
   // Forward nav
@@ -221,6 +239,11 @@ function QuizInner({ questions, order, resumeAtEnd, gameTitle, answerAudioRef, q
         questionAudioCleanupRef.current?.();
         questionAudioCleanupRef.current = null;
         questionAudioRef.current = null;
+        // The listeners are gone, so clear the question-audio state here —
+        // otherwise the GM buttons and the player bar keep acting on it.
+        setAudioCurrentTime(0);
+        setAudioDuration(0);
+        setAudioPlaying(false);
       }
     } else {
       if (qIdx < questions.length - 1) {
@@ -229,6 +252,7 @@ function QuizInner({ questions, order, resumeAtEnd, gameTitle, answerAudioRef, q
         answerAudioCleanupRef.current?.();
         answerAudioCleanupRef.current = null;
         answerAudioRef.current = null;
+        setAnswerAudioEl(null);
         questionAudioRef.current?.pause();
         questionAudioCleanupRef.current?.();
         questionAudioCleanupRef.current = null;
@@ -262,6 +286,7 @@ function QuizInner({ questions, order, resumeAtEnd, gameTitle, answerAudioRef, q
       answerAudioCleanupRef.current?.();
       answerAudioCleanupRef.current = null;
       answerAudioRef.current = null;
+      setAnswerAudioEl(null);
       if (q?.questionAudio) {
         currentQuestionAudio?.pause();
         questionAudioCleanupRef.current?.();
@@ -298,6 +323,7 @@ function QuizInner({ questions, order, resumeAtEnd, gameTitle, answerAudioRef, q
       answerAudioCleanupRef.current?.();
       answerAudioCleanupRef.current = null;
       answerAudioRef.current = null;
+      setAnswerAudioEl(null);
       setQIdx(prev => prev - 1);
       setShowAnswer(true);
       return true;
@@ -310,24 +336,24 @@ function QuizInner({ questions, order, resumeAtEnd, gameTitle, answerAudioRef, q
     setBackNavHandler(handleBack);
   }, [handleNext, handleBack, setNavHandler, setBackNavHandler]);
 
-  // Broadcast gamemaster controls (only when question audio is active)
+  // The answer audio takes over the GM audio buttons once it exists; before
+  // that (and when there is none) they drive the question audio, which keeps
+  // playing through the reveal when no answer audio is configured.
+  const answerAudioActive = showAnswer && answerAudioEl !== null;
+
+  // Broadcast gamemaster controls: audio buttons for whichever clip is active.
   useEffect(() => {
     const controls: GamemasterControl[] = [];
-    if (q?.questionAudio && audioDuration > 0) {
-      controls.push({
-        type: 'button-group',
-        id: 'audio-controls',
-        buttons: [
-          { id: 'audio-playpause', label: audioPlaying ? 'Pause' : 'Abspielen' },
-          { id: 'audio-restart', label: 'Von vorne' },
-        ],
-      });
+    if (answerAudioActive) {
+      controls.push(audioControlGroup(answerAudioPlaying));
+    } else if (q?.questionAudio && audioDuration > 0) {
+      controls.push(audioControlGroup(audioPlaying));
     }
     if (assetFailed) {
       controls.push({ type: 'button', id: 'asset-reload', label: 'Asset neu laden' });
     }
     setGamemasterControls(controls);
-  }, [q?.questionAudio, audioDuration, audioPlaying, assetFailed, setGamemasterControls]);
+  }, [answerAudioActive, answerAudioPlaying, q?.questionAudio, audioDuration, audioPlaying, assetFailed, setGamemasterControls]);
 
   const handleAssetReload = useCallback(() => {
     setAssetFailed(false);
@@ -336,10 +362,14 @@ function QuizInner({ questions, order, resumeAtEnd, gameTitle, answerAudioRef, q
 
   // Handle gamemaster commands
   const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
-    if (cmd.controlId === 'audio-playpause') handleAudioPlayPause();
-    else if (cmd.controlId === 'audio-restart') handleAudioRestart();
-    else if (cmd.controlId === 'asset-reload') handleAssetReload();
-  }, [handleAudioPlayPause, handleAudioRestart, handleAssetReload]);
+    if (cmd.controlId === 'audio-playpause') {
+      if (answerAudioActive) handleAnswerAudioPlayPause();
+      else handleAudioPlayPause();
+    } else if (cmd.controlId === 'audio-restart') {
+      if (answerAudioActive) handleAnswerAudioRestart();
+      else handleAudioRestart();
+    } else if (cmd.controlId === 'asset-reload') handleAssetReload();
+  }, [answerAudioActive, handleAudioPlayPause, handleAudioRestart, handleAnswerAudioPlayPause, handleAnswerAudioRestart, handleAssetReload]);
 
   useEffect(() => {
     setCommandHandler(commandHandlerFn);
@@ -389,6 +419,7 @@ function QuizInner({ questions, order, resumeAtEnd, gameTitle, answerAudioRef, q
     const audio = new Audio(toMediaSrc(q.answerAudio));
     audio.volume = 1;
     answerAudioRef.current = audio;
+    setAnswerAudioEl(audio);
     if (q.answerAudioStart !== undefined) {
       audio.currentTime = q.answerAudioStart;
     }
