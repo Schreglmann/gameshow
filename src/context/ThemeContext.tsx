@@ -3,7 +3,7 @@ import { fetchTheme, saveTheme } from '@/services/api';
 import { useWsChannel } from '@/services/useBackendSocket';
 import type { ContentChangedPayload } from '@/types/config';
 
-export type ThemeId = 'galaxia' | 'harry-potter' | 'dnd' | 'deepsea' | 'enterprise' | 'retro' | 'minecraft' | 'classical-music' | 'modern-music' | 'movie-quiz' | 'atlas' | 'atlas-light' | 'pub-quiz';
+export type ThemeId = 'galaxia' | 'harry-potter' | 'dnd' | 'deepsea' | 'enterprise' | 'retro' | 'minecraft' | 'classical-music' | 'modern-music' | 'movie-quiz' | 'atlas' | 'atlas-light' | 'pub-quiz' | 'maerchen';
 
 export const THEMES: { id: ThemeId; label: string; description: string }[] = [
   { id: 'atlas', label: 'Atlas', description: 'Seekarte in Tiefblau & Gold' },
@@ -19,6 +19,7 @@ export const THEMES: { id: ThemeId; label: string; description: string }[] = [
   { id: 'modern-music', label: 'Modern Music', description: 'Neon & DJ-Booth' },
   { id: 'movie-quiz', label: 'Filme', description: 'Kino & roter Teppich' },
   { id: 'pub-quiz', label: 'Pub Quiz', description: 'Kreidetafel & Kneipenabend' },
+  { id: 'maerchen', label: 'Halloween', description: 'Spukwald, Kürbisse & Spukschloss' },
 ];
 
 // Swatch gradient shown as each theme's "color icon" in the admin theme picker
@@ -41,6 +42,7 @@ export const THEME_SWATCHES: Record<ThemeId, string> = {
   'movie-quiz': 'linear-gradient(135deg, #1a0a0d 0%, #e0a008 55%, #f5c518 100%)',
   deepsea: 'linear-gradient(135deg, #021a26 0%, #0ea5e9 55%, #2dd4bf 100%)',
   'pub-quiz': 'linear-gradient(135deg, #121a16 0%, #4a84b8 55%, #f2d264 100%)',
+  maerchen: 'linear-gradient(135deg, #1a0f24 0%, #f08a2c 50%, #7b45b0 100%)',
 };
 
 // The admin UI offers only a curated subset of themes — the immersive themes

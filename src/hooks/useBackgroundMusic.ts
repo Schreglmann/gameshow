@@ -2,6 +2,7 @@ import { useRef, useCallback, useEffect, useState } from 'react';
 import { fetchBackgroundMusic } from '@/services/api';
 import { useCurrentFrontendTheme } from '@/context/ThemeContext';
 import { useWsChannel } from '@/services/useBackendSocket';
+import type { BackgroundMusicSource } from '@/types/config';
 
 function encodeMusicPath(file: string): string {
   return file.split('/').map(encodeURIComponent).join('/');
@@ -78,8 +79,12 @@ export interface MusicPlayerControls {
   seekTo: (fraction: number) => void;
 }
 
-export function useBackgroundMusic(): MusicPlayerControls {
-  const theme = useCurrentFrontendTheme();
+export function useBackgroundMusic(source: BackgroundMusicSource = 'theme'): MusicPlayerControls {
+  const frontendTheme = useCurrentFrontendTheme();
+  // With the `default` source the playlist is fetched without a theme, so it is
+  // always the root folder and a theme switch doesn't refetch at all.
+  // See specs/background-music.md.
+  const theme = source === 'theme' ? frontendTheme : undefined;
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentSong, setCurrentSong] = useState('');
   const [currentTime, setCurrentTime] = useState(0);
@@ -224,7 +229,8 @@ export function useBackgroundMusic(): MusicPlayerControls {
     crossfadeRef.current = crossfade;
   }, [crossfade]);
 
-  // Reload the playlist whenever the active frontend theme changes.
+  // Reload the playlist whenever the active frontend theme (or the music
+  // source) changes.
   // Theme changes do a *sequential* swap (fade out current → switch source →
   // fade in new) rather than a crossfade, because two different theme
   // soundtracks playing on top of each other for two seconds sounds chaotic.

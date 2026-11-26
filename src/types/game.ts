@@ -1,4 +1,4 @@
-import type { PointMode, TeamColors } from './config.js';
+import type { BackgroundMusicSource, PointMode, TeamColors } from './config.js';
 import type { TeamKey } from '../utils/teams.js';
 
 /**
@@ -225,6 +225,12 @@ export interface GlobalSettings {
    */
   jokerUsageScope: 'per-gameshow' | 'per-game';
   /**
+   * Whether the background music plays the active theme's soundtrack (`theme`,
+   * default) or always the default playlist (`default`).
+   * See specs/background-music.md.
+   */
+  backgroundMusicSource: BackgroundMusicSource;
+  /**
    * Roster of the active gameshow (`GameshowConfig.players`), configured in the
    * admin Gameshows tab. Prefills the HomeScreen randomization textarea so the
    * host only has to click "Teams zuweisen". Empty when the gameshow has no
@@ -271,6 +277,8 @@ export interface GamemasterAnswerData {
    */
   questionImage?: string;
   extraInfo?: string;
+  /** The question's `gmInfo`: a host-only note, rendered under the answer and hidden with it. */
+  gmInfo?: string;
   /**
    * The question a tally or point award made *right now* belongs to. Omitted
    * whenever nothing is attributable: the example question, any non-`game`
@@ -296,12 +304,18 @@ export interface GamemasterAnswerData {
   /**
    * Structured list of the *hints* the audience is looking at, for games whose
    * puzzle is a set of clues around a single hidden answer (city-compass: the
-   * neighbor cities on the rose). Rendered as its own labelled block, so unlike
-   * `answerList` it does NOT replace `answer` — the host still needs the
-   * solution while asking. `revealed` reflects what the audience can see; a
+   * neighbor cities on the rose; four-statements: the clues). Rendered as its
+   * own labelled block, so unlike `answerList` it does NOT replace `answer` —
+   * the host still needs the solution while asking. `revealed` reflects what the audience can see; a
    * pending row is an upcoming clue, not the answer.
    */
   hintList?: { rank: number; text: string; revealed: boolean }[];
+  /**
+   * When true, the `hintList` rows are reveal controls: clicking row N sends
+   * `hint-<N>` and the game shows exactly hints 1…N (four-statements). Absent,
+   * the rows are static (city-compass).
+   */
+  hintListClickable?: boolean;
   /**
    * Preview of the NEXT question's answer, shown in the gamemaster card while
    * the current answer is revealed in the frontend (`answerRevealed`), gated by

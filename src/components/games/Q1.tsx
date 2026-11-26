@@ -102,12 +102,13 @@ function StatementsInner({ questions, order, resumeAtEnd, gameTitle, onGameCompl
       gameTitle,
       questionNumber: qIdx,
       totalQuestions: questions.length - 1,
+      gmInfo: q.gmInfo,
       question: q.Frage,
       answer: q.answer || '—',
       extraInfo: 'Falsch: ' + q.wrongStatement,
       nextAnswer: nextQ ? { question: nextQ.Frage, answer: nextQ.answer || '—' } : undefined,
     });
-  }, [qIdx, gameTitle, questions, setGamemasterData]);
+  }, [qIdx, gameTitle, questions, q, setGamemasterData]);
 
   // Signal answer-reveal so the GM-triggered deadline timer hides immediately.
   useEffect(() => {

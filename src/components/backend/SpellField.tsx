@@ -24,6 +24,7 @@ type SpellFieldProps = {
   segKey: string;
   as?: 'input' | 'textarea';
   value: string;
+  rows?: number;
 } & Omit<InputHTMLAttributes<HTMLInputElement>, 'value'>;
 
 function isSpelling(m: SpellMatch): boolean {

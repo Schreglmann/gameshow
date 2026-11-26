@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { ColorGuessQuestion, ColorSlice } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
 import SpellField from '../SpellField';
+import GmInfoField from './GmInfoField';
 import { AssetField } from '../AssetPicker';
 import MoveQuestionButton from './MoveQuestionButton';
 import { ColorPie } from '@/components/games/ColorGuess';
@@ -17,7 +18,7 @@ interface Props {
 }
 
 const empty = (): ColorGuessQuestion => ({ image: '', answer: '' });
-const isEmpty = (q: ColorGuessQuestion) => !q.answer.trim() && !q.image;
+const isEmpty = (q: ColorGuessQuestion) => !q.answer.trim() && !q.image && !q.gmInfo?.trim();
 
 function ColorPiePreview({ image, size = 40, onClick }: { image: string; size?: number; onClick?: () => void }) {
   const [colors, setColors] = useState<ColorSlice[] | null>(null);
@@ -207,6 +208,7 @@ export default function ColorGuessForm({ questions, onChange, otherInstances, on
                 onChange={v => update(i, { image: v ?? '' })}
               />
             </div>
+            {!isVirtual && <GmInfoField segKey={`q${i}.gmInfo`} value={q.gmInfo} onChange={v => update(i, { gmInfo: v })} />}
           </div>
         </div>
         );

@@ -130,4 +130,71 @@ describe('useBackgroundMusic - theme switch music continuity', () => {
     const playingRetro = audioInstances.find(a => a.src.includes('retro/') && !a.paused);
     expect(playingRetro).toBeTruthy();
   });
+
+  describe('backgroundMusicSource', () => {
+    it('fetches without a theme when the source is "default"', async () => {
+      mocks.theme.value = 'retro';
+      renderHook(() => useBackgroundMusic('default'));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      expect(mocks.fetchBackgroundMusic).toHaveBeenCalledTimes(1);
+      expect(mocks.fetchBackgroundMusic).toHaveBeenCalledWith(undefined);
+    });
+
+    it('does not refetch on a theme switch when the source is "default"', async () => {
+      const { result, rerender } = renderHook(() => useBackgroundMusic('default'));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      act(() => {
+        result.current.start();
+      });
+      const active = audioInstances.find(a => a.src !== '' && !a.paused);
+      const srcBefore = active!.src;
+
+      // A theme WITH its own soundtrack — under the "theme" source this would swap.
+      mocks.theme.value = 'retro';
+      rerender();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      act(() => {
+        vi.advanceTimersByTime(2000);
+      });
+
+      expect(mocks.fetchBackgroundMusic).toHaveBeenCalledTimes(1);
+      expect(active!.src).toBe(srcBefore);
+      expect(active!.paused).toBe(false);
+    });
+
+    it('swaps from the theme soundtrack to the default playlist when the source changes live', async () => {
+      mocks.theme.value = 'retro';
+      const { result, rerender } = renderHook(
+        ({ source }: { source: 'theme' | 'default' }) => useBackgroundMusic(source),
+        { initialProps: { source: 'theme' as 'theme' | 'default' } },
+      );
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      act(() => {
+        result.current.start();
+      });
+      expect(audioInstances.find(a => !a.paused)!.src).toContain('retro/');
+
+      rerender({ source: 'default' });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      // Run the fade-out (600ms) so the source swap fires.
+      act(() => {
+        vi.advanceTimersByTime(700);
+      });
+
+      expect(mocks.fetchBackgroundMusic).toHaveBeenLastCalledWith(undefined);
+      const playing = audioInstances.find(a => !a.paused);
+      expect(playing!.src).toContain('Global');
+    });
+  });
 });

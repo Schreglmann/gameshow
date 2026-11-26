@@ -1,6 +1,7 @@
 import type { ImageGuessQuestion } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
 import SpellField from '../SpellField';
+import GmInfoField from './GmInfoField';
 import { AssetField } from '../AssetPicker';
 import { RENDER_BOX_IMAGE_GUESS } from '../assetFolders';
 import MoveQuestionButton from './MoveQuestionButton';
@@ -15,7 +16,7 @@ interface Props {
 }
 
 const empty = (): ImageGuessQuestion => ({ image: '', answer: '' });
-const isEmpty = (q: ImageGuessQuestion) => !q.answer.trim() && !q.image;
+const isEmpty = (q: ImageGuessQuestion) => !q.answer.trim() && !q.image && !q.gmInfo?.trim();
 
 export default function ImageGuessForm({ questions, onChange, otherInstances, onMoveQuestion }: Props) {
   const confirmDialog = useConfirm();
@@ -122,6 +123,7 @@ export default function ImageGuessForm({ questions, onChange, otherInstances, on
                 </select>
               </div>
             )}
+            {!isVirtual && <GmInfoField segKey={`q${i}.gmInfo`} value={q.gmInfo} onChange={v => update(i, { gmInfo: v })} />}
           </div>
         </div>
         );

@@ -606,6 +606,10 @@ function FrontendShowcase() {
           <div className="gamemaster-title">Allgemeinwissen</div>
           <div className="gamemaster-question">Welcher Fluss ist der längste der Welt?</div>
           <div className="gamemaster-answer">Nil</div>
+          <div className="gamemaster-gm-info">
+            <div className="gamemaster-gm-info-label">Info für Gamemaster</div>
+            <div className="gamemaster-gm-info-text">Mit 6.650 km knapp länger als der Amazonas – auch „Nil“ ohne Artikel gelten lassen.</div>
+          </div>
           <div className="gamemaster-next">
             <div className="gamemaster-next-label">Nächste Frage</div>
             <div className="gamemaster-next-question">Wie viele Planeten hat unser Sonnensystem?</div>

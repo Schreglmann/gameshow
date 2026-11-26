@@ -2,6 +2,7 @@ import { useState, type ClipboardEvent } from 'react';
 import type { RankingQuestion } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
 import SpellField from '../SpellField';
+import GmInfoField from './GmInfoField';
 import { AssetField } from '../AssetPicker';
 import AudioTrimTimeline from '../AudioTrimTimeline';
 import { toMediaSrc } from '@/utils/assetUrl';
@@ -18,7 +19,7 @@ interface Props {
 
 const empty = (): RankingQuestion => ({ question: '', answers: [] });
 const isEmptyQuestion = (q: RankingQuestion) =>
-  !q.question.trim() && q.answers.length === 0 && !q.topic?.trim() && !(q.items?.some(s => s.trim()));
+  !q.question.trim() && q.answers.length === 0 && !q.topic?.trim() && !q.gmInfo?.trim() && !(q.items?.some(s => s.trim()));
 
 /** Empty item arrays are dropped (stored as `undefined`) so the JSON never carries `items: []`. */
 const normItems = (items: string[]): string[] | undefined => (items.length > 0 ? items : undefined);
@@ -345,6 +346,7 @@ export default function RankingForm({ questions, onChange, otherInstances, onMov
                 )}
               </div>
             )}
+            {!isVirtual && <GmInfoField segKey={`q${i}.gmInfo`} value={q.gmInfo} onChange={v => update(i, { gmInfo: v })} />}
           </div>
         </div>
         );

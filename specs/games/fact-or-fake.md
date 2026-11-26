@@ -26,6 +26,8 @@ A statement is shown and teams must decide whether it is a real fact (FAKT) or m
   - `questionImage?: string` (path to image shown alongside the statement during the question phase)
   - `answerImage?: string` (path to image shown after reveal, e.g. `/images/Karten/<game>/<slug>.svg`)
 
+Every question also accepts the optional `gmInfo` (host-only note, shown in the GM card only) — see [gamemaster-info.md](../gamemaster-info.md).
+
 ## UI behaviour
 - Component: `src/components/games/FactOrFake.tsx`
 - Statement displayed prominently in the centre

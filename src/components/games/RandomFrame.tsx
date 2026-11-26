@@ -210,6 +210,7 @@ function RandomFrameInner({
       gameTitle,
       questionNumber: qIdx,
       totalQuestions: questions.length - 1,
+      gmInfo: q.gmInfo,
       answer: q.answer,
       answerImage: q.answerImage,
       question: prompt,

@@ -32,6 +32,8 @@ Teams watch a video clip played from a start marker to a question marker; the ho
 - Game playback: pre-cached via `/videos-compressed/` or `/videos-sdr/` endpoints (with `?strict=1`); questions without time markers play the original `/videos/<path>` directly
 - Cache generated manually via "Cache für Gameshow" button in admin editor. The cache URL uses the effective (resolved) track so instance-default language is honoured even when a question has no explicit `audioTrack`.
 
+Every question also accepts the optional `gmInfo` (host-only note, shown in the GM card only) — see [gamemaster-info.md](../gamemaster-info.md).
+
 ## UI behaviour
 - Component: `src/components/games/VideoGuess.tsx`
 - Optional `question` text renders above the video (`.quiz-question`), between the "Clip X von Y" heading and the player; shown in both the question and the answer phase. Edited via a "Frage (optional)" input in `VideoGuessForm`.

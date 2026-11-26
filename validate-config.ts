@@ -36,7 +36,7 @@ function isGitCryptBlob(filePath: string): boolean {
   }
 }
 
-const VALID_THEMES = ['galaxia', 'harry-potter', 'dnd', 'deepsea', 'enterprise', 'retro', 'minecraft', 'classical-music', 'modern-music', 'movie-quiz', 'atlas', 'atlas-light', 'pub-quiz'];
+const VALID_THEMES = ['galaxia', 'harry-potter', 'dnd', 'deepsea', 'enterprise', 'retro', 'minecraft', 'classical-music', 'modern-music', 'movie-quiz', 'atlas', 'atlas-light', 'pub-quiz', 'maerchen'];
 
 const VALID_GAME_TYPES: GameType[] = [
   'simple-quiz',
@@ -190,6 +190,11 @@ function validateConfig(): void {
   // Validate jokerUsageScope (optional) — whether jokers refresh per game
   if (config.jokerUsageScope !== undefined && config.jokerUsageScope !== 'per-gameshow' && config.jokerUsageScope !== 'per-game') {
     errors.push('"jokerUsageScope" must be "per-gameshow" or "per-game"');
+  }
+
+  // Validate backgroundMusicSource (optional) — theme soundtrack vs. default playlist
+  if (config.backgroundMusicSource !== undefined && config.backgroundMusicSource !== 'theme' && config.backgroundMusicSource !== 'default') {
+    errors.push('"backgroundMusicSource" must be "theme" or "default"');
   }
 
   // Show title (optional, both levels). A blank value silently falls through to
@@ -595,6 +600,8 @@ export function validateQuizjagd(
     for (const [idx, q] of pool.entries()) {
       if (!q.question) errors.push(`Game "${gameRef}", ${poolName} question ${idx}: missing "question"`);
       if (!q.answer) errors.push(`Game "${gameRef}", ${poolName} question ${idx}: missing "answer"`);
+      if (q.gmInfo !== undefined && typeof q.gmInfo !== 'string')
+        errors.push(`Game "${gameRef}", ${poolName} question ${idx}: "gmInfo" must be a string`);
     }
   }
 
@@ -618,7 +625,7 @@ export function validateQuizjagd(
   return errors;
 }
 
-function validateQuestion(
+export function validateQuestion(
   gameRef: string,
   gameType: GameType,
   question: Record<string, unknown>,
@@ -628,6 +635,10 @@ function validateQuestion(
 
   const hasQuestionPrompt =
     Boolean(question.question) || Boolean(question.questionImage) || Boolean(question.questionAudio);
+
+  // Gamemaster-only note, valid on every question type. See specs/gamemaster-info.md.
+  if (question.gmInfo !== undefined && typeof question.gmInfo !== 'string')
+    errors.push(`Game "${gameRef}", question ${index}: "gmInfo" must be a string`);
 
   switch (gameType) {
     case 'simple-quiz':

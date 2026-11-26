@@ -69,6 +69,7 @@ games/
 - `teamColorsEnabled` / `teamColors` — Opt-in per-team colours (default: off). When on, every surface that renders a team marks it with an accent edge plus a dot beside the name, in all three zones; the four colours are picked in the admin Konfiguration tab and a blank one falls back to the active theme (see [specs/team-colors.md](specs/team-colors.md))
 - `teamRandomizationEnabled` — How the teams are formed on the `HomeScreen` (default: `true`). `true` = enter a name pool that is shuffled + split automatically; `false` = **manual assignment** — add/remove players per team by hand on the show and the gamemaster (see [specs/team-management.md](specs/team-management.md))
 - `jokersInLastGame` — Allow jokers to stay available in the last game (default: `false`; when off, the joker UI is hidden in the last game)
+- `backgroundMusicSource` — Which background music the show plays (default: `"theme"`). `"theme"` = the active theme's `background-music/<theme>/` folder, falling back to the root folder; `"default"` = always the root folder. Admin toggle "Theme-Hintergrundmusik verwenden" (see [specs/background-music.md](specs/background-music.md))
 - `globalRules` — Array of strings for the global rules screen
 - `rulesPresets` — Optional list of `{ id, name, rules[], rulesSolo?[], rulesMulti?[] }` entries. Games may reference one via `rulesPreset`; the server resolves it onto the per-game task line at runtime, picking the wording band for the active gameshow's team count (`rulesSolo` at 0–1 teams, `rules` at 2, `rulesMulti` at 3–4). See [specs/rules-presets.md](specs/rules-presets.md).
 - `activeGameshow` — Key of the gameshow to run (must match a key in `gameshows`)
@@ -188,7 +189,7 @@ See [GAME_TYPES.md](GAME_TYPES.md) for detailed per-type documentation.
 
 | Endpoint | Response |
 |----------|----------|
-| `GET /api/settings` | `{ showTitle, pointSystemEnabled, teamRandomizationEnabled, teamColors, jokersInLastGame, globalRules, enabledJokers, jokerRules }` |
+| `GET /api/settings` | `{ showTitle, pointSystemEnabled, teamRandomizationEnabled, teamColors, jokersInLastGame, backgroundMusicSource, globalRules, enabledJokers, jokerRules }` |
 | `GET /api/game/:index` | `{ gameId, config, currentIndex, totalGames, pointSystemEnabled }` |
 | `GET /api/background-music` | `string[]` (audio filenames) |
 

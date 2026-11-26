@@ -37,6 +37,8 @@ Host asks a question whose answer is an ordered list (e.g. "Top 5 highest-grossi
   - `answerAudioTrigger?: 'first' | 'all'` — when the clip plays: on the first revealed answer (default) or once all are revealed
   - `disabled?: boolean`
 
+Every question also accepts the optional `gmInfo` (host-only note, shown in the GM card only) — see [gamemaster-info.md](../gamemaster-info.md).
+
 ## UI behaviour
 - Component: [`src/components/games/Ranking.tsx`](../../src/components/games/Ranking.tsx)
 - Question label: `Beispiel` for index 0, otherwise `Frage N von M`

@@ -1316,7 +1316,7 @@ describe('AssetsTab', () => {
     });
   });
 
-  describe('Usage filter (Verwendet / Unbenutzt)', () => {
+  describe('Usage filter (In Gameshow / Verwendet / Unbenutzt)', () => {
     const setup = () => {
       mockFetchAssets.mockResolvedValue({
         files: ['orphan.mp3'],
@@ -1408,6 +1408,29 @@ describe('AssetsTab', () => {
       // Click "Verwendet" again — filter clears, every folder reappears.
       await user.click(screen.getByRole('button', { name: /Verwendet/ }));
       await waitFor(() => expect(screen.getByText('Forgotten')).toBeInTheDocument());
+    });
+
+    it('"In Gameshow" keeps only files a gameshow plays, "Verwendet" every referenced file', async () => {
+      setup();
+      mockFetchAssetCategoryUsages.mockResolvedValue({
+        truncated: false,
+        // nobody.mp3 is only referenced by an instance no gameshow plays (e.g. an archive).
+        usedFiles: ['Beatles/hey-jude.mp3', 'Forgotten/nobody.mp3'],
+        gameshowFiles: ['Beatles/hey-jude.mp3'],
+        imageGuessFiles: [],
+      });
+      const user = userEvent.setup();
+      render(<UploadProvider><AssetsTab initialCategory="audio" /></UploadProvider>);
+      await waitFor(() => expect(screen.getByText('Beatles')).toBeInTheDocument());
+
+      await openSortPopover(user);
+      await user.click(screen.getByRole('button', { name: /In Gameshow/ }));
+      await waitFor(() => expect(screen.queryByText('Forgotten')).not.toBeInTheDocument());
+      expect(screen.getByText('Beatles')).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: /Verwendet/ }));
+      await waitFor(() => expect(screen.getByText('Forgotten')).toBeInTheDocument());
+      expect(screen.getByText('Beatles')).toBeInTheDocument();
     });
 
     it('switching between Verwendet and Unbenutzt swaps the filter', async () => {

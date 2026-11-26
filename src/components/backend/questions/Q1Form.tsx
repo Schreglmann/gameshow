@@ -1,6 +1,7 @@
 import type { Q1Question } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
 import SpellField from '../SpellField';
+import GmInfoField from './GmInfoField';
 import MoveQuestionButton from './MoveQuestionButton';
 import { stripTrailingEmpty } from './ghostRow';
 import { useConfirm } from '../ConfirmContext';
@@ -17,7 +18,8 @@ const isEmpty = (q: Q1Question) =>
   !q.Frage.trim() &&
   q.trueStatements.every(s => !s.trim()) &&
   !q.wrongStatement.trim() &&
-  !q.answer?.trim();
+  !q.answer?.trim() &&
+  !q.gmInfo?.trim();
 
 export default function Q1Form({ questions, onChange, otherInstances, onMoveQuestion }: Props) {
   const confirmDialog = useConfirm();
@@ -91,6 +93,7 @@ export default function Q1Form({ questions, onChange, otherInstances, onMoveQues
                 <SpellField segKey={`q${i}.answer`} className="be-input" value={q.answer ?? ''} placeholder="Optionaler Erklärungstext..." onChange={e => update(i, { answer: e.target.value || undefined })} />
               </div>
             )}
+            {!isVirtual && <GmInfoField segKey={`q${i}.gmInfo`} value={q.gmInfo} onChange={v => update(i, { gmInfo: v })} />}
           </div>
         </div>
         );

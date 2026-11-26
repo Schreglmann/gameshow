@@ -82,6 +82,7 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | Gamemaster per-question scoring breakdown | [gamemaster-question-scores.md](gamemaster-question-scores.md) | ✅ Implemented |
 | Gamemaster next-answer preview | [gamemaster-next-answer.md](gamemaster-next-answer.md) | ✅ Implemented |
 | Gamemaster hide-answers toggle | [gamemaster-hide-answers.md](gamemaster-hide-answers.md) | ✅ Implemented |
+| Gamemaster info (host-only note per question, `gmInfo`) | [gamemaster-info.md](gamemaster-info.md) | ✅ Implemented |
 | Gamemaster show-scroll controls | [gamemaster-scroll.md](gamemaster-scroll.md) | ✅ Implemented |
 | Gamemaster fullscreen toggle | [gamemaster-fullscreen.md](gamemaster-fullscreen.md) | ✅ Implemented |
 | Gamemaster background-music remote control | [gamemaster-music-control.md](gamemaster-music-control.md) | ✅ Implemented |

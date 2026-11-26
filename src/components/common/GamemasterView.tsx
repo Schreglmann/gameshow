@@ -148,23 +148,40 @@ export default function GamemasterView({ showAnswerImages = false, hideAnswers =
             {data.hintList && data.hintList.length > 0 && (
               // Hints, not answers: the revealed rows are already on the projector,
               // so they stay legible while answers are hidden — only the pending
-              // ones (clues the host has not introduced yet) are masked. Static
-              // rows, because no game listens for a hint-jump command.
+              // ones (clues the host has not introduced yet) are masked. The rows
+              // are reveal controls only when the game listens for `hint-<n>`.
               <div className="gamemaster-hints">
                 <div className="gamemaster-hints-label">Hinweise</div>
                 <ul className="gamemaster-answer-list">
-                  {data.hintList.map(item => (
-                    <li key={item.rank}>
-                      <div
-                        className={`gamemaster-answer-item gamemaster-answer-item--static${item.revealed ? ' revealed' : ' pending'}`}
-                      >
+                  {data.hintList.map(item => {
+                    const stateClass = item.revealed ? ' revealed' : ' pending';
+                    const text = (
+                      <>
                         <span className="gamemaster-answer-rank">{item.rank}</span>
                         <span className={`gamemaster-answer-text${hideAnswers && !item.revealed ? ' gamemaster-answer-text--masked' : ''}`}>
                           {hideAnswers && !item.revealed ? ANSWER_MASK : item.text}
                         </span>
-                      </div>
-                    </li>
-                  ))}
+                      </>
+                    );
+                    return (
+                      <li key={item.rank}>
+                        {data.hintListClickable ? (
+                          <button
+                            type="button"
+                            className={`gamemaster-answer-item${stateClass}`}
+                            onClick={() => sendCommand(`hint-${item.rank}`)}
+                            title="In Frontend bis hierher aufdecken"
+                          >
+                            {text}
+                          </button>
+                        ) : (
+                          <div className={`gamemaster-answer-item gamemaster-answer-item--static${stateClass}`}>
+                            {text}
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             )}
@@ -185,6 +202,14 @@ export default function GamemasterView({ showAnswerImages = false, hideAnswers =
                     {line}
                   </div>
                 ))}
+              </div>
+            )}
+            {/* Host-only note (spec: specs/gamemaster-info.md). Not answer-shaped, but the host
+                may have the card turned towards the players, so it hides with the answer. */}
+            {data.gmInfo && !hideAnswers && (
+              <div className="gamemaster-gm-info">
+                <div className="gamemaster-gm-info-label">Info für Gamemaster</div>
+                <div className="gamemaster-gm-info-text">{data.gmInfo}</div>
               </div>
             )}
             {!hideAnswers && controlsData?.answerRevealed && data.nextAnswer && (

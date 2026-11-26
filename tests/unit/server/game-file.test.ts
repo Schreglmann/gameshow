@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { convertToMultiInstance } from '../../../server/game-file.js';
+import { convertToMultiInstance, selectableInstanceKeys, gameshowPlayedContent } from '../../../server/game-file.js';
 
 /** Mirror the server's instance-resolution merge so we can assert the round-trip. */
 function mergeInstance(multi: Record<string, any>, key: string): Record<string, unknown> {
@@ -70,5 +70,67 @@ describe('convertToMultiInstance', () => {
       instances: { v1: { questions: [] }, v2: { questions: [] } },
     };
     expect(convertToMultiInstance(multi)).toBe(multi);
+  });
+});
+
+describe('selectableInstanceKeys', () => {
+  it('hides the archive when another instance has questions', () => {
+    expect(selectableInstanceKeys({
+      v1: { questions: [{ question: 'Q' }] },
+      archive: { questions: [{ question: 'A' }] },
+    })).toEqual(['v1']);
+  });
+
+  it('exposes the archive as fallback when no other instance has questions', () => {
+    expect(selectableInstanceKeys({
+      v1: { questions: [] },
+      archive: { questions: [{ question: 'A' }] },
+    })).toEqual(['v1', 'archive']);
+  });
+
+  it('counts quizjagd-shaped questions', () => {
+    expect(selectableInstanceKeys({
+      v1: { questions: { easy: [{ question: 'Q' }], medium: [], hard: [] } },
+      archive: { questions: [] },
+    })).toEqual(['v1']);
+  });
+});
+
+describe('gameshowPlayedContent', () => {
+  const multi = {
+    type: 'simple-quiz',
+    title: 'Märchen',
+    instances: {
+      v1: { questions: [{ question: 'Q', answerImage: '/images/a.png' }] },
+      v2: { questions: [{ question: 'R', answerImage: '/images/c.png' }] },
+      archive: { questions: [{ question: 'A', answerImage: '/images/b.png' }] },
+    },
+  };
+
+  it('keeps only the instances a gameshow references', () => {
+    expect(gameshowPlayedContent(multi, ['v1'])).toEqual({
+      type: 'simple-quiz',
+      title: 'Märchen',
+      instances: { v1: { questions: [{ question: 'Q', answerImage: '/images/a.png' }] } },
+    });
+  });
+
+  it('keeps the archive when a gameshow references it', () => {
+    expect(gameshowPlayedContent(multi, ['archive'])).toEqual({
+      type: 'simple-quiz',
+      title: 'Märchen',
+      instances: { archive: { questions: [{ question: 'A', answerImage: '/images/b.png' }] } },
+    });
+  });
+
+  it('returns null when no gameshow plays any instance', () => {
+    expect(gameshowPlayedContent(multi, [])).toBeNull();
+    expect(gameshowPlayedContent(multi, ['v9', null])).toBeNull();
+  });
+
+  it('returns a referenced single-instance file whole, an unreferenced one as null', () => {
+    const file = { type: 'simple-quiz', questions: [{ question: 'Q' }] };
+    expect(gameshowPlayedContent(file, [null])).toBe(file);
+    expect(gameshowPlayedContent(file, [])).toBeNull();
   });
 });

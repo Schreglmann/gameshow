@@ -45,6 +45,8 @@ Teams see a single random still frame extracted at runtime from a video the host
 - Prerendered fallback frames (per question): `VIDEO_CACHE_BASE/frames/prerendered/<slug>__q<index>__p<0..2>.jpg`, indexed by a manifest sidecar `VIDEO_CACHE_BASE/frames/.prerender.json` keyed by `<relPath>#<questionIndex>` (`{ [key]: { files: string[]; first?: number } }`, where `first` is the variant shown first — a marker, files are never reordered); local-only, never mirrored to NAS. Persistence + selection helpers live in [server/random-frame-prerender.ts](../../server/random-frame-prerender.ts)
 - New admin routes (admin zone): `POST /api/backend/assets/videos/random-frame/prerender` (body `{ items: [{ path, index, frameStart?, frameEnd? }], count? }` → SSE `data:{ percent }` … `{ done }`/`{ error }`) and `GET /api/backend/assets/videos/random-frame/prerender-status?keys=a%230|b%231` → `{ status: { [key]: number } }`
 
+Every question also accepts the optional `gmInfo` (host-only note, shown in the GM card only) — see [gamemaster-info.md](../gamemaster-info.md).
+
 ## UI behaviour
 - Component: `src/components/games/RandomFrame.tsx` (wraps `BaseGameWrapper`)
 - Frame rendered via `<RetryImage>` for load resilience, responsive (`max-height: 60vh`), border-radius — reuses the `.image-guess-*` styling. A centered spinner overlay (`.random-frame-loading`, reusing `.video-loading-spinner`) covers the container until the frame loads (the `<img>` fades in on load); the container reserves a min-height so there's no layout jump

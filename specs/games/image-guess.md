@@ -29,6 +29,8 @@ Teams guess what an image shows as it is progressively de-obfuscated on an autom
 - Questions defined in game JSON files under `games/`
 - Images served from `/images/` static path (normal images DAM)
 
+Every question also accepts the optional `gmInfo` (host-only note, shown in the GM card only) — see [gamemaster-info.md](../gamemaster-info.md).
+
 ## UI behaviour
 - Component: `src/components/games/ImageGuess.tsx`
 - Image container with `overflow: hidden`, responsive sizing (`max-height: 60vh`), border-radius

@@ -37,6 +37,8 @@ Teams guess songs by hearing instruments revealed one at a time (drums first, th
 - Audio served from: `/audio/bandle/` static path
 - Persisted to localStorage: no
 
+Every question also accepts the optional `gmInfo` (host-only note, shown in the GM card only) — see [gamemaster-info.md](../gamemaster-info.md).
+
 ## UI behaviour
 - Component: `src/components/games/Bandle.tsx`
 - Song counter: "SONG X VON Y" at top

@@ -216,6 +216,7 @@ function BetQuizInner({
       gameTitle,
       questionNumber: qIdx,
       totalQuestions: questions.length - 1,
+      gmInfo: q.gmInfo,
       question: q.question,
       answer: q.answer,
       answerImage: q.answerImage,

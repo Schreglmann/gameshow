@@ -124,6 +124,7 @@ function CityCompassInner({
       gameTitle,
       questionNumber: qIdx,
       totalQuestions: questions.length - 1,
+      gmInfo: q.gmInfo,
       question: q.question || DEFAULT_PROMPT,
       answer: answerText,
       answerImage: q.answerImage,

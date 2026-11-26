@@ -190,6 +190,7 @@ function ImageGuessInner({ questions, order, resumeAtEnd, gameTitle, onGameCompl
       gameTitle,
       questionNumber: qIdx,
       totalQuestions: questions.length - 1,
+      gmInfo: q.gmInfo,
       answer: q.answer,
       nextAnswer: nextQ ? { answer: nextQ.answer } : undefined,
     });

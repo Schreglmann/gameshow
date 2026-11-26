@@ -16,6 +16,19 @@ vi.mock('@/services/api', () => ({
   fetchBackgroundMusic: vi.fn().mockResolvedValue([]),
 }));
 
+// Capture what the game hands to the gamemaster sync, without replacing the real hook.
+const gmPayloads = vi.hoisted(() => [] as Array<Record<string, unknown> | null>);
+vi.mock('@/hooks/useGamemasterSync', async () => {
+  const actual = await vi.importActual<typeof import('@/hooks/useGamemasterSync')>('@/hooks/useGamemasterSync');
+  return {
+    ...actual,
+    useGamemasterSync: (data: Parameters<typeof actual.useGamemasterSync>[0]) => {
+      gmPayloads.push(data as Record<string, unknown> | null);
+      actual.useGamemasterSync(data);
+    },
+  };
+});
+
 const onAwardPoints = vi.fn();
 const onNextGame = vi.fn();
 
@@ -354,5 +367,36 @@ describe('Quizjagd', () => {
     await waitFor(() => {
       expect(screen.getByText(/7 Punkte/)).toBeInTheDocument();
     });
+  });
+});
+
+describe('Quizjagd — gmInfo', () => {
+  beforeEach(() => {
+    gmPayloads.length = 0;
+  });
+
+  it('hands gmInfo to the gamemaster payload of a question and never renders it on the show', async () => {
+    const user = userEvent.setup();
+    const withNote = (q: { question: string; answer: string }) => ({ ...q, gmInfo: 'Nur für den Host' });
+    const base = makeConfig();
+    const pools = base.questions as unknown as Record<'easy' | 'medium' | 'hard', Array<{ question: string; answer: string }>>;
+    renderGame(makeConfig({
+      questions: {
+        easy: pools.easy.map(withNote),
+        medium: pools.medium.map(withNote),
+        hard: pools.hard.map(withNote),
+      },
+    } as Partial<QuizjagdConfig>));
+    await waitFor(() => expect(screen.getByText('Quiz Chase')).toBeInTheDocument());
+    await advanceToGame(user);
+
+    // The difficulty pick is not a question screen, so it carries no note.
+    await waitFor(() => expect(screen.getByRole('button', { name: /Leicht/ })).toBeInTheDocument());
+    expect(gmPayloads.some(p => p?.gmInfo === 'Nur für den Host')).toBe(false);
+
+    await user.click(screen.getByRole('button', { name: /Leicht/ }));
+    await waitFor(() => expect(gmPayloads.some(p => p?.gmInfo === 'Nur für den Host')).toBe(true));
+
+    expect(document.body.textContent).not.toContain('Nur für den Host');
   });
 });

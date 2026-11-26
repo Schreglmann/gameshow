@@ -191,11 +191,12 @@ function AudioInner({ questions, order, resumeAtEnd, gameTitle, longAudioRef, fa
       gameTitle,
       questionNumber: qIdx,
       totalQuestions: questions.length - 1,
+      gmInfo: q.gmInfo,
       answer: q.answer,
       answerImage: q.answerImage,
       nextAnswer: nextQ ? { answer: nextQ.answer } : undefined,
     });
-  }, [qIdx, gameTitle, questions, setGamemasterData]);
+  }, [qIdx, gameTitle, questions, q, setGamemasterData]);
 
   // Play the short clip (trimmed segment) and schedule a precise stop at
   // audioEnd. Using setTimeout instead of `timeupdate` avoids the up-to-250ms

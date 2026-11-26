@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { GuessingGameQuestion } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
 import SpellField from '../SpellField';
+import GmInfoField from './GmInfoField';
 import { AssetField } from '../AssetPicker';
 import AudioTrimTimeline from '../AudioTrimTimeline';
 import { toMediaSrc } from '@/utils/assetUrl';
@@ -18,7 +19,7 @@ interface Props {
 
 const empty = (): GuessingGameQuestion => ({ question: '', answer: 0 });
 const isEmpty = (q: GuessingGameQuestion) =>
-  !q.question.trim() && q.answer === 0 && !q.answerImage && !q.questionAudio;
+  !q.question.trim() && q.answer === 0 && !q.answerImage && !q.questionAudio && !q.gmInfo?.trim();
 
 export default function GuessingGameForm({ questions, onChange, otherInstances, onMoveQuestion }: Props) {
   const confirmDialog = useConfirm();
@@ -142,6 +143,7 @@ export default function GuessingGameForm({ questions, onChange, otherInstances, 
                 />
               </div>
             )}
+            {!isVirtual && <GmInfoField segKey={`q${i}.gmInfo`} value={q.gmInfo} onChange={v => update(i, { gmInfo: v })} />}
           </div>
         </div>
         );

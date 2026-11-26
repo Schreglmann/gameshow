@@ -177,6 +177,35 @@ describe('SimpleQuizForm', () => {
     expect(optBtn.style.background).toContain('234');
   });
 
+  it('renders the GM info field only in the expanded optional section', async () => {
+    const user = userEvent.setup();
+    render(<SimpleQuizForm questions={[q1]} onChange={vi.fn()} />);
+    expect(screen.queryByPlaceholderText(/Nur für den Gamemaster sichtbar/)).not.toBeInTheDocument();
+    await user.click(screen.getByTitle('Optionen'));
+    expect(screen.getByPlaceholderText(/Nur für den Gamemaster sichtbar/)).toBeInTheDocument();
+  });
+
+  it('writes gmInfo when the GM info field changes', async () => {
+    const onChange = vi.fn();
+    const user = userEvent.setup();
+    render(<SimpleQuizForm questions={[{ question: 'Q', answer: 'A' }]} onChange={onChange} />);
+    await user.click(screen.getByTitle('Optionen'));
+    fireEvent.change(screen.getByPlaceholderText(/Nur für den Gamemaster sichtbar/), { target: { value: 'Auch richtig: Paris' } });
+    expect(onChange).toHaveBeenLastCalledWith([{ question: 'Q', answer: 'A', gmInfo: 'Auch richtig: Paris' }]);
+  });
+
+  it('marks the Optionen button as having optional content when gmInfo is the only optional field set', () => {
+    render(<SimpleQuizForm questions={[{ question: 'Q', answer: 'A', gmInfo: 'Notiz' }]} onChange={vi.fn()} />);
+    expect((screen.getByTitle('Optionen') as HTMLButtonElement).style.background).toContain('234');
+  });
+
+  it('does not strip a trailing question that only has gmInfo', () => {
+    const onChange = vi.fn();
+    render(<SimpleQuizForm questions={[q1, { question: '', answer: '', gmInfo: 'nur Notiz' }]} onChange={onChange} />);
+    fireEvent.change(screen.getByDisplayValue('What is 2+2?'), { target: { value: 'What is 3+3?' } });
+    expect(onChange.mock.calls.at(-1)![0]).toHaveLength(2);
+  });
+
   it('renders drag handles for each real question (ghost row has no draggable handle)', () => {
     render(<SimpleQuizForm questions={[q1, q2]} onChange={vi.fn()} />);
     const handles = screen.getAllByTitle('Ziehen zum Sortieren').filter(h => h.getAttribute('draggable') === 'true');

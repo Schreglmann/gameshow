@@ -42,6 +42,7 @@ const QUESTION_FIELDS: Record<GameType, ProseField[]> = {
     { kind: 'scalar', field: 'info', label: 'Zusatzinfo' },
     { kind: 'scalar', field: 'category', label: 'Kategorie' },
     { kind: 'array', field: 'answerList', label: 'Antwort' },
+    { kind: 'scalar', field: 'gmInfo', label: 'GM-Info' },
   ],
   'bet-quiz': [
     { kind: 'scalar', field: 'question', label: 'Fragetext' },
@@ -49,72 +50,88 @@ const QUESTION_FIELDS: Record<GameType, ProseField[]> = {
     { kind: 'scalar', field: 'info', label: 'Zusatzinfo' },
     { kind: 'scalar', field: 'category', label: 'Kategorie' },
     { kind: 'array', field: 'answerList', label: 'Antwort' },
+    { kind: 'scalar', field: 'gmInfo', label: 'GM-Info' },
   ],
   'guessing-game': [
     { kind: 'scalar', field: 'question', label: 'Fragetext' },
     // answer is a number — excluded
+    { kind: 'scalar', field: 'gmInfo', label: 'GM-Info' },
   ],
   'final-quiz': [
     { kind: 'scalar', field: 'question', label: 'Fragetext' },
     { kind: 'scalar', field: 'answer', label: 'Antwort' },
+    { kind: 'scalar', field: 'gmInfo', label: 'GM-Info' },
   ],
   'audio-guess': [
     { kind: 'scalar', field: 'answer', label: 'Antwort' },
+    { kind: 'scalar', field: 'gmInfo', label: 'GM-Info' },
   ],
   'video-guess': [
     { kind: 'scalar', field: 'question', label: 'Fragetext' },
     { kind: 'scalar', field: 'answer', label: 'Antwort' },
+    { kind: 'scalar', field: 'gmInfo', label: 'GM-Info' },
   ],
   'image-guess': [
     { kind: 'scalar', field: 'answer', label: 'Antwort' },
+    { kind: 'scalar', field: 'gmInfo', label: 'GM-Info' },
   ],
   'colorguess': [
     { kind: 'scalar', field: 'answer', label: 'Antwort' },
+    { kind: 'scalar', field: 'gmInfo', label: 'GM-Info' },
   ],
   'bandle': [
     { kind: 'scalar', field: 'answer', label: 'Antwort' },
     { kind: 'scalar', field: 'hint', label: 'Hinweis' },
     { kind: 'objarray', field: 'tracks', sub: 'label', label: 'Spur' },
+    { kind: 'scalar', field: 'gmInfo', label: 'GM-Info' },
   ],
   'q1': [
     { kind: 'scalar', field: 'Frage', label: 'Fragetext' },
     { kind: 'array', field: 'trueStatements', label: 'Wahre Aussage' },
     { kind: 'scalar', field: 'wrongStatement', label: 'Falsche Aussage' },
     { kind: 'scalar', field: 'answer', label: 'Antwort' },
+    { kind: 'scalar', field: 'gmInfo', label: 'GM-Info' },
   ],
   'four-statements': [
     { kind: 'scalar', field: 'topic', label: 'Thema' },
     { kind: 'array', field: 'statements', label: 'Aussage' },
     { kind: 'scalar', field: 'answer', label: 'Antwort' },
+    { kind: 'scalar', field: 'gmInfo', label: 'GM-Info' },
   ],
   'ranking': [
     { kind: 'scalar', field: 'question', label: 'Fragetext' },
     { kind: 'scalar', field: 'topic', label: 'Thema' },
     { kind: 'array', field: 'answers', label: 'Antwort' },
+    { kind: 'scalar', field: 'gmInfo', label: 'GM-Info' },
   ],
   'wer-kennt-mehr': [
     { kind: 'scalar', field: 'question', label: 'Fragetext' },
     { kind: 'scalar', field: 'info', label: 'Zusatzinfo' },
     { kind: 'scalar', field: 'answer', label: 'Antwort' },
     { kind: 'array', field: 'answerList', label: 'Antwort' },
+    { kind: 'scalar', field: 'gmInfo', label: 'GM-Info' },
   ],
   'fact-or-fake': [
     { kind: 'scalar', field: 'statement', label: 'Aussage' },
     { kind: 'scalar', field: 'description', label: 'Beschreibung' },
+    { kind: 'scalar', field: 'gmInfo', label: 'GM-Info' },
   ],
   'quizjagd': [
     { kind: 'scalar', field: 'question', label: 'Fragetext' },
     { kind: 'scalar', field: 'answer', label: 'Antwort' },
+    { kind: 'scalar', field: 'gmInfo', label: 'GM-Info' },
   ],
   'random-frame': [
     { kind: 'scalar', field: 'question', label: 'Fragetext' },
     { kind: 'scalar', field: 'answer', label: 'Antwort' },
+    { kind: 'scalar', field: 'gmInfo', label: 'GM-Info' },
   ],
   // City names are deliberately absent: they are place names, and checking them
   // would report every second neighbor as a typo.
   'city-compass': [
     { kind: 'scalar', field: 'question', label: 'Fragetext' },
     { kind: 'scalar', field: 'info', label: 'Zusatzinfo' },
+    { kind: 'scalar', field: 'gmInfo', label: 'GM-Info' },
   ],
 };
 

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { FactOrFakeQuestion } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
 import SpellField from '../SpellField';
+import GmInfoField from './GmInfoField';
 import { AssetField } from '../AssetPicker';
 import MoveQuestionButton from './MoveQuestionButton';
 import { stripTrailingEmpty } from './ghostRow';
@@ -16,10 +17,10 @@ interface Props {
 
 const empty = (): FactOrFakeQuestion => ({ statement: '', isFact: true, description: '' });
 const isEmpty = (q: FactOrFakeQuestion) =>
-  !q.statement.trim() && !q.description.trim() && !q.questionImage && !q.answerImage;
+  !q.statement.trim() && !q.description.trim() && !q.questionImage && !q.answerImage && !q.gmInfo?.trim();
 
 const hasOptional = (q: FactOrFakeQuestion) =>
-  Boolean(q.questionImage || q.answerImage);
+  Boolean(q.questionImage || q.answerImage || q.gmInfo);
 
 export default function FactOrFakeForm({ questions, onChange, otherInstances, onMoveQuestion }: Props) {
   const confirmDialog = useConfirm();
@@ -109,7 +110,7 @@ export default function FactOrFakeForm({ questions, onChange, otherInstances, on
                     : { background: 'rgba(var(--glass-rgb), 0.06)', color: 'rgba(var(--text-rgb), max(0.45, var(--text-fade-floor, 0)))', borderColor: 'rgba(255,255,255,0.12)' }),
               }}
               onClick={() => toggleOptional(i)}
-              title="Bilder"
+              title="Optionen"
             ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" /></svg></button>
             {/* Fakt/Fake toggle inline in header */}
             <div style={{ display: 'flex', gap: 4 }}>
@@ -150,6 +151,7 @@ export default function FactOrFakeForm({ questions, onChange, otherInstances, on
                   onChange={v => update(i, { answerImage: v })}
                 />
               </div>
+              <GmInfoField segKey={`q${i}.gmInfo`} value={q.gmInfo} onChange={v => update(i, { gmInfo: v })} />
             </div>
           )}
         </div>

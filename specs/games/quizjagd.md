@@ -37,6 +37,8 @@ A turn-based quiz where each team alternately selects a difficulty level (easy/m
   - Flat: `{ question: string; answer: string; difficulty: 3 | 5 | 7; isExample?: boolean }`
   - Structured: `{ easy: Q[]; medium: Q[]; hard: Q[] }` where each Q has `question`, `answer`, optional `isExample`
 
+Every question also accepts the optional `gmInfo` (host-only note, shown in the GM card only) — see [gamemaster-info.md](../gamemaster-info.md).
+
 ## UI behaviour
 - Component: `src/components/games/Quizjagd.tsx`
 - Difficulty selection screen: three buttons per turn showing point values

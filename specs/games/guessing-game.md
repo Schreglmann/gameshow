@@ -88,6 +88,8 @@ Both teams submit a numeric guess; the team whose answer is closest to the corre
   - `questionAudio?: string` (auto-played during the question)
   - `questionAudioStart?: number` / `questionAudioEnd?: number` / `questionAudioLoop?: boolean` (trim, same semantics as simple-quiz)
 
+Every question also accepts the optional `gmInfo` (host-only note, shown in the GM card only) — see [gamemaster-info.md](../gamemaster-info.md).
+
 ## UI behaviour
 - Component: `src/components/games/GuessingGame.tsx`
 - Two numeric inputs, one per team, labelled clearly, side by side in a two-column grid (`.guess-fields`) so the pair stays visible next to the question audio player

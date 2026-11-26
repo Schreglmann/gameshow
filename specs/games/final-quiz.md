@@ -24,6 +24,8 @@ A high-stakes betting round where teams wager their own points on each question;
   - `answer: string`
   - `answerImage?: string`
 
+Every question also accepts the optional `gmInfo` (host-only note, shown in the GM card only) — see [gamemaster-info.md](../gamemaster-info.md).
+
 ## UI behaviour
 - Component: `src/components/games/FinalQuiz.tsx`
 - **Question phase**: question text shown; click/Space/ArrowRight advances to betting phase

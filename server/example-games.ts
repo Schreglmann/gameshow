@@ -45,7 +45,7 @@ export const EXAMPLE_GAMES: ExampleGame[] = [
       rules: ['Beantwortet die Quizfragen.', ...A],
       questions: [
         { question: 'Welcher Planet ist der größte in unserem Sonnensystem?', answer: 'Jupiter' },
-        { question: 'In welchem Jahr fiel die Berliner Mauer?', answer: '1989', info: 'Es war ein entscheidender Moment der jüngeren deutschen Geschichte.' },
+        { question: 'In welchem Jahr fiel die Berliner Mauer?', answer: '1989', info: 'Es war ein entscheidender Moment der jüngeren deutschen Geschichte.', gmInfo: 'Es war der 9. November. Auch „1989“ ohne Zusatz gilt als richtig.' },
         { question: 'Welches Land hat diese Flagge?', answer: 'Japan', questionImage: '/images/Beispiele/flag-jp.png' },
         { question: 'Welches Musikstück erklingt hier?', answer: 'Ludwig van Beethoven – Für Elise', questionAudio: '/audio/Beispiele/melodie-fuer-elise.mp3' },
       ],
@@ -152,7 +152,7 @@ export const EXAMPLE_GAMES: ExampleGame[] = [
       rules: ['Errate das gespielte Musikstück.', ...B],
       questions: [
         { answer: 'Ludwig van Beethoven – Für Elise', audio: '/audio/Beispiele/melodie-fuer-elise.mp3' },
-        { answer: 'Wolfgang Amadeus Mozart – Eine kleine Nachtmusik', audio: '/audio/Beispiele/melodie-eine-kleine.mp3' },
+        { answer: 'Wolfgang Amadeus Mozart – Eine kleine Nachtmusik', audio: '/audio/Beispiele/melodie-eine-kleine.mp3', gmInfo: 'Mozart schrieb das Stück 1787. Es reicht, wenn „Eine kleine Nachtmusik“ genannt wird.' },
         { answer: 'Ludwig van Beethoven – Ode an die Freude', audio: '/audio/Beispiele/melodie-ode-an-die-freude.mp3', audioStart: 0, audioEnd: 4 },
       ],
     },
@@ -174,7 +174,7 @@ export const EXAMPLE_GAMES: ExampleGame[] = [
       questions: {
         easy: [
           { question: 'Welche Farbe entsteht, wenn man Blau und Gelb mischt?', answer: 'Grün' },
-          { question: 'Wie viele Beine hat eine Spinne?', answer: 'Acht' },
+          { question: 'Wie viele Beine hat eine Spinne?', answer: 'Acht', gmInfo: 'Spinnen sind keine Insekten – die haben sechs Beine.' },
           { question: 'Welches Tier wird „König der Tiere“ genannt?', answer: 'Der Löwe' },
           { question: 'Wie viele Tage hat eine Woche?', answer: 'Sieben' },
         ],

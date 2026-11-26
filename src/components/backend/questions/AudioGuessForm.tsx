@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import type { AudioGuessQuestion } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
 import SpellField from '../SpellField';
+import GmInfoField from './GmInfoField';
 import { AssetField } from '../AssetPicker';
 import { useCoverUrl } from '@/context/AudioCoverMetaContext';
 import AudioTrimTimeline from '../AudioTrimTimeline';
@@ -18,7 +19,7 @@ interface Props {
 }
 
 const empty = (): AudioGuessQuestion => ({ answer: '', audio: '' });
-const isEmpty = (q: AudioGuessQuestion) => !q.answer.trim() && !q.audio && !q.answerImage;
+const isEmpty = (q: AudioGuessQuestion) => !q.answer.trim() && !q.audio && !q.answerImage && !q.gmInfo?.trim();
 
 export default function AudioGuessForm({ questions, onChange, otherInstances, onMoveQuestion }: Props) {
   const confirmDialog = useConfirm();
@@ -248,6 +249,7 @@ export default function AudioGuessForm({ questions, onChange, otherInstances, on
               })()}
             </div>
             )}
+            {!isVirtual && <GmInfoField segKey={`q${i}.gmInfo`} value={q.gmInfo} onChange={v => update(i, { gmInfo: v })} />}
           </div>
         </div>
         );

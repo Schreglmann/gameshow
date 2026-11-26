@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { QuizjagdFlatQuestion } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
 import SpellField from '../SpellField';
+import GmInfoField from './GmInfoField';
 import MoveQuestionButton from './MoveQuestionButton';
 import { stripTrailingEmpty } from './ghostRow';
 import { useConfirm } from '../ConfirmContext';
@@ -16,7 +17,7 @@ interface Props {
 }
 
 const empty = (): QuizjagdFlatQuestion => ({ question: '', answer: '', difficulty: 5 });
-const isEmpty = (q: QuizjagdFlatQuestion) => !q.question.trim() && !q.answer.trim();
+const isEmpty = (q: QuizjagdFlatQuestion) => !q.question.trim() && !q.answer.trim() && !q.gmInfo?.trim();
 
 const DIFF_STYLES: Record<number, React.CSSProperties> = {
   3: { background: 'rgba(34,197,94,0.2)', color: '#86efac', borderColor: 'rgba(34,197,94,0.4)' },
@@ -119,6 +120,11 @@ export default function QuizjagdForm({ questions, questionsPerTeam, onChange, on
             <button className="be-delete-btn" onClick={() => remove(i)} title="Löschen" style={{ width: 30, height: 30, borderRadius: 5, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.07)', color: 'rgba(239,68,68,0.7)' }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg></button>
             </>}
           </div>
+          {!isVirtual && (
+            <div className="question-fields" style={{ marginTop: 8 }}>
+              <GmInfoField segKey={`q${i}.gmInfo`} value={q.gmInfo} onChange={v => update(i, { gmInfo: v })} />
+            </div>
+          )}
         </div>
         );
       })}

@@ -22,6 +22,18 @@ and on the show's start screen. See [specs/team-count.md](specs/team-count.md).
 
 ---
 
+## Gamemaster-Info (`gmInfo`)
+
+Every question of **every** game type accepts an optional `gmInfo` string: a note for the host (background facts, pronunciation, "accept also X"). It is shown in the gamemaster card under the answer and is **never rendered on the show**. It is hidden while "Antworten verstecken" is on. Use it instead of `info`, which players see above the question.
+
+```json
+{ "question": "Wie heißt der längste Fluss der Welt?", "answer": "Nil", "gmInfo": "Knapp länger als der Amazonas. „Nil“ ohne Artikel gelten lassen." }
+```
+
+The note is not secret: the show receives it with the game config, it only does not render it. See [specs/gamemaster-info.md](specs/gamemaster-info.md).
+
+---
+
 ## 1. Simple Quiz (`simple-quiz`)
 
 **Description**: Standard quiz game where teams answer questions. The host reveals the answer after both teams have submitted their responses.

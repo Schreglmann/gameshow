@@ -24,6 +24,8 @@ Teams listen to short audio clips and guess what song, sound, or artist is being
 - Questions defined in game JSON files under `games/`
 - Audio served from: `/audio/` static path (normal audio DAM)
 
+Every question also accepts the optional `gmInfo` (host-only note, shown in the GM card only) — see [gamemaster-info.md](../gamemaster-info.md).
+
 ## UI behaviour
 - Component: `src/components/games/AudioGuess.tsx`
 - Two `<audio>` elements sharing the same source file: one for short clip (with trim), one for long version

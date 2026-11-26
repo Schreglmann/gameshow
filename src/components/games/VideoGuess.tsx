@@ -200,12 +200,13 @@ function VideoInner({ questions, order, resumeAtEnd, gameTitle, videoRef, onGame
       gameTitle,
       questionNumber: qIdx,
       totalQuestions: questions.length - 1,
+      gmInfo: q.gmInfo,
       question: q.question,
       answer: q.answer,
       answerImage: q.answerImage,
       nextAnswer: nextQ ? { answer: nextQ.answer } : undefined,
     });
-  }, [qIdx, gameTitle, questions, setGamemasterData]);
+  }, [qIdx, gameTitle, questions, q, setGamemasterData]);
 
   // Reset asset-failure flag on every new question.
   useEffect(() => {
