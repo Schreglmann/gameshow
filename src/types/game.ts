@@ -263,6 +263,15 @@ export interface ShowHoldState {
   message?: string;
 }
 
+/**
+ * Sent by the gamemaster on the cached `show-controls-hidden` channel. When
+ * `hidden`, the show hides its own control buttons because the GM drives the
+ * show. See specs/gamemaster-hide-show-controls.md.
+ */
+export interface ShowControlsHiddenState {
+  hidden: boolean;
+}
+
 export interface GamemasterAnswerData {
   gameTitle: string;
   questionNumber: number;

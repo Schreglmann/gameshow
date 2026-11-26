@@ -1798,7 +1798,8 @@ html.gamemaster-embedded::after {
 .gm-images-toggle,
 .gm-answers-toggle,
 .gm-fullscreen-toggle,
-.gm-hold-toggle {
+.gm-hold-toggle,
+.gm-show-controls-toggle {
   min-height: clamp(36px, 4vw, 44px);
   padding: clamp(6px, 1vw, 10px) clamp(12px, 1.6vw, 18px);
   display: inline-flex;
@@ -1825,7 +1826,8 @@ html.gamemaster-embedded::after {
   .gm-images-toggle:hover,
   .gm-answers-toggle:hover,
   .gm-fullscreen-toggle:hover,
-  .gm-hold-toggle:hover {
+  .gm-hold-toggle:hover,
+  .gm-show-controls-toggle:hover {
     background: rgba(var(--glass-rgb), 0.22);
     border-color: rgba(var(--glass-rgb), 0.4);
     color: rgba(var(--text-rgb), 0.95);
@@ -1851,7 +1853,8 @@ html.gamemaster-embedded::after {
 .gm-lock-toggle:active,
 .gm-images-toggle:active,
 .gm-answers-toggle:active,
-.gm-fullscreen-toggle:active {
+.gm-fullscreen-toggle:active,
+.gm-show-controls-toggle:active {
   transform: scale(0.96);
 }
 
@@ -1859,7 +1862,8 @@ html.gamemaster-embedded::after {
 .gm-lock-toggle:focus-visible,
 .gm-images-toggle:focus-visible,
 .gm-answers-toggle:focus-visible,
-.gm-fullscreen-toggle:focus-visible {
+.gm-fullscreen-toggle:focus-visible,
+.gm-show-controls-toggle:focus-visible {
   outline: 2px solid rgba(var(--glass-rgb), 0.6);
   outline-offset: 2px;
 }
@@ -1868,7 +1872,8 @@ html.gamemaster-embedded::after {
 .gm-lock-toggle--locked,
 .gm-images-toggle--showing,
 .gm-answers-toggle--hidden,
-.gm-fullscreen-toggle--active {
+.gm-fullscreen-toggle--active,
+.gm-show-controls-toggle--active {
   background: rgba(var(--success-rgb), 0.18);
   border-color: rgba(var(--success-rgb), 0.5);
   color: var(--success);
@@ -1879,7 +1884,8 @@ html.gamemaster-embedded::after {
   .gm-lock-toggle--locked:hover,
   .gm-images-toggle--showing:hover,
   .gm-answers-toggle--hidden:hover,
-  .gm-fullscreen-toggle--active:hover {
+  .gm-fullscreen-toggle--active:hover,
+  .gm-show-controls-toggle--active:hover {
     background: rgba(var(--success-rgb), 0.28);
     border-color: rgba(var(--success-rgb), 0.7);
     color: var(--success);

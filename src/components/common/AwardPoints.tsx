@@ -171,6 +171,9 @@ export default function AwardPoints({ selected, points, onToggle, onConfirm, cou
                 data-team={team}
                 className={className}
                 aria-pressed={isSelected}
+                // Stays visible when the GM hides the show's buttons: it shows
+                // which team was picked. See specs/gamemaster-hide-show-controls.md.
+                data-show-display
                 onClick={() => onToggle(team)}
               >
                 {content}

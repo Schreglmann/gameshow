@@ -32,6 +32,7 @@
  *   show-reemit-request         — server → active show (requests a state re-emit)
  *   gm-presence                 — server → all clients ({ connected: boolean }); cached last-value
  *   show-hold                   — gamemaster → show ({ active, message? }); panic/pause hold overlay; cached last-value
+ *   show-controls-hidden        — gamemaster → show ({ hidden }); hide the show's own control buttons; cached last-value
  *   content-changed             — server → all clients; file watcher fired (config/theme/games changed on disk); NOT cached
  *
  * Client→server meta messages (not channels — ride on the same socket):
@@ -75,6 +76,7 @@ export type WsChannel =
   | 'show-reemit-request'
   | 'gm-presence'
   | 'show-hold'
+  | 'show-controls-hidden'
   | 'content-changed';
 
 // Client→server control messages (not WsChannels — these are meta messages on the same socket).
@@ -90,6 +92,7 @@ const CLIENT_WRITABLE: ReadonlySet<WsChannel> = new Set<WsChannel>([
   'music-state',
   'music-command',
   'show-hold',
+  'show-controls-hidden',
 ]);
 
 // Channels the server caches last-value of (for late-joining clients).
@@ -101,6 +104,7 @@ const CACHED_CHANNELS: ReadonlySet<WsChannel> = new Set<WsChannel>([
   'music-state',
   'gm-presence',
   'show-hold',
+  'show-controls-hidden',
 ]);
 
 // Cached channels on which an identical re-broadcast is a pure echo and is

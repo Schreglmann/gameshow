@@ -16,8 +16,9 @@ info:
 
     **Cached channels.** The server holds the last value of select channels
     (`gamemaster-answer`, `gamemaster-controls`, `gamemaster-team-state-v2`,
-    `gamemaster-question-tally`, `music-state`) and sends the cached value to
-    every newly connected client in the initial-state burst.
+    `gamemaster-question-tally`, `music-state`, `gm-presence`, `show-hold`,
+    `show-controls-hidden`) and sends the cached value to every newly connected
+    client in the initial-state burst.
 
     **Client-writable channels** (server re-broadcasts to all OTHER clients,
     skipping the origin):
@@ -28,6 +29,8 @@ info:
       - `gamemaster-question-tally`
       - `music-state`
       - `music-command`
+      - `show-hold`
+      - `show-controls-hidden`
 
     All other channels are server-push only.
 
@@ -198,6 +201,23 @@ channels:
       emits it) and cached last-value, so a projector reload mid-hold
       immediately re-receives it. Zone: shared (gamemaster writes, show
       renders). See specs/gamemaster-cockpit.md.
+
+  show-controls-hidden:
+    address: show-controls-hidden
+    messages:
+      showControlsHidden:
+        $ref: "#/components/messages/ShowControlsHiddenMessage"
+    description: |
+      Gamemaster→show. `{ hidden }`. While `hidden`, the show hides its own
+      control buttons (Weiter, Richtig/Falsch, music player, …) because the
+      gamemaster drives the show; displays the audience reads (joker icons,
+      award team cards, mirrored inputs) stay visible but not clickable.
+      Client-writable (the GM emits it) and cached last-value, so a show that
+      reloads while hiding is on comes back with its buttons hidden. A GM
+      re-sends its known value after reconnecting when the server's
+      initial-state burst carried none (server restart). Zone: shared
+      (gamemaster writes, show applies). See
+      specs/gamemaster-hide-show-controls.md.
 
   content-changed:
     address: content-changed
@@ -511,6 +531,20 @@ operations:
     messages:
       - $ref: "#/channels/show-hold/messages/showHold"
 
+  sendShowControlsHidden:
+    action: send
+    channel: { $ref: "#/channels/show-controls-hidden" }
+    summary: Gamemaster PWA hides / shows the show's own control buttons.
+    messages:
+      - $ref: "#/channels/show-controls-hidden/messages/showControlsHidden"
+
+  receiveShowControlsHidden:
+    action: receive
+    channel: { $ref: "#/channels/show-controls-hidden" }
+    summary: Show PWA hides / shows its own control buttons.
+    messages:
+      - $ref: "#/channels/show-controls-hidden/messages/showControlsHidden"
+
 components:
   messages:
 
@@ -753,6 +787,13 @@ components:
       contentType: application/json
       payload:
         $ref: "#/components/schemas/ShowHoldState"
+
+    ShowControlsHiddenMessage:
+      name: showControlsHidden
+      title: Whether the show hides its own control buttons
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/ShowControlsHiddenState"
 
   schemas:
 
@@ -1088,3 +1129,9 @@ components:
       properties:
         active: { type: boolean, description: "True while the panic/pause hold overlay covers the projector." }
         message: { type: string, description: "Optional custom German message shown under the title." }
+
+    ShowControlsHiddenState:
+      type: object
+      required: [hidden]
+      properties:
+        hidden: { type: boolean, description: "True while the show hides its own control buttons because the gamemaster drives the show." }

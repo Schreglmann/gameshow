@@ -522,6 +522,14 @@ function FrontendShowcase() {
             >
               Antworten verstecken
             </button>
+            <button
+              type="button"
+              className="gm-show-controls-toggle"
+              aria-pressed={false}
+              title="Buttons auf der Show ausblenden (Weiter, Richtig/Falsch, Musik-Player, …), weil die Show von hier gesteuert wird."
+            >
+              Show-Buttons ausblenden
+            </button>
             <div className="gm-deadline-group" role="group" aria-label="Deadline-Timer (Demo)">
               <div className="gm-deadline-durations" role="group" aria-label="Countdown-Dauer wählen (Demo)">
                 <div className="gm-deadline-durations-label">Countdown</div>
@@ -558,6 +566,14 @@ function FrontendShowcase() {
               title="Antworten sind versteckt — nur die Frage ist zu sehen. Klicken zum Anzeigen."
             >
               Antworten zeigen
+            </button>
+            <button
+              type="button"
+              className="gm-show-controls-toggle gm-show-controls-toggle--active"
+              aria-pressed={true}
+              title="Die Buttons der Show sind ausgeblendet — gesteuert wird nur hier. Klicken zum Einblenden."
+            >
+              Show-Buttons einblenden
             </button>
             <div className="gm-deadline-group" role="group" aria-label="Deadline-Timer aktiv (Demo)">
               <div className="gm-deadline-durations" role="group" aria-label="Countdown-Dauer wählen aktiv (Demo)">

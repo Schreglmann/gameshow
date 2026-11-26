@@ -610,7 +610,7 @@ Each gameshow can offer a set of **jokers** — single-use powers a team can spe
 
 - The catalog is fixed and lives in `src/data/jokers.ts`. To add a new joker, run the `add-joker` skill (see `skills/add-joker/SKILL.md`).
 - Each enabled joker appears as a row of icons at the bottom of the player screen during every phase.
-- Teams spend a joker by clicking its icon; the gamemaster can also mark jokers used remotely.
+- Teams spend a joker by clicking its icon; the gamemaster can also mark jokers used remotely. While **Show-Buttons ausblenden** is on, the icons stay visible but only the gamemaster can mark them.
 - Each joker is single-use **per team** — the effect is resolved manually by the gamemaster.
 - **Joker pro Spiel zurücksetzen** (Config tab → "Globale Einstellungen" toggle; hover for details): off (default) = each joker is one use for the whole show; on = every joker *except* the Aufholjoker becomes available again at the start of each game. The Aufholjoker is always one-use-per-show.
 - Jokers cannot be used in the last game of a gameshow, unless "Joker im letzten Spiel erlauben" is enabled.
@@ -660,6 +660,7 @@ From here you can:
 - The admin panel never interrupts the game — you can check or correct things at any time
 - Points can be manually corrected in the **Session tab** if you make a mistake
 - Use **keyboard shortcuts** (`→` to advance, `←` to go back) for smooth presenting
+- If you run the show from the gamemaster, press **Show-Buttons ausblenden** in its toolbar. The projector then hides its own buttons (Weiter, Richtig/Falsch, the music player, …). Joker icons, the team picks on the points screen and the entered bets and guesses stay visible. Press **Show-Buttons einblenden** to bring the buttons back. The setting applies to every show screen and stays on when the projector reloads.
 
 ### If the server crashes
 

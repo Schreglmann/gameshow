@@ -32,6 +32,7 @@ type WsChannel =
   | 'show-reemit-request'
   | 'gm-presence'
   | 'show-hold'
+  | 'show-controls-hidden'
   | 'content-changed';
 
 type Listener = (data: unknown) => void;
@@ -82,6 +83,7 @@ const NOTIFY_ON_DROP: ReadonlySet<WsChannel> = new Set<WsChannel>([
   'gamemaster-command',
   'music-command',
   'show-hold',
+  'show-controls-hidden',
 ]);
 let droppedSends = 0;
 

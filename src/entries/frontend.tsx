@@ -7,6 +7,7 @@ import { MusicProvider, useMusicPlayer } from '@/context/MusicContext';
 import { useMusicStateSync, useMusicCommandListener } from '@/hooks/useMusicSync';
 import { useShowNavigationCommands } from '@/hooks/useShowNavigationCommands';
 import { useShowDocumentTitle } from '@/hooks/useShowDocumentTitle';
+import { useShowControlsHidden } from '@/hooks/useShowControlsHidden';
 import { AudioCoverMetaProvider } from '@/context/AudioCoverMetaContext';
 import Header from '@/components/layout/Header';
 import MusicControls from '@/components/layout/MusicControls';
@@ -74,6 +75,10 @@ function AppContent() {
 
   // Browser tab title follows the operator's show title. See specs/show-title.md.
   useShowDocumentTitle();
+
+  // The GM's "Show-Buttons ausblenden" toggle. The theme showcase keeps every
+  // button. See specs/gamemaster-hide-show-controls.md.
+  useShowControlsHidden(location.pathname !== '/theme-showcase');
 
   // A reload resumes the game it happened on (specs/crash-recovery.md). Leaving
   // the game flow (start page, rules, summary) ends that, so a later jump back

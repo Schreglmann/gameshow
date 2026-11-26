@@ -25,7 +25,7 @@ It is the smallest of the three PWAs — two HTTP endpoints and a handful of Web
 
 That's it for HTTP. Everything else flows over WebSocket.
 
-Commands (`gamemaster-command`, `music-command`, `show-hold`) are never queued while the socket is down — a stale "next" replayed later would jump the show. The reference gamemaster shows "Server getrennt – verbinde neu…" after 1.5 s offline and flashes "Befehl nicht gesendet" when a tap could not be sent. A replacement should tell the operator the same way.
+Commands (`gamemaster-command`, `music-command`, `show-hold`, `show-controls-hidden`) are never queued while the socket is down — a stale "next" replayed later would jump the show. The reference gamemaster shows "Server getrennt – verbinde neu…" after 1.5 s offline and flashes "Befehl nicht gesendet" when a tap could not be sent. A replacement should tell the operator the same way.
 
 ## Required WebSocket channels
 
@@ -52,6 +52,7 @@ One socket at `/api/ws`. Wire format: `{ channel, data }`.
 | `gamemaster-team-state-v2` | yes | On every local team/joker state mutation (incl. a scoring undo, which mutates points + `scoreHistory`). Bump `rev` to `(highest rev seen) + 1`, and mutate the LAST RECEIVED state — publishing a snapshot this device captured earlier reverts points everywhere. The server drops a write that doesn't beat its cached rev and returns the cached value instead. |
 | `gamemaster-question-tally` | yes | On every local tally mutation. |
 | `show-hold` | yes | `{ active, message? }` when toggling the panic/pause hold overlay on the show. |
+| `show-controls-hidden` | yes | **Optional.** `{ hidden }` when toggling whether the show hides its own control buttons. Subscribe to it to show the current state. The server cache is in memory: after reconnecting, re-send your value only if the server's initial burst brought none, so you don't overwrite a change another gamemaster made while you were offline. |
 | `music-command` | no | **Optional.** `{ action: 'toggle'\|'skip'\|'volume'\|'seek', value?, timestamp }` to control the active show's background music. `value` is 0–1 for `volume`/`seek`. Set `timestamp` to `Date.now()` (replay dedup). See [specs/gamemaster-music-control.md](../specs/gamemaster-music-control.md). |
 
 ### Meta messages (send)
