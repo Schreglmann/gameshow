@@ -561,6 +561,13 @@ In all four cases the original bytes are backed up under `local-assets/images/.r
 
 In the Simple Quiz editor, click the image field and pick an uploaded image from the asset browser.
 
+You can also paste an image into the picker. Copy an image, or the URL of an image, and press **Strg+V** (**⌘V** on a Mac) while the picker is open. This works in both **DAM** and **🌐 Online** mode. The picker shows a preview; choose the target folder under **Speichern in:** and click **✓ Übernehmen**. The image is saved to the DAM and set on the question. A clipboard image is named `pasted-<Datum>.png`; an image from a URL keeps the file name from the URL. **Verwerfen** or Esc discards the paste.
+
+To change or improve an image that is already on a question, click its thumbnail, either in the collapsed question row or in the image field. The enlarged view shows the image's size in pixels and two buttons:
+
+- **↻ Ersetzen** opens the same picker as **Ändern** (DAM, **🌐 Online**, Strg+V). The picked image is set on this question only; the old file and other games stay unchanged.
+- **✨ Hochskalieren** opens the replace dialog of the Assets tab on its **AI hochskalieren** tab. It only appears when the image's resolution is too low for the game, by the same rule as the Assets tab's **Niedrige Auflösung** filter (smaller than 1920 × 540, or 1920 × 648 in Bilderrätsel), and only for JPG, PNG and WebP. The result overwrites the file in the DAM, so every game that uses it gets the new version. The dialog's other tabs (search, URL, file) replace the file's content the same way.
+
 ![Image Picker](./screenshots/admin-assets-image-picker.png)
 > *Add screenshot: `docs/screenshots/admin-assets-image-picker.png` — the image picker lightbox*
 

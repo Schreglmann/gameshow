@@ -4,6 +4,8 @@ import { useDragReorder } from '../useDragReorder';
 import SpellField from '../SpellField';
 import GmInfoField from './GmInfoField';
 import { AssetField } from '../AssetPicker';
+import AssetImageLightbox from '../AssetImageLightbox';
+import { useImageSrc } from '../replacedImages';
 import MoveQuestionButton from './MoveQuestionButton';
 import { stripTrailingEmpty } from './ghostRow';
 import { useConfirm } from '../ConfirmContext';
@@ -28,8 +30,9 @@ export default function FactOrFakeForm({ questions, onChange, otherInstances, on
   const displayQuestions = [...questions, empty()];
 
   const [expandedOptional, setExpandedOptional] = useState<Set<number>>(new Set());
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
-  const [previewDims, setPreviewDims] = useState<{ w: number; h: number } | null>(null);
+  // Row thumbnail opened in the lightbox: which question and which of its two images.
+  const [previewImage, setPreviewImage] = useState<{ index: number; field: 'questionImage' | 'answerImage'; path: string } | null>(null);
+  const imageSrc = useImageSrc();
 
   const update = (i: number, patch: Partial<FactOrFakeQuestion>) => {
     let next: FactOrFakeQuestion[];
@@ -93,8 +96,8 @@ export default function FactOrFakeForm({ questions, onChange, otherInstances, on
             {/* Inline thumbnail badges (when not expanded) */}
             {!isVirtual && !expandedOptional.has(i) && hasOptional(q) && (
               <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
-                {q.questionImage && <img src={q.questionImage} alt="" style={{ height: 59, width: 59, objectFit: 'contain', borderRadius: 4, border: '1px solid rgba(var(--glass-rgb), 0.12)', background: 'rgba(0,0,0,0.3)', cursor: 'pointer' }} title={`Q-Bild: ${q.questionImage}`} onClick={e => { e.stopPropagation(); setPreviewDims(null); setPreviewImage(q.questionImage!); }} />}
-                {q.answerImage && <img src={q.answerImage} alt="" style={{ height: 59, width: 59, objectFit: 'contain', borderRadius: 4, border: '1px solid rgba(var(--glass-rgb), 0.12)', background: 'rgba(0,0,0,0.3)', opacity: 0.6, cursor: 'pointer' }} title={`A-Bild: ${q.answerImage}`} onClick={e => { e.stopPropagation(); setPreviewDims(null); setPreviewImage(q.answerImage!); }} />}
+                {q.questionImage && <img src={imageSrc(q.questionImage)} alt="" style={{ height: 59, width: 59, objectFit: 'contain', borderRadius: 4, border: '1px solid rgba(var(--glass-rgb), 0.12)', background: 'rgba(0,0,0,0.3)', cursor: 'pointer' }} title={`Q-Bild: ${q.questionImage}`} onClick={e => { e.stopPropagation(); setPreviewImage({ index: i, field: 'questionImage', path: q.questionImage! }); }} />}
+                {q.answerImage && <img src={imageSrc(q.answerImage)} alt="" style={{ height: 59, width: 59, objectFit: 'contain', borderRadius: 4, border: '1px solid rgba(var(--glass-rgb), 0.12)', background: 'rgba(0,0,0,0.3)', opacity: 0.6, cursor: 'pointer' }} title={`A-Bild: ${q.answerImage}`} onClick={e => { e.stopPropagation(); setPreviewImage({ index: i, field: 'answerImage', path: q.answerImage! }); }} />}
               </div>
             )}
             {!isVirtual && <>
@@ -158,30 +161,17 @@ export default function FactOrFakeForm({ questions, onChange, otherInstances, on
         );
       })}
 
-      {previewImage && (() => {
-        const isSvg = previewImage.toLowerCase().endsWith('.svg');
-        return (
-        <div className="modal-overlay" onClick={() => setPreviewImage(null)}>
-          <div className={`image-lightbox${isSvg ? ' image-lightbox--svg' : ''}`} onClick={e => e.stopPropagation()}>
-            <div className="image-lightbox-header">
-              <span className="image-lightbox-name">{previewImage.split('/').pop()}</span>
-              {previewDims && !isSvg && <span className="image-lightbox-dims">{previewDims.w} × {previewDims.h}px</span>}
-              <button className="be-icon-btn" onClick={() => setPreviewImage(null)}>✕</button>
-            </div>
-            <div className="image-lightbox-body">
-              <img
-                src={previewImage}
-                alt=""
-                onLoad={e => {
-                  const img = e.target as HTMLImageElement;
-                  setPreviewDims({ w: img.naturalWidth, h: img.naturalHeight });
-                }}
-              />
-            </div>
-          </div>
-        </div>
-        );
-      })()}
+      {previewImage && (
+        <AssetImageLightbox
+          key={previewImage.path}
+          path={previewImage.path}
+          onClose={() => setPreviewImage(null)}
+          onChange={path => {
+            update(previewImage.index, { [previewImage.field]: path });
+            setPreviewImage({ ...previewImage, path });
+          }}
+        />
+      )}
     </div>
   );
 }

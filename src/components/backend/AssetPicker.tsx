@@ -3,12 +3,15 @@ import { createPortal } from 'react-dom';
 import type { AssetCategory, AssetFolder, AssetFileMeta } from '@/types/config';
 import { fetchAssets, uploadAsset, createAssetFolder, downloadImageFromUrl, type ImageSearchResult, type ImageSearchProvider, type YouTubeSearchResult } from '@/services/backendApi';
 import { useCoverUrl } from '@/context/AudioCoverMetaContext';
-import { toTitleCaseName } from '@/utils/filename';
+import { pastedImageFile, pasteTimestamp, toTitleCaseName } from '@/utils/filename';
+import { readPastedImage } from '@/utils/clipboardImage';
 import { toMediaSrc } from '@/utils/assetUrl';
 import { isTouchDevice } from '@/utils/isTouchDevice';
 import { parseYouTubeVideoId, youTubeWatchUrl } from '@/utils/youtube';
 import MiniAudioPlayer from './MiniAudioPlayer';
 import FolderNamePrompt from './FolderNamePrompt';
+import AssetImageLightbox from './AssetImageLightbox';
+import { resolveReplacedImage, useImageSrc } from './replacedImages';
 import ImageSearchPanel, { ImageSearchFilterToggle } from './ImageSearchPanel';
 import YouTubeSearchPanel, { YouTubePreview } from './YouTubeSearchPanel';
 import { useUpload } from './UploadContext';
@@ -146,6 +149,37 @@ function assetUrl(category: AssetCategory, filePath: string): string {
   return `/${category}/${filePath}`;
 }
 
+/** An image pasted into the picker, waiting for "✓ Übernehmen". */
+type PastedCandidate =
+  | { kind: 'file'; file: File; previewUrl: string }
+  | { kind: 'url'; url: string };
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function decodeURIComponentSafe(s: string): string {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+}
+
+function pastedMetaSource(p: PastedCandidate): string {
+  if (p.kind === 'file') {
+    const type = p.file.type.split('/')[1]?.split('+')[0]?.toUpperCase() || 'Bild';
+    return `${type} · ${formatBytes(p.file.size)}`;
+  }
+  try {
+    return `Quelle: ${new URL(p.url).hostname}`;
+  } catch {
+    return 'Quelle: URL';
+  }
+}
+
 // ── Picker Modal ─────────────────────────────────────────────────────────────
 
 interface ModalProps {
@@ -208,6 +242,15 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
   const [hideSmallerResults, setHideSmallerResults] = useState(true);
   const [onlineHiddenCount, setOnlineHiddenCount] = useState(0);
 
+  // Clipboard paste (image category, single-select only): an image or image
+  // URL pasted anywhere in the picker becomes a preview that "✓ Übernehmen"
+  // saves to the DAM.
+  const [pasted, setPasted] = useState<PastedCandidate | null>(null);
+  const [pastedSaving, setPastedSaving] = useState(false);
+  const [pastedError, setPastedError] = useState<string | null>(null);
+  const [pastedDims, setPastedDims] = useState<{ w: number; h: number } | null>(null);
+  const [pastedPreviewFailed, setPastedPreviewFailed] = useState(false);
+
   // YouTube mode. The download runs in UploadContext (shared progress overlay),
   // so it outlives the picker; `mountedRef` makes a late result a no-op once the
   // picker is closed, and `onSelectRef` always calls the latest onSelect.
@@ -237,11 +280,11 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
       .finally(() => setLoading(false));
   }, [category]);
 
-  // Single Esc handler with priority: close lightbox → deselect online
-  // candidate → close the picker. Each branch calls preventDefault +
-  // stopPropagation so the browser doesn't also act on the key (e.g. exit
-  // fullscreen). While an online download is in flight we don't allow
-  // deselect/close.
+  // Single Esc handler with priority: close lightbox → discard pasted image →
+  // deselect online candidate → close the picker. Each branch calls
+  // preventDefault + stopPropagation so the browser doesn't also act on the
+  // key (e.g. exit fullscreen). While a paste is being saved or an online
+  // download is in flight we don't allow discard/deselect/close.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
@@ -249,6 +292,13 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
         e.preventDefault();
         e.stopPropagation();
         setOnlineEnlarged(null);
+        return;
+      }
+      if (pastedSaving) return;
+      if (pasted) {
+        e.preventDefault();
+        e.stopPropagation();
+        setPasted(null);
         return;
       }
       if (onlineDownloading) return;
@@ -272,7 +322,7 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
     };
     document.addEventListener('keydown', handler, true);
     return () => document.removeEventListener('keydown', handler, true);
-  }, [onlineEnlarged, onlineCandidate, onlineDownloading, ytCandidate, ytDownloading, onClose]);
+  }, [onlineEnlarged, pasted, pastedSaving, onlineCandidate, onlineDownloading, ytCandidate, ytDownloading, onClose]);
 
   const isImage = isImageCategory(category);
   const isSearching = search.trim().length > 0;
@@ -281,7 +331,60 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
   // audio/video picks, never in the multi-select (cover-loading) flow.
   const showYouTubeToggle = isYouTubeCategory(category) && !multiSelect && !!startYtDownload;
   const showModeToggle = (isImage && !multiSelect) || showYouTubeToggle;
-  const anyDownloading = onlineDownloading || ytDownloading;
+  const pasteEnabled = isImage && !multiSelect;
+  const anyDownloading = onlineDownloading || ytDownloading || pastedSaving;
+
+  // Capture phase + stopImmediatePropagation, so the DAM tab's own
+  // paste-to-upload listener on `document` doesn't also upload the image.
+  // Text that isn't an image URL passes through to the focused input.
+  useEffect(() => {
+    if (!pasteEnabled) return;
+    const onPaste = (e: ClipboardEvent) => {
+      const img = readPastedImage(e.clipboardData);
+      if (!img) return;
+      e.stopImmediatePropagation();
+      e.preventDefault();
+      if (anyDownloading) return;
+      setPastedError(null);
+      setPastedDims(null);
+      setPastedPreviewFailed(false);
+      setPasted(img.kind === 'file'
+        ? { kind: 'file', file: img.file, previewUrl: URL.createObjectURL(img.file) }
+        : img);
+    };
+    document.addEventListener('paste', onPaste, true);
+    return () => document.removeEventListener('paste', onPaste, true);
+  }, [pasteEnabled, anyDownloading]);
+
+  // Revoke a file preview's object URL once it is replaced, discarded or the
+  // picker unmounts.
+  useEffect(() => {
+    if (pasted?.kind !== 'file') return;
+    const url = pasted.previewUrl;
+    return () => URL.revokeObjectURL(url);
+  }, [pasted]);
+
+  const switchMode = (next: typeof mode) => {
+    setPasted(null);
+    setPastedError(null);
+    setMode(next);
+  };
+
+  const handlePastedConfirm = useCallback(async () => {
+    if (!pasted) return;
+    const subfolder = onlineSubfolder;
+    setPastedSaving(true);
+    setPastedError(null);
+    try {
+      const fileName = pasted.kind === 'file'
+        ? await uploadAsset(category, pastedImageFile(pasted.file, pasteTimestamp()), subfolder || undefined)
+        : await downloadImageFromUrl(category, pasted.url, subfolder || undefined);
+      onSelect(assetUrl(category, subfolder ? `${subfolder}/${fileName}` : fileName));
+    } catch (err) {
+      setPastedError(err instanceof Error ? err.message : 'Speichern fehlgeschlagen');
+      setPastedSaving(false);
+    }
+  }, [pasted, onlineSubfolder, category, onSelect]);
 
   // Follow the user's DAM navigation into the online subfolder field, until
   // they switch to online mode and explicitly pick a different folder. After
@@ -503,7 +606,7 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
               <button
                 type="button"
                 className={`be-icon-btn${mode === 'dam' ? ' asset-select-toggle-active' : ''}`}
-                onClick={() => setMode('dam')}
+                onClick={() => switchMode('dam')}
                 disabled={anyDownloading}
               >
                 DAM
@@ -512,7 +615,7 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
                 <button
                   type="button"
                   className={`be-icon-btn${mode === 'youtube' ? ' asset-select-toggle-active' : ''}`}
-                  onClick={() => setMode('youtube')}
+                  onClick={() => switchMode('youtube')}
                   disabled={anyDownloading}
                 >
                   ▶ YouTube
@@ -521,7 +624,7 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
                 <button
                   type="button"
                   className={`be-icon-btn${mode === 'online' ? ' asset-select-toggle-active' : ''}`}
-                  onClick={() => setMode('online')}
+                  onClick={() => switchMode('online')}
                   disabled={anyDownloading}
                 >
                   🌐 Online
@@ -629,14 +732,87 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
           />
         )}
 
-        {mode === 'dam' && !isSearching && currentPath && (
+        {pasteEnabled && !pasted && (
+          <div className="picker-paste-hint">Strg+V / ⌘V: Bild oder Bild-URL einfügen</div>
+        )}
+
+        {mode === 'dam' && !pasted && !isSearching && currentPath && (
           <div className="picker-nav">
             <button className="be-icon-btn" onClick={goUp}>← Zurück</button>
             <span className="picker-nav-folder">{currentPath}</span>
           </div>
         )}
 
-        {mode === 'youtube' ? (
+        {onlineEnlarged && createPortal(
+          <div className="modal-overlay" onClick={() => setOnlineEnlarged(null)}>
+            <div className="image-lightbox" onClick={e => e.stopPropagation()}>
+              <div className="image-lightbox-header">
+                <span className="image-lightbox-name">🖼 {onlineEnlarged.name}</span>
+                <button className="be-icon-btn" onClick={() => setOnlineEnlarged(null)} aria-label="Schließen">✕</button>
+              </div>
+              <div className="image-lightbox-body">
+                <img src={onlineEnlarged.src} alt={onlineEnlarged.name} referrerPolicy="no-referrer" />
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+
+        {pasted ? (() => {
+          const src = pasted.kind === 'file' ? pasted.previewUrl : pasted.url;
+          const name = pasted.kind === 'file'
+            ? 'Eingefügtes Bild'
+            : (decodeURIComponentSafe(pasted.url.split(/[?#]/)[0]?.split('/').pop() ?? '') || 'Bild-URL');
+          const dims = pastedDims ? `${pastedDims.w} × ${pastedDims.h}px` : '—';
+          return (
+            <>
+              <div className="picker-online-subfolder">
+                {subfolderSelect}
+              </div>
+              <div className="replace-compare replace-compare--single picker-paste-preview">
+                <div className="replace-compare-pane">
+                  <div className="replace-compare-label">Eingefügt</div>
+                  {pastedPreviewFailed ? (
+                    <div className="picker-paste-unavailable">Vorschau nicht verfügbar — Übernehmen trotzdem möglich</div>
+                  ) : (
+                    <img
+                      key={src}
+                      src={src}
+                      alt={name}
+                      referrerPolicy="no-referrer"
+                      className="replace-compare-img"
+                      onLoad={e => setPastedDims({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
+                      onError={() => setPastedPreviewFailed(true)}
+                      onClick={() => setOnlineEnlarged({ src, name })}
+                      title="Größer anzeigen"
+                    />
+                  )}
+                  <div className="replace-compare-meta">
+                    {dims} · {pastedMetaSource(pasted)}
+                    {pasted.kind === 'url' ? ` · ${name}` : ''}
+                  </div>
+                </div>
+              </div>
+              {pastedError && <div className="replace-error">{pastedError}</div>}
+              <div className="picker-footer">
+                <button
+                  className="be-btn-secondary"
+                  onClick={() => { setPasted(null); setPastedError(null); }}
+                  disabled={pastedSaving}
+                >
+                  Verwerfen
+                </button>
+                <button
+                  className="be-btn-primary"
+                  onClick={handlePastedConfirm}
+                  disabled={pastedSaving}
+                >
+                  {pastedSaving ? 'Lade…' : '✓ Übernehmen'}
+                </button>
+              </div>
+            </>
+          );
+        })() : mode === 'youtube' ? (
           <>
             <div className="picker-online-subfolder">
               {subfolderSelect}
@@ -736,20 +912,6 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
                 </div>
               );
             })()}
-            {onlineEnlarged && createPortal(
-              <div className="modal-overlay" onClick={() => setOnlineEnlarged(null)}>
-                <div className="image-lightbox" onClick={e => e.stopPropagation()}>
-                  <div className="image-lightbox-header">
-                    <span className="image-lightbox-name">🖼 {onlineEnlarged.name}</span>
-                    <button className="be-icon-btn" onClick={() => setOnlineEnlarged(null)} aria-label="Schließen">✕</button>
-                  </div>
-                  <div className="image-lightbox-body">
-                    <img src={onlineEnlarged.src} alt={onlineEnlarged.name} referrerPolicy="no-referrer" />
-                  </div>
-                </div>
-              </div>,
-              document.body,
-            )}
             {onlineError && <div className="replace-error">{onlineError}</div>}
             {onlineCandidate && (
               <div className="picker-footer">
@@ -965,15 +1127,19 @@ export function AssetField({ label, value, category, onChange, readOnly = false,
   const [preview, setPreview] = useState(false);
   const isImage = isImageCategory(category);
   const isVideo = isVideoCategory(category);
-  const coverUrl = useCoverUrl();
   // Encoded ONLY at the DOM boundary — `value` itself stays the raw logical
   // path, because rename/move rewrites config refs by matching raw disk paths.
-  // `coverUrl` already runs `toMediaSrc` internally; encoding a second time
-  // turns `%20` into `%2520` and breaks every path containing spaces.
-  const displaySrc = coverUrl(value);
+  // `imageSrc` (via `coverUrl`) already runs `toMediaSrc` internally; encoding
+  // a second time turns `%20` into `%2520` and breaks every path containing
+  // spaces. It also follows images replaced from a lightbox (cache-bust +
+  // extension change), see replacedImages.ts.
+  const imageSrc = useImageSrc();
+  const displaySrc = imageSrc(value);
+  const shownName = value ? resolveReplacedImage(value).path.split('/').pop() : undefined;
 
+  // Images use <AssetImageLightbox>, which handles its own Esc.
   useEffect(() => {
-    if (!preview) return;
+    if (!preview || isImage) return;
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -982,10 +1148,10 @@ export function AssetField({ label, value, category, onChange, readOnly = false,
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [preview]);
+  }, [preview, isImage]);
 
   const openPreview = () => setPreview(true);
-  const icon = isImage ? '🖼' : isVideo ? '🎬' : '🎵';
+  const icon = isVideo ? '🎬' : '🎵';
 
   return (
     <div className="asset-field">
@@ -1018,7 +1184,7 @@ export function AssetField({ label, value, category, onChange, readOnly = false,
               />
             )}
             <div className="asset-field-info">
-              <span className="asset-field-name">{value.split('/').pop()}</span>
+              <span className="asset-field-name">{shownName}</span>
               {isVideo && <VideoInfo src={toMediaSrc(value) ?? value} />}
               {!readOnly && (
                 <div className="asset-field-actions">
@@ -1039,7 +1205,17 @@ export function AssetField({ label, value, category, onChange, readOnly = false,
               )}
             </div>
           </div>
-          {preview && createPortal(
+          {preview && isImage && (
+            <AssetImageLightbox
+              key={value}
+              path={value}
+              onClose={() => setPreview(false)}
+              onChange={readOnly ? undefined : onChange}
+              canUpscale={!readOnly}
+              renderBox={renderBox}
+            />
+          )}
+          {preview && !isImage && createPortal(
             <div className="modal-overlay" onClick={() => setPreview(false)}>
               <div className="image-lightbox" onClick={e => e.stopPropagation()}>
                 <div className="image-lightbox-header">
@@ -1047,9 +1223,7 @@ export function AssetField({ label, value, category, onChange, readOnly = false,
                   <button className="be-icon-btn" onClick={() => setPreview(false)}>✕</button>
                 </div>
                 <div className="image-lightbox-body">
-                  {isImage ? (
-                    <img src={displaySrc} alt="" />
-                  ) : isVideo ? (
+                  {isVideo ? (
                     <video src={toMediaSrc(value) ?? value} controls autoPlay preload="metadata" />
                   ) : (
                     <audio src={toMediaSrc(value) ?? value} controls autoPlay preload="metadata" />

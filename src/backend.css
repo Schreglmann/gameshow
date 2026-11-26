@@ -7001,6 +7001,35 @@
   padding: 0 16px 12px;
 }
 
+/* Clipboard-paste hint + pasted-image preview in <PickerModal> (images only). */
+.picker-paste-hint {
+  padding: 4px 16px;
+  font-size: clamp(11px, 1.1vw, 12px);
+  color: rgba(var(--text-rgb), max(0.5, var(--text-fade-floor, 0)));
+  border-bottom: 1px solid rgba(var(--glass-rgb), 0.08);
+  flex-shrink: 0;
+}
+
+/* Fills the picker body: there is no grid or result list above it. */
+.replace-compare.picker-paste-preview {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  align-items: center;
+  border-top: none;
+}
+
+.replace-compare--single.picker-paste-preview .replace-compare-pane img {
+  max-height: min(56vh, 520px);
+}
+
+.picker-paste-unavailable {
+  padding: clamp(24px, 6vh, 48px) 16px;
+  font-size: clamp(12px, 1.2vw, 13px);
+  text-align: center;
+  color: rgba(var(--text-rgb), max(0.6, var(--text-fade-floor, 0)));
+}
+
 /* "URL einfügen" row in the picker's YouTube mode. */
 .picker-yt-url {
   display: flex;

@@ -2,7 +2,8 @@ import { useState } from 'react';
 import type { SimpleQuizQuestion } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
 import { AssetField } from '../AssetPicker';
-import { useCoverUrl } from '@/context/AudioCoverMetaContext';
+import AssetImageLightbox from '../AssetImageLightbox';
+import { useImageSrc } from '../replacedImages';
 import { toMediaSrc } from '@/utils/assetUrl';
 import StatusMessage from '../StatusMessage';
 import ColorPickerField from '../ColorPickerField';
@@ -84,10 +85,10 @@ function ColorList({ colors, onChange, onUpdate, onError }: ColorListProps) {
 
 export default function SimpleQuizForm({ questions, onChange, otherInstances, onMoveQuestion, showCategory }: Props) {
   const confirmDialog = useConfirm();
-  const coverUrl = useCoverUrl();
+  const imageSrc = useImageSrc();
   const [expandedOptional, setExpandedOptional] = useState<Set<number>>(new Set());
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
-  const [previewDims, setPreviewDims] = useState<{ w: number; h: number } | null>(null);
+  // Row thumbnail opened in the lightbox: which question and which of its two images.
+  const [previewImage, setPreviewImage] = useState<{ index: number; field: 'questionImage' | 'answerImage'; path: string } | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Track which questions have their trim panel open; key = "${i}-question" or "${i}-answer"
@@ -193,8 +194,8 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
             {/* Compact badges inline */}
             {!isVirtual && !expandedOptional.has(i) && hasOptional(q) && (
               <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
-                {q.questionImage && <img src={coverUrl(q.questionImage) ?? q.questionImage} alt="" style={{ height: 59, width: 59, objectFit: 'contain', borderRadius: 4, border: '1px solid rgba(var(--glass-rgb), 0.12)', background: 'rgba(0,0,0,0.3)', cursor: 'pointer' }} title={`Q-Bild: ${q.questionImage}`} onClick={e => { e.stopPropagation(); setPreviewDims(null); setPreviewImage(q.questionImage!); }} />}
-                {q.answerImage && <img src={coverUrl(q.answerImage) ?? q.answerImage} alt="" style={{ height: 59, width: 59, objectFit: 'contain', borderRadius: 4, border: '1px solid rgba(var(--glass-rgb), 0.12)', background: 'rgba(0,0,0,0.3)', opacity: 0.6, cursor: 'pointer' }} title={`A-Bild: ${q.answerImage}`} onClick={e => { e.stopPropagation(); setPreviewDims(null); setPreviewImage(q.answerImage!); }} />}
+                {q.questionImage && <img src={imageSrc(q.questionImage)} alt="" style={{ height: 59, width: 59, objectFit: 'contain', borderRadius: 4, border: '1px solid rgba(var(--glass-rgb), 0.12)', background: 'rgba(0,0,0,0.3)', cursor: 'pointer' }} title={`Q-Bild: ${q.questionImage}`} onClick={e => { e.stopPropagation(); setPreviewImage({ index: i, field: 'questionImage', path: q.questionImage! }); }} />}
+                {q.answerImage && <img src={imageSrc(q.answerImage)} alt="" style={{ height: 59, width: 59, objectFit: 'contain', borderRadius: 4, border: '1px solid rgba(var(--glass-rgb), 0.12)', background: 'rgba(0,0,0,0.3)', opacity: 0.6, cursor: 'pointer' }} title={`A-Bild: ${q.answerImage}`} onClick={e => { e.stopPropagation(); setPreviewImage({ index: i, field: 'answerImage', path: q.answerImage! }); }} />}
                 {q.questionAudio && (
                   <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 44, fontSize: 'var(--admin-sz-10, 10px)', color: 'rgba(var(--text-rgb), max(0.4, var(--text-fade-floor, 0)))', background: 'rgba(255,255,255,0.07)', padding: '2px 6px', borderRadius: 3, whiteSpace: 'nowrap', boxSizing: 'border-box' }}>
                     🎵Q{(q.questionAudioStart !== undefined || q.questionAudioEnd !== undefined) ? ' ✂' : ''}
@@ -428,30 +429,17 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
         );
       })}
 
-      {previewImage && (() => {
-        const isSvg = previewImage.toLowerCase().endsWith('.svg');
-        return (
-        <div className="modal-overlay" onClick={() => setPreviewImage(null)}>
-          <div className={`image-lightbox${isSvg ? ' image-lightbox--svg' : ''}`} onClick={e => e.stopPropagation()}>
-            <div className="image-lightbox-header">
-              <span className="image-lightbox-name">{previewImage.split('/').pop()}</span>
-              {previewDims && !isSvg && <span className="image-lightbox-dims">{previewDims.w} × {previewDims.h}px</span>}
-              <button className="be-icon-btn" onClick={() => setPreviewImage(null)}>✕</button>
-            </div>
-            <div className="image-lightbox-body">
-              <img
-                src={coverUrl(previewImage) ?? previewImage}
-                alt=""
-                onLoad={e => {
-                  const img = e.target as HTMLImageElement;
-                  setPreviewDims({ w: img.naturalWidth, h: img.naturalHeight });
-                }}
-              />
-            </div>
-          </div>
-        </div>
-        );
-      })()}
+      {previewImage && (
+        <AssetImageLightbox
+          key={previewImage.path}
+          path={previewImage.path}
+          onClose={() => setPreviewImage(null)}
+          onChange={path => {
+            update(previewImage.index, { [previewImage.field]: path });
+            setPreviewImage({ ...previewImage, path });
+          }}
+        />
+      )}
 
       <StatusMessage message={message} />
     </div>

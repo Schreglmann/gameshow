@@ -74,6 +74,46 @@ The same multi-provider search is also reachable directly from the question-imag
 - [ ] Clicking a candidate **selects** it and renders a large single-pane preview block (`.replace-compare.replace-compare--single` → `.replace-compare-pane`) below the result grid showing the full-resolution image, dimensions, source, and title; the image is clickable to open the shared `.image-lightbox`. The actual download is gated behind a **✓ Herunterladen** button rendered in a `.picker-footer` below the preview — no immediate download on click. Clicking the same candidate again deselects it; submitting a new search clears the candidate. Confirming calls `downloadImageFromUrl('images', url, subfolder, desiredName)` and on success closes the picker via the existing `onSelect` contract (i.e. the path is written to the question via the `AssetField.onChange`). While the request is in flight the candidate carries the `is-busy` "Lade…" badge, other candidates are disabled, and the mode toggle + subfolder dropdown are disabled. On error the modal stays open with a `.replace-error` banner and the candidate stays selected.
 - [ ] Reuses the same `<ImageSearchPanel>` / `<ImageSearchFilterToggle>` / CSS classes as the DAM upload modal — responsive at 375 / 768 / 1024 / 1920 px.
 
+## Einfügen im Asset-Picker
+
+The question-image picker also takes a clipboard paste: an image copied to the clipboard, or the URL of an image. The pasted image is shown as a preview first and only saved to the DAM, and set on the question, after an explicit confirm.
+
+- [ ] Active only when `category === 'images'` and `!multiSelect`, in both DAM and Online mode. Audio, video and the multi-select (cover-loading) flow never handle paste.
+- [ ] A hint line below the header reads "Strg+V / ⌘V: Bild oder Bild-URL einfügen".
+- [ ] `PickerModal` mounts a `document`-level `paste` listener in the capture phase while it is open. When it takes a paste it calls `stopImmediatePropagation()` + `preventDefault()`, so the global DAM paste-to-upload listener in [AssetsTab.tsx](../src/components/backend/AssetsTab.tsx) does not also upload the image.
+- [ ] What the listener takes, in order:
+  1. a clipboard item of type `image/*` (the first one) → file candidate;
+  2. clipboard text that is a `data:image/…;base64,…` URL → converted to a `File`, file candidate;
+  3. clipboard text that is exactly one `http(s)://` URL (trimmed, no whitespace inside) → URL candidate. This applies even while the focus is in a search field: neither search needs a pasted URL.
+  Any other text is left alone, so normal typing/pasting into the search fields still works.
+- [ ] While a candidate exists, the picker body shows it instead of the DAM grid / search panel: the "Speichern in:" subfolder dropdown (same state as the Online mode, preselected to the browsed DAM folder), a `.replace-compare--single` pane labelled "Eingefügt" with the image (click → shared `.image-lightbox`), and a meta line with the natural dimensions plus file type and size (file) or the host name (URL). If a URL image cannot be displayed (hotlink protection), the pane reads "Vorschau nicht verfügbar — Übernehmen trotzdem möglich".
+- [ ] A `.picker-footer` holds **Verwerfen** (drops the candidate, back to the previous view) and **✓ Übernehmen**.
+- [ ] Confirm:
+  - file candidate → `uploadAsset('images', file, subfolder)`, with the file renamed to `pasted-<YYYY-MM-DDTHH-MM-SS>.<ext>` via the same helper the DAM tab's paste uses (`pastedImageFile` in [src/utils/filename.ts](../src/utils/filename.ts));
+  - URL candidate → `downloadImageFromUrl('images', url, subfolder)` without `desiredName`, so the server derives the name from the URL (Google/Bing result links are unwrapped server-side, magic bytes are checked).
+  - On success the picker closes through the existing `onSelect` contract, which writes the path to the question.
+  - While saving, the button reads "Lade…" and the mode toggle, subfolder dropdown and Verwerfen are disabled. On error a `.replace-error` banner shows and the candidate stays.
+- [ ] Esc priority: lightbox → pasted candidate → online candidate → close picker. Esc does nothing while saving.
+- [ ] Switching the DAM / 🌐 Online toggle discards the pasted candidate. A paste while a save or online download is running is swallowed (not passed to the DAM tab) and ignored.
+- [ ] A second paste replaces the current candidate. Object URLs created for file previews are revoked on replace, discard and unmount.
+- [ ] No server or API change — the existing `upload` and `download-url` routes are used.
+
+## Ersetzen aus dem Frage-Editor
+
+Every image lightbox in the game editor lets the operator swap the question's image and AI-upscale the file, without going through the Assets tab. All of them render the shared [AssetImageLightbox.tsx](../src/components/backend/AssetImageLightbox.tsx):
+
+- the image field's lightbox (`<AssetField category="images">`, click on the thumbnail);
+- the collapsed question rows' thumbnail lightbox in `SimpleQuizForm` and `FactOrFakeForm` (Q-Bild / A-Bild).
+
+Acceptance criteria:
+
+- [ ] The lightbox header shows 🖼, the file name, the natural dimensions (`{w} × {h}px`, not for SVG), **"↻ Ersetzen"** and **"✨ Hochskalieren"**.
+- [ ] **"↻ Ersetzen"** opens the same `<PickerModal category="images">` as the image field's **Ändern** button (DAM, 🌐 Online, Strg+V paste), with the caller's render box. Picking an image does what **Ändern** does: it changes only this question's image field (`onChange` with the picked path) — the old file and other games stay untouched. The picker closes and the lightbox shows the picked image. The button appears only when the caller passes an `onChange` (`AssetField` doesn't when `readOnly`; the rows pass one that updates that row's `questionImage` / `answerImage`).
+- [ ] **"✨ Hochskalieren"** opens `ReplaceImageModal` on its **AI hochskalieren** tab (`initialTab="ai"`), portalled to `document.body` above the lightbox. The other tabs (Suchen / URL einfügen / Datei / Einfügen) stay available there and replace the file's bytes in the DAM, as in the DAM lightbox. `target` is the path relative to `images/`, `currentDims` the lightbox's natural dimensions, `renderBox` the caller's render box (default `RENDER_BOX_QUIZ`). The button appears only for DAM image paths (`/images/…`) in the formats the upscaler supports (`.jpg`, `.jpeg`, `.png`, `.webp`), not when `AssetField` is `readOnly`, and only when the image is low-resolution by the DAM's "Niedrige Auflösung" rule ([admin-backend.md](admin-backend.md) §Low-resolution filter): both natural dimensions are smaller than the caller's render box (`RENDER_BOX_IMAGE_GUESS` 1920 × 648 for image-guess fields, `RENDER_BOX_QUIZ` 1920 × 540 otherwise). The DAM filter and the lightbox share `isLowResolution()` in [assetFolders.ts](../src/components/backend/assetFolders.ts). The button is hidden until the image has loaded and been measured, and disappears after an upscale that makes the image large enough. (The DAM filter picks the box from the image's usage across all games; the lightbox uses the box of the game being edited.)
+- [ ] Esc closes the picker / replace modal first, then the lightbox. (Each modal's own enlarged view still takes Esc before both.)
+- [ ] On success the modal closes and the replace is recorded in a module-scope store ([replacedImages.ts](../src/components/backend/replacedImages.ts)) — admin UI cache only, not app state. Every editor thumbnail that builds its `src` through `useImageSrc()` (field thumbnail, row thumbnails, lightbox) then renders the new file with `?v=<version>` from the response, so the browser fetches the new bytes. The lightbox re-measures its dimensions from the reloaded image.
+- [ ] When the extension changes, the server rewrites every game reference on disk (as in the DAM). The open game editor picks that up through its existing `content-changed` reconcile ([live-config-reload.md](live-config-reload.md)) — no component calls `onChange` for it. Until the reconciled value arrives, the store maps the old path to `/images/<newFilename>`, so thumbnails and the file name don't point at the old name. If the editor has unsaved edits at that moment, the existing conflict banner appears.
+
 ## Dateinamen (Online-Suche flows)
 
 The DAM "Online suchen" upload modal and the question-image "🌐 Online" picker both send a `desiredName` to `POST /api/backend/assets/{category}/download-url`:
@@ -91,4 +131,4 @@ The DAM "Online suchen" upload modal and the question-image "🌐 Online" picker
 - Bulk replace (replacing many low-res images in one operation).
 - AI-upscaling the current image to synthesise a higher-resolution version — see [dam-image-upscale.md](dam-image-upscale.md). The AI-upscale flow renders as a 4th tab inside the same `ReplaceImageModal`.
 - Detecting near-duplicate candidates across providers (only exact URL deduplication is performed).
-- URL / file / clipboard input in the "Online suchen" modal — those flows are kept on the existing "Von URL" button + upload zone.
+- URL / file / clipboard input in the "Online suchen" modal — those flows are kept on the existing "Von URL" button + upload zone. (The question-image picker does take a paste — see "Einfügen im Asset-Picker".)
