@@ -441,15 +441,19 @@ function WerKenntMehrInner({
             active: selected[k] === true,
           })),
         });
-        controls.push({
-          type: 'input-group',
-          id: 'award-submit',
-          inputs: [
-            { id: `count-q${qIdx}`, label: 'Anzahl', inputType: 'number', placeholder: 'Anzahl', value: count, emitOnChange: true },
-          ],
-          submitLabel: isExample ? 'Weiter' : 'Punkte vergeben',
-          submitDisabled: !isExample && activeTeams.every(t => selected[t] !== true),
-        });
+        // The example awards nothing, so it gets no award form — the nav row's
+        // "Weiter" is its single advance control (specs/gamemaster-controls.md).
+        if (!isExample) {
+          controls.push({
+            type: 'input-group',
+            id: 'award-submit',
+            inputs: [
+              { id: `count-q${qIdx}`, label: 'Anzahl', inputType: 'number', placeholder: 'Anzahl', value: count, emitOnChange: true },
+            ],
+            submitLabel: 'Punkte vergeben',
+            submitDisabled: activeTeams.every(t => selected[t] !== true),
+          });
+        }
       }
     } else if (phase === 'summary') {
       // Standard-mode end reward screen — host picks the overall winner.

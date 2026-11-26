@@ -6,6 +6,7 @@ import { GameProvider } from '@/context/GameContext';
 import { MusicProvider } from '@/context/MusicContext';
 import GuessingGame from '@/components/games/GuessingGame';
 import { __emitChannelForTests } from '@/services/useBackendSocket';
+import * as backendSocket from '@/services/useBackendSocket';
 import type { GuessingGameConfig } from '@/types/config';
 
 vi.mock('@/services/api', () => ({
@@ -600,5 +601,40 @@ describe('GuessingGame question audio', () => {
     // The background-music player creates two src-less A/B elements; the game
     // itself must not have created any sourced audio element.
     expect(audioInstances.filter(a => a.src !== '').length).toBe(0);
+  });
+});
+
+/** Last `gamemaster-controls` payload published by the game. */
+type GmCtrl = { type: string; id: string; hideForward?: boolean };
+function lastGmControls(spy: { mock: { calls: unknown[][] } }): GmCtrl[] {
+  const calls = spy.mock.calls.filter(([ch]) => ch === 'gamemaster-controls');
+  return (calls[calls.length - 1]?.[1] as { controls?: GmCtrl[] })?.controls ?? [];
+}
+
+// The GM panel shows exactly one advance control per phase (specs/gamemaster-controls.md).
+describe('GuessingGame — single GM advance control', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+  });
+
+  it('result phase: nav "Weiter" is the only advance control (no extra next-question button)', async () => {
+    const user = userEvent.setup();
+    const sendWsSpy = vi.spyOn(backendSocket, 'sendWs');
+    renderGame();
+    await waitFor(() => expect(screen.getByText('Test Guessing')).toBeInTheDocument());
+    await advanceToGame(user);
+
+    await waitFor(() => expect(screen.getByLabelText('Tipp Team 1:')).toBeInTheDocument());
+    await user.type(screen.getByLabelText('Tipp Team 1:'), '40');
+    await user.type(screen.getByLabelText('Tipp Team 2:'), '60');
+    await user.click(screen.getByText('Tipp Abgeben'));
+
+    await waitFor(() => {
+      const controls = lastGmControls(sendWsSpy);
+      expect(controls.find(c => c.id === 'nav')?.hideForward).toBeFalsy();
+      expect(controls.some(c => c.id === 'next-question')).toBe(false);
+    });
+    sendWsSpy.mockRestore();
   });
 });

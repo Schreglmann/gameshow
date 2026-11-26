@@ -10,7 +10,7 @@ A high-stakes betting round where teams wager their own points on each question;
 - [x] "Antwort anzeigen" button reveals the answer and transitions to the judging phase
 - [x] Host judges each team independently: **Richtig** (team earns their bet) or **Falsch** (team loses their bet)
 - [x] Judgment can be changed after initial selection — previous award is reversed and new one applied
-- [x] "Nächste Frage" / "Weiter" button is disabled until both teams have been judged
+- [x] The on-show "Nächste Frage" / "Weiter" button is disabled until both teams have been judged. On the gamemaster, the nav row's "Weiter" is the only advance control and stays hidden until then (no separate GM "Nächste Frage" button)
 - [x] Points are awarded inline via `AWARD_POINTS` dispatch (no separate `AwardPoints` screen after this game)
 - [x] `BaseGameWrapper`'s award-points phase is skipped (`skipPointsScreen`)
 - [x] Optional `answerImage`: shown after reveal
