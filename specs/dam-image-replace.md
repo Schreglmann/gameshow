@@ -67,7 +67,7 @@ The same multi-provider search powers an **"Online suchen"** button next to the 
 The same multi-provider search is also reachable directly from the question-image asset picker: every `<AssetField category="images">` opens a `<PickerModal>` that now exposes a **"DAM / 🌐 Online"** toggle in the header. Switching to Online replaces the DAM file grid with the shared `<ImageSearchPanel>` plus a subfolder dropdown. On selection the image is downloaded into the DAM and immediately selected as the question's image — no round trip through the DAM tab.
 
 - [ ] The mode toggle appears only when `category === 'images'` and `!multiSelect`. The audio-cover-loading flow (`multiSelect`) never shows it.
-- [ ] Default mode is `'dam'`. Switching to `'online'` hides the DAM-only header controls (upload, create-folder, sort) and the DAM breadcrumb.
+- [ ] Default mode is `'dam'`. Switching to `'online'` hides the DAM-only header controls (DAM filter field, upload, create-folder, sort) and the DAM breadcrumb.
 - [ ] The subfolder dropdown is preselected to the folder the user was browsing (`currentPath`). While the user is still in DAM mode, switching folders keeps the dropdown in sync; once in Online mode, the user's manual choice is preserved.
 - [ ] When no subfolders exist, the dropdown is omitted (downloads land at the images root).
 - [ ] The render box for the low-resolution filter is forwarded from `<AssetField>`. `ImageGuessForm` passes `RENDER_BOX_IMAGE_GUESS` (1920 × 648); every other form gets the default `RENDER_BOX_QUIZ` (1920 × 540).

@@ -2192,6 +2192,42 @@ function AdminShowcase() {
         </div>
       </Section>
 
+      <Section title="YouTube im Asset-Picker (Audio/Video-Feld → ▶ YouTube)">
+        <div style={{ display: 'flex', flexDirection: 'column', maxWidth: 720 }}>
+          <div className="picker-mode-toggle" style={{ marginBottom: 8 }}>
+            <button type="button" className="be-icon-btn">DAM</button>
+            <button type="button" className="be-icon-btn asset-select-toggle-active">▶ YouTube</button>
+          </div>
+          <form className="picker-yt-url" onSubmit={e => e.preventDefault()}>
+            <label htmlFor="showcase-yt-url">URL einfügen:</label>
+            <input id="showcase-yt-url" type="url" className="replace-search-input" defaultValue="youtu.be/kein-video" />
+            <button type="submit" className="be-btn-secondary">Vorschau</button>
+            <span className="picker-yt-url-error">Keine gültige YouTube-URL</span>
+          </form>
+          {/* Static placeholder instead of the real iframe, so the showcase makes no network calls. */}
+          <div className="replace-compare replace-compare--single yt-preview">
+            <div className="replace-compare-pane">
+              <div className="yt-preview-head">
+                <div className="replace-compare-label">Vorschau</div>
+                <button type="button" className="be-icon-btn yt-preview-close" aria-label="Vorschau schließen">✕</button>
+              </div>
+              <div className="yt-preview-frame">
+                <div className="yt-preview-placeholder" style={{ background: 'linear-gradient(135deg, #8b5cf6, #ec4899)' }} />
+              </div>
+              <div className="replace-compare-meta yt-preview-meta">
+                <span className="yt-preview-title">Never Gonna Give You Up — Official Video</span>
+                <span>Rick Astley · 3:33</span>
+                <a href="#" onClick={e => e.preventDefault()}>Auf YouTube öffnen ↗</a>
+              </div>
+            </div>
+          </div>
+          <div className="replace-error">Download abgebrochen</div>
+          <div className="picker-footer">
+            <button type="button" className="be-btn-primary">✓ Herunterladen</button>
+          </div>
+        </div>
+      </Section>
+
       <Section title="Progress overlays">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'flex-start' }}>
           {/* One job — the row opens expanded, no group header */}

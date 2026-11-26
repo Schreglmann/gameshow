@@ -564,6 +564,17 @@ In the Simple Quiz editor, click the image field and pick an uploaded image from
 ![Image Picker](./screenshots/admin-assets-image-picker.png)
 > *Add screenshot: `docs/screenshots/admin-assets-image-picker.png` — the image picker lightbox*
 
+### Loading audio or video from YouTube in a question
+
+Audio and video fields in the game editor can take a track straight from YouTube, without going through the Assets tab first:
+
+1. Click the audio or video field (or **Ändern**) and switch the picker from **DAM** to **▶ YouTube**.
+2. Search by keyword, or paste a YouTube link into **URL einfügen** and press **Vorschau**.
+3. Click a result to open the preview player and check that it is the right video. **Auf YouTube öffnen ↗** opens it on YouTube, for videos that can't be played embedded. The **✕** in the preview's corner (or Esc) closes the preview.
+4. Choose the target folder under **Speichern in:** and click **✓ Herunterladen**.
+
+Progress shows in the download tracker. When it finishes, the file is in the DAM and set on the question. Audio is normalized and gets the YouTube thumbnail as its cover, the same as a download from the Assets tab. If you close the picker during the download, the file still lands in the DAM, but the question is left unchanged.
+
 ### Background music
 
 Upload audio files to **Hintergrundmusik**. They play continuously during the gameshow with 3-second crossfades between tracks.

@@ -1,14 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { AssetCategory, AssetFolder, AssetFileMeta } from '@/types/config';
-import { fetchAssets, uploadAsset, createAssetFolder, downloadImageFromUrl, type ImageSearchResult, type ImageSearchProvider } from '@/services/backendApi';
+import { fetchAssets, uploadAsset, createAssetFolder, downloadImageFromUrl, type ImageSearchResult, type ImageSearchProvider, type YouTubeSearchResult } from '@/services/backendApi';
 import { useCoverUrl } from '@/context/AudioCoverMetaContext';
 import { toTitleCaseName } from '@/utils/filename';
 import { toMediaSrc } from '@/utils/assetUrl';
 import { isTouchDevice } from '@/utils/isTouchDevice';
+import { parseYouTubeVideoId, youTubeWatchUrl } from '@/utils/youtube';
 import MiniAudioPlayer from './MiniAudioPlayer';
 import FolderNamePrompt from './FolderNamePrompt';
 import ImageSearchPanel, { ImageSearchFilterToggle } from './ImageSearchPanel';
+import YouTubeSearchPanel, { YouTubePreview } from './YouTubeSearchPanel';
+import { useUpload } from './UploadContext';
 import { getAllFolderPaths, RENDER_BOX_QUIZ } from './assetFolders';
 
 const IMAGE_CATEGORIES: AssetCategory[] = ['images'];
@@ -125,6 +128,11 @@ function isImageCategory(cat: AssetCategory) {
   return IMAGE_CATEGORIES.includes(cat);
 }
 
+/** Categories whose picker offers the "▶ YouTube" download mode. */
+function isYouTubeCategory(cat: AssetCategory) {
+  return cat === 'audio' || cat === 'videos';
+}
+
 function isVideoCategory(cat: AssetCategory) {
   return VIDEO_CATEGORIES.includes(cat);
 }
@@ -188,8 +196,9 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
   const [showSort, setShowSort] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Online image-search mode (image category only, single-select only).
-  const [mode, setMode] = useState<'dam' | 'online'>('dam');
+  // Online image-search mode (image category only, single-select only) and
+  // YouTube mode (audio/video categories only, single-select only).
+  const [mode, setMode] = useState<'dam' | 'online' | 'youtube'>('dam');
   const [onlineSubfolder, setOnlineSubfolder] = useState('');
   const [onlineCandidate, setOnlineCandidate] = useState<ImageSearchResult | null>(null);
   const [onlineCandidateQuery, setOnlineCandidateQuery] = useState('');
@@ -198,6 +207,25 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
   const [onlineEnlarged, setOnlineEnlarged] = useState<{ src: string; name: string } | null>(null);
   const [hideSmallerResults, setHideSmallerResults] = useState(true);
   const [onlineHiddenCount, setOnlineHiddenCount] = useState(0);
+
+  // YouTube mode. The download runs in UploadContext (shared progress overlay),
+  // so it outlives the picker; `mountedRef` makes a late result a no-op once the
+  // picker is closed, and `onSelectRef` always calls the latest onSelect.
+  // `useUpload()` is null outside an UploadProvider (unit tests render the
+  // picker bare); the YouTube toggle is hidden then.
+  const startYtDownload = useUpload()?.startYtDownload;
+  const [ytCandidate, setYtCandidate] = useState<YouTubeSearchResult | null>(null);
+  const [ytUrl, setYtUrl] = useState('');
+  const [ytUrlError, setYtUrlError] = useState<string | null>(null);
+  const [ytDownloading, setYtDownloading] = useState(false);
+  const [ytError, setYtError] = useState<string | null>(null);
+  const mountedRef = useRef(true);
+  const onSelectRef = useRef(onSelect);
+  useEffect(() => { onSelectRef.current = onSelect; }, [onSelect]);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   useEffect(() => {
     fetchAssets(category)
@@ -230,20 +258,30 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
         setOnlineCandidate(null);
         return;
       }
+      // A running YouTube download keeps going after the picker closes, so Esc
+      // skips the deselect step and closes directly.
+      if (ytCandidate && !ytDownloading) {
+        e.preventDefault();
+        e.stopPropagation();
+        setYtCandidate(null);
+        return;
+      }
       e.preventDefault();
       e.stopPropagation();
       onClose();
     };
     document.addEventListener('keydown', handler, true);
     return () => document.removeEventListener('keydown', handler, true);
-  }, [onlineEnlarged, onlineCandidate, onlineDownloading, onClose]);
+  }, [onlineEnlarged, onlineCandidate, onlineDownloading, ytCandidate, ytDownloading, onClose]);
 
   const isImage = isImageCategory(category);
   const isSearching = search.trim().length > 0;
   const allFolderPaths = useMemo(() => getAllFolderPaths(subfolders), [subfolders]);
-  // Show the DAM/Online toggle for image picks only, and never in the
-  // multi-select (cover-loading) flow.
-  const showModeToggle = isImage && !multiSelect;
+  // Show the DAM/Online toggle for image picks and the DAM/YouTube toggle for
+  // audio/video picks, never in the multi-select (cover-loading) flow.
+  const showYouTubeToggle = isYouTubeCategory(category) && !multiSelect && !!startYtDownload;
+  const showModeToggle = (isImage && !multiSelect) || showYouTubeToggle;
+  const anyDownloading = onlineDownloading || ytDownloading;
 
   // Follow the user's DAM navigation into the online subfolder field, until
   // they switch to online mode and explicitly pick a different folder. After
@@ -281,6 +319,51 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
       setOnlineDownloading(false);
     }
   }, [onlineCandidate, onlineCandidateQuery, onlineSubfolder, category, onSelect]);
+
+  // Clicking a YouTube result toggle-selects it and opens the preview player;
+  // the download is gated behind "✓ Herunterladen", as for images.
+  const handleYtSelect = useCallback((r: YouTubeSearchResult) => {
+    setYtError(null);
+    setYtUrlError(null);
+    setYtCandidate(prev => (prev?.url === r.url ? null : r));
+  }, []);
+
+  const handleYtSearchSubmit = useCallback(() => {
+    setYtCandidate(null);
+    setYtError(null);
+  }, []);
+
+  // A pasted link becomes a candidate with the canonical watch URL, which also
+  // drops `&list=` / `&t=` so only that one video is downloaded.
+  const handleYtUrlPreview = useCallback(() => {
+    setYtError(null);
+    const id = parseYouTubeVideoId(ytUrl);
+    if (!id) {
+      setYtUrlError('Keine gültige YouTube-URL');
+      return;
+    }
+    setYtUrlError(null);
+    setYtCandidate({ id, url: youTubeWatchUrl(id), title: 'Video aus Link' });
+  }, [ytUrl]);
+
+  const handleYtConfirm = useCallback(() => {
+    if (!ytCandidate || !startYtDownload) return;
+    const subfolder = onlineSubfolder;
+    setYtDownloading(true);
+    setYtError(null);
+    const fail = (message: string) => {
+      if (!mountedRef.current) return;
+      setYtError(message);
+      setYtDownloading(false);
+    };
+    startYtDownload(category, ytCandidate.url, subfolder || undefined, fileName => {
+      if (!mountedRef.current) return;
+      // The stream ends without a file name when the job was cancelled from
+      // the progress overlay.
+      if (!fileName) { fail('Download abgebrochen'); return; }
+      onSelectRef.current(assetUrl(category, subfolder ? `${subfolder}/${fileName}` : fileName));
+    }, undefined, message => fail(message || 'Download fehlgeschlagen'));
+  }, [ytCandidate, startYtDownload, onlineSubfolder, category]);
 
 
   // Merged metadata map + flat list of all files. Memoized so the recursive walk
@@ -376,6 +459,26 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
     }
   };
 
+  // Target folder for Online / YouTube downloads; omitted when the category has
+  // no subfolders (downloads then land at the category root).
+  const subfolderSelect = allFolderPaths.length > 0 ? (
+    <label>
+      Speichern in:
+      <select
+        value={onlineSubfolder}
+        onChange={e => setOnlineSubfolder(e.target.value)}
+        disabled={anyDownloading}
+      >
+        <option value="">— (Hauptordner)</option>
+        {allFolderPaths.map(p => (
+          <option key={p} value={p}>{p}</option>
+        ))}
+      </select>
+    </label>
+  ) : (
+    <span />
+  );
+
   const acceptTypes = isImageCategory(category) ? 'image/*'
     : category === 'videos' ? 'video/*'
     : 'audio/*';
@@ -385,32 +488,45 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
       <div className="picker-modal" onClick={e => e.stopPropagation()}>
         <div className="picker-header">
           <h3>{multiSelect ? (multiSelectLabel ?? 'Auswählen') : category}</h3>
-          <input
-            className="be-input"
-            placeholder="Suchen..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            style={{ width: 220 }}
-            autoFocus={!isTouchDevice()}
-          />
+          {/* Filters the DAM listing only; Online / YouTube bring their own search field. */}
+          {mode === 'dam' && (
+            <input
+              className="be-input picker-header-search"
+              placeholder="Suchen..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              autoFocus={!isTouchDevice()}
+            />
+          )}
           {showModeToggle && (
             <div className="picker-mode-toggle">
               <button
                 type="button"
                 className={`be-icon-btn${mode === 'dam' ? ' asset-select-toggle-active' : ''}`}
                 onClick={() => setMode('dam')}
-                disabled={onlineDownloading}
+                disabled={anyDownloading}
               >
                 DAM
               </button>
-              <button
-                type="button"
-                className={`be-icon-btn${mode === 'online' ? ' asset-select-toggle-active' : ''}`}
-                onClick={() => setMode('online')}
-                disabled={onlineDownloading}
-              >
-                🌐 Online
-              </button>
+              {showYouTubeToggle ? (
+                <button
+                  type="button"
+                  className={`be-icon-btn${mode === 'youtube' ? ' asset-select-toggle-active' : ''}`}
+                  onClick={() => setMode('youtube')}
+                  disabled={anyDownloading}
+                >
+                  ▶ YouTube
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className={`be-icon-btn${mode === 'online' ? ' asset-select-toggle-active' : ''}`}
+                  onClick={() => setMode('online')}
+                  disabled={anyDownloading}
+                >
+                  🌐 Online
+                </button>
+              )}
             </div>
           )}
           {mode === 'dam' && !multiSelect && (
@@ -520,26 +636,58 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
           </div>
         )}
 
-        {mode === 'online' ? (
+        {mode === 'youtube' ? (
           <>
             <div className="picker-online-subfolder">
-              {allFolderPaths.length > 0 ? (
-                <label>
-                  Speichern in:
-                  <select
-                    value={onlineSubfolder}
-                    onChange={e => setOnlineSubfolder(e.target.value)}
-                    disabled={onlineDownloading}
-                  >
-                    <option value="">— (Hauptordner)</option>
-                    {allFolderPaths.map(p => (
-                      <option key={p} value={p}>{p}</option>
-                    ))}
-                  </select>
-                </label>
-              ) : (
-                <span />
-              )}
+              {subfolderSelect}
+            </div>
+            <form
+              className="picker-yt-url"
+              onSubmit={e => { e.preventDefault(); handleYtUrlPreview(); }}
+            >
+              <label htmlFor="picker-yt-url-input">URL einfügen:</label>
+              <input
+                id="picker-yt-url-input"
+                type="url"
+                className="replace-search-input"
+                placeholder="https://www.youtube.com/watch?v=…"
+                value={ytUrl}
+                onChange={e => { setYtUrl(e.target.value); setYtUrlError(null); }}
+                disabled={ytDownloading}
+              />
+              <button type="submit" className="be-btn-secondary" disabled={ytDownloading || !ytUrl.trim()}>
+                Vorschau
+              </button>
+              {ytUrlError && <span className="picker-yt-url-error" role="alert">{ytUrlError}</span>}
+            </form>
+            <div className="picker-online-body">
+              <YouTubeSearchPanel
+                selectedUrl={ytCandidate?.url}
+                busyUrl={ytDownloading ? ytCandidate?.url : undefined}
+                onSelect={handleYtSelect}
+                onSearch={handleYtSearchSubmit}
+              />
+            </div>
+            {ytCandidate && !ytDownloading && (
+              <YouTubePreview key={ytCandidate.id} video={ytCandidate} onClose={() => setYtCandidate(null)} />
+            )}
+            {ytError && <div className="replace-error">{ytError}</div>}
+            {ytCandidate && (
+              <div className="picker-footer">
+                <button
+                  className="be-btn-primary"
+                  onClick={handleYtConfirm}
+                  disabled={ytDownloading}
+                >
+                  {ytDownloading ? 'Lädt…' : '✓ Herunterladen'}
+                </button>
+              </div>
+            )}
+          </>
+        ) : mode === 'online' ? (
+          <>
+            <div className="picker-online-subfolder">
+              {subfolderSelect}
               {(renderBox ?? RENDER_BOX_QUIZ) && (
                 <ImageSearchFilterToggle
                   checked={hideSmallerResults}

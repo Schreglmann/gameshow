@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { isTouchDevice } from '@/utils/isTouchDevice';
 import { searchYouTube, type YouTubeSearchResult } from '../../services/backendApi';
+import { youTubeEmbedUrl } from '@/utils/youtube';
 
 // Reusable single-provider YouTube search panel. Renders the search form, the
 // result grid (16:9 video cards with title / channel / view count / duration), and the
@@ -34,6 +35,50 @@ function formatViews(views?: number): string | null {
   if (views >= 1_000_000) return fmt(views / 1_000_000, 'Mio');
   if (views >= 1_000) return fmt(views / 1_000, 'Tsd');
   return views.toLocaleString('de-DE');
+}
+
+/**
+ * Preview pane for one selected video: an embedded player plus an "Auf YouTube
+ * öffnen" link for videos whose owner blocks embedding. The iframe keeps the
+ * browser's default referrer policy on purpose; YouTube rejects embeds that
+ * send no referrer (error 153), so don't copy the thumbnails' `no-referrer`.
+ * Callers unmount it to stop playback; `onClose` renders a ✕ that asks them to.
+ */
+export function YouTubePreview({ video, onClose }: { video: YouTubeSearchResult; onClose?: () => void }) {
+  const details = [video.channel, formatDuration(video.duration)].filter(Boolean).join(' · ');
+  return (
+    <div className="replace-compare replace-compare--single yt-preview">
+      <div className="replace-compare-pane">
+        <div className="yt-preview-head">
+          <div className="replace-compare-label">Vorschau</div>
+          {onClose && (
+            <button
+              type="button"
+              className="be-icon-btn yt-preview-close"
+              onClick={onClose}
+              title="Vorschau schließen"
+              aria-label="Vorschau schließen"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+        <div className="yt-preview-frame">
+          <iframe
+            key={video.id}
+            src={youTubeEmbedUrl(video.id)}
+            title={`YouTube-Vorschau: ${video.title}`}
+            allow="encrypted-media; picture-in-picture; fullscreen"
+          />
+        </div>
+        <div className="replace-compare-meta yt-preview-meta">
+          <span className="yt-preview-title">{video.title}</span>
+          {details && <span>{details}</span>}
+          <a href={video.url} target="_blank" rel="noopener noreferrer">Auf YouTube öffnen ↗</a>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 interface Props {

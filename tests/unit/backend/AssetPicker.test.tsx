@@ -1,16 +1,25 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AssetField, PickerModal } from '@/components/backend/AssetPicker';
 
 const mockFetchAssets = vi.fn();
 const mockDownloadImageFromUrl = vi.fn();
 const mockSearchImages = vi.fn();
+const mockSearchYouTube = vi.fn();
+const mockUseUpload = vi.fn<() => unknown>(() => null);
 
 vi.mock('@/services/backendApi', () => ({
   fetchAssets: (...args: unknown[]) => mockFetchAssets(...args),
   downloadImageFromUrl: (...args: unknown[]) => mockDownloadImageFromUrl(...args),
   searchImages: (...args: unknown[]) => mockSearchImages(...args),
+  searchYouTube: (...args: unknown[]) => mockSearchYouTube(...args),
+}));
+
+// No UploadProvider by default (the picker hides YouTube mode then); the
+// YouTube-mode tests return a stub with a controllable startYtDownload.
+vi.mock('@/components/backend/UploadContext', () => ({
+  useUpload: () => mockUseUpload(),
 }));
 
 describe('AssetField', () => {
@@ -295,6 +304,191 @@ describe('PickerModal online mode', () => {
     await user.click(await screen.findByRole('button', { name: /✓ Herunterladen/i }));
 
     await waitFor(() => expect(screen.getByText('boom')).toBeInTheDocument());
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+});
+
+describe('PickerModal YouTube mode', () => {
+  type StartArgs = [
+    category: string,
+    url: string,
+    subfolder: string | undefined,
+    onDone: (fileName: string) => void,
+    playlist: boolean | undefined,
+    onError: (message: string) => void,
+  ];
+  const mockStartYtDownload = vi.fn<(...args: StartArgs) => void>();
+  const lastStart = () => mockStartYtDownload.mock.calls.at(-1)!;
+
+  const VIDEO = {
+    id: 'dQw4w9WgXcQ',
+    url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    title: 'Never Gonna Give You Up',
+    channel: 'Rick Astley',
+    duration: 213,
+  };
+
+  beforeEach(() => {
+    mockStartYtDownload.mockReset();
+    mockUseUpload.mockReturnValue({ startYtDownload: mockStartYtDownload });
+    mockFetchAssets.mockResolvedValue({
+      files: [],
+      subfolders: [{ name: 'Songs', files: [], subfolders: [] }],
+    });
+    mockSearchYouTube.mockResolvedValue({ results: [VIDEO], page: 1, hasMore: false });
+  });
+
+  afterEach(() => {
+    mockUseUpload.mockReturnValue(null);
+  });
+
+  async function openYouTubeMode(category: 'audio' | 'videos' = 'audio', onSelect = vi.fn()) {
+    const user = userEvent.setup();
+    const view = render(<PickerModal category={category} onSelect={onSelect} onClose={vi.fn()} />);
+    await user.click(await screen.findByRole('button', { name: '▶ YouTube' }));
+    return { user, onSelect, ...view };
+  }
+
+  async function searchAndPick(user: ReturnType<typeof userEvent.setup>) {
+    await user.type(screen.getByPlaceholderText('YouTube durchsuchen'), 'rick');
+    await user.click(screen.getByRole('button', { name: /🔍 Suchen/i }));
+    await user.click(await screen.findByTitle(VIDEO.title));
+  }
+
+  it.each(['audio', 'videos'] as const)('shows the DAM/YouTube toggle for %s', async (category) => {
+    render(<PickerModal category={category} onSelect={vi.fn()} onClose={vi.fn()} />);
+    expect(await screen.findByRole('button', { name: '▶ YouTube' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '🌐 Online' })).not.toBeInTheDocument();
+  });
+
+  it.each(['images', 'background-music'] as const)('does not show the YouTube toggle for %s', async (category) => {
+    render(<PickerModal category={category} onSelect={vi.fn()} onClose={vi.fn()} />);
+    await waitFor(() => expect(screen.queryByPlaceholderText('Suchen...')).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: '▶ YouTube' })).not.toBeInTheDocument();
+  });
+
+  it('does not show the YouTube toggle in multi-select mode', async () => {
+    render(<PickerModal category="audio" onSelect={vi.fn()} onClose={vi.fn()} multiSelect onMultiSelect={vi.fn()} />);
+    await waitFor(() => expect(screen.queryByPlaceholderText('Suchen...')).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: '▶ YouTube' })).not.toBeInTheDocument();
+  });
+
+  it('does not show the YouTube toggle without an UploadProvider', async () => {
+    mockUseUpload.mockReturnValue(null);
+    render(<PickerModal category="audio" onSelect={vi.fn()} onClose={vi.fn()} />);
+    await waitFor(() => expect(screen.queryByPlaceholderText('Suchen...')).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: '▶ YouTube' })).not.toBeInTheDocument();
+  });
+
+  it('hides the DAM-only controls and shows the folder dropdown and URL row', async () => {
+    await openYouTubeMode();
+    expect(screen.queryByRole('button', { name: 'Hochladen' })).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/Speichern in:/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/URL einfügen:/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('YouTube durchsuchen')).toBeInTheDocument();
+  });
+
+  it('selecting a result shows the embedded preview; selecting it again removes it', async () => {
+    const { user } = await openYouTubeMode();
+    await searchAndPick(user);
+
+    const frame = screen.getByTitle(`YouTube-Vorschau: ${VIDEO.title}`);
+    expect(frame.getAttribute('src')).toBe('https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?rel=0');
+    // YouTube refuses embeds without a referrer (error 153).
+    expect(frame.getAttribute('referrerpolicy')).toBeNull();
+    expect(screen.getByRole('link', { name: /Auf YouTube öffnen/ })).toHaveAttribute('href', VIDEO.url);
+    expect(screen.getByText('Rick Astley · 3:33')).toBeInTheDocument();
+
+    await user.click(screen.getByTitle(VIDEO.title));
+    expect(screen.queryByTitle(`YouTube-Vorschau: ${VIDEO.title}`)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /✓ Herunterladen/ })).not.toBeInTheDocument();
+  });
+
+  it('the ✕ in the preview closes it and deselects the video', async () => {
+    const { user, onSelect } = await openYouTubeMode();
+    await searchAndPick(user);
+
+    await user.click(screen.getByRole('button', { name: 'Vorschau schließen' }));
+    expect(screen.queryByTitle(`YouTube-Vorschau: ${VIDEO.title}`)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /✓ Herunterladen/ })).not.toBeInTheDocument();
+    expect(screen.getByTitle(VIDEO.title)).not.toHaveClass('is-selected');
+    // The picker itself stays open.
+    expect(screen.getByPlaceholderText('YouTube durchsuchen')).toBeInTheDocument();
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('downloads the picked result into the chosen folder and selects the file', async () => {
+    const { user, onSelect } = await openYouTubeMode();
+    await user.selectOptions(screen.getByLabelText(/Speichern in:/i), 'Songs');
+    await searchAndPick(user);
+    await user.click(screen.getByRole('button', { name: /✓ Herunterladen/ }));
+
+    expect(mockStartYtDownload).toHaveBeenCalledTimes(1);
+    const [category, url, subfolder, onDone, playlist] = lastStart();
+    expect([category, url, subfolder, playlist]).toEqual(['audio', VIDEO.url, 'Songs', undefined]);
+
+    // While downloading: preview gone, button busy, toggle locked.
+    expect(screen.queryByTitle(`YouTube-Vorschau: ${VIDEO.title}`)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Lädt…' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'DAM' })).toBeDisabled();
+
+    act(() => onDone('Never Gonna Give You Up.mp3'));
+    expect(onSelect).toHaveBeenCalledWith('/audio/Songs/Never Gonna Give You Up.mp3');
+  });
+
+  it('previews and downloads a pasted link as its canonical single-video URL', async () => {
+    const { user, onSelect } = await openYouTubeMode('videos');
+    await user.type(screen.getByLabelText(/URL einfügen:/i), 'https://youtu.be/dQw4w9WgXcQ?list=PL123&t=42');
+    await user.click(screen.getByRole('button', { name: 'Vorschau' }));
+
+    expect(screen.getByTitle('YouTube-Vorschau: Video aus Link')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /✓ Herunterladen/ }));
+
+    const [category, url, subfolder, onDone] = lastStart();
+    expect([category, url, subfolder]).toEqual(['videos', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', undefined]);
+    act(() => onDone('Clip.mp4'));
+    expect(onSelect).toHaveBeenCalledWith('/videos/Clip.mp4');
+  });
+
+  it('rejects a link that is not a YouTube video', async () => {
+    const { user } = await openYouTubeMode();
+    await user.type(screen.getByLabelText(/URL einfügen:/i), 'https://example.com/watch?v=dQw4w9WgXcQ');
+    await user.click(screen.getByRole('button', { name: 'Vorschau' }));
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Keine gültige YouTube-URL');
+    expect(screen.queryByRole('button', { name: /✓ Herunterladen/ })).not.toBeInTheDocument();
+  });
+
+  it('keeps the picker open with an error banner when the download fails', async () => {
+    const { user, onSelect } = await openYouTubeMode();
+    await searchAndPick(user);
+    await user.click(screen.getByRole('button', { name: /✓ Herunterladen/ }));
+
+    const onError = lastStart()[5];
+    act(() => onError('Video nicht verfügbar'));
+    expect(screen.getByText('Video nicht verfügbar')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /✓ Herunterladen/ })).toBeEnabled();
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('treats a download that ends without a file name as cancelled', async () => {
+    const { user, onSelect } = await openYouTubeMode();
+    await searchAndPick(user);
+    await user.click(screen.getByRole('button', { name: /✓ Herunterladen/ }));
+
+    act(() => lastStart()[3](''));
+    expect(screen.getByText('Download abgebrochen')).toBeInTheDocument();
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('leaves the question untouched when the picker was closed before the download finished', async () => {
+    const { user, onSelect, unmount } = await openYouTubeMode();
+    await searchAndPick(user);
+    await user.click(screen.getByRole('button', { name: /✓ Herunterladen/ }));
+
+    const onDone = lastStart()[3];
+    unmount();
+    onDone('Late.mp3');
     expect(onSelect).not.toHaveBeenCalled();
   });
 });

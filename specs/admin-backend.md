@@ -145,6 +145,7 @@ Note: the `local-assets/audio-guess/` directory on disk is not exposed as a DAM 
 - The "▶ YouTube" upload-zone button opens a modal with a **Suchen | URL** tab switch, defaulting to **Suchen** (the leftmost tab). The **Suchen** tab renders `<YouTubeSearchPanel>` for keyword search; the **URL** tab (second) is the existing paste-a-URL (+ playlist) flow.
 - Searching calls `POST /api/backend/assets/youtube/search` (`yt-dlp` flat search, metadata only — no API key). Results are 16:9 video cards (thumbnail, title, channel, duration); "Mehr laden" paginates.
 - Picking a result and confirming "✓ Herunterladen" downloads it into the active category / chosen subfolder via the **existing** `POST /api/backend/assets/:category/youtube-download` flow (yt-dlp → normalize → thumbnail-as-cover → SSE progress in the standard download tracker). The subfolder dropdown is shared with the URL tab. See [youtube-search.md](youtube-search.md).
+- The same search, plus link paste and an embedded preview player, is also available inside the game editor's audio/video asset picker (**DAM / ▶ YouTube** toggle): the downloaded file is set on the question directly. See [youtube-search.md](youtube-search.md) "YouTube im Asset-Picker".
 
 **Shared behavior:**
 - Drop zones show `dragover` CSS class while dragging over them (OS files, asset cards, and cross-browser URL drags) — suppressed when the current drag would be an invalid folder move

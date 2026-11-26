@@ -76,7 +76,19 @@ interface UploadContextValue {
   startUpload: (category: AssetCategory, files: File[], subfolder?: string) => Promise<{ success: boolean; count: number }>;
   abortUpload: () => void;
   ytDownloads: YtDownloadProgress[];
-  startYtDownload: (category: AssetCategory, url: string, subfolder?: string, onDone?: () => void, playlist?: boolean) => void;
+  /**
+   * `onDone` receives the downloaded file's name relative to `subfolder` (empty
+   * when the stream ended without a `done` event, e.g. a cancelled job; for a
+   * playlist it is the playlist folder). `onError` fires on any failure.
+   */
+  startYtDownload: (
+    category: AssetCategory,
+    url: string,
+    subfolder?: string,
+    onDone?: (fileName: string) => void,
+    playlist?: boolean,
+    onError?: (message: string) => void,
+  ) => void;
   cancelYtDownload: (id: number) => void;
   dismissYtDownload: (id: number) => void;
   audioCoverDownloads: AudioCoverProgress[];
@@ -225,7 +237,14 @@ export function UploadProvider({ children }: { children: ReactNode }) {
     return { success: true, count: files.length };
   }, []);
 
-  const startYtDownload = useCallback((category: AssetCategory, url: string, subfolder?: string, onDone?: () => void, playlist?: boolean) => {
+  const startYtDownload = useCallback((
+    category: AssetCategory,
+    url: string,
+    subfolder?: string,
+    onDone?: (fileName: string) => void,
+    playlist?: boolean,
+    onError?: (message: string) => void,
+  ) => {
     const id = nextYtId++;
     const entry: YtDownloadProgress = { id, category, phase: 'downloading', percent: 0, title: '' };
     setYtDownloads(prev => [...prev, entry]);
@@ -293,7 +312,7 @@ export function UploadProvider({ children }: { children: ReactNode }) {
 
         return updated;
       }));
-    }, playlist).then(() => {
+    }, playlist).then((fileName) => {
       setYtDownloads(prev => {
         const dl = prev.find(d => d.id === id);
         if (dl?.serverId) liveJobIds.current.delete(dl.serverId);
@@ -303,7 +322,7 @@ export function UploadProvider({ children }: { children: ReactNode }) {
           tracks: d.tracks?.map(t => ({ ...t, phase: 'done' as const, percent: 100 })),
         });
       });
-      onDone?.();
+      onDone?.(fileName);
       // Auto-dismiss after 5s for playlists (more tracks to glance at), 3s for singles
       const delay = playlist ? 5000 : 3000;
       setTimeout(() => {
@@ -318,6 +337,7 @@ export function UploadProvider({ children }: { children: ReactNode }) {
         if (dl?.serverId) liveJobIds.current.delete(dl.serverId);
         return prev.map(d => d.id !== id ? d : { ...d, phase: 'error', error: (err as Error).message });
       });
+      onError?.((err as Error).message);
     });
   }, []);
 
