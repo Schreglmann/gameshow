@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'path';
-import { sharedPlugins, sharedResolve, projectRoot } from './vite.config.shared';
+import { sharedPlugins, sharedResolve, projectRoot } from './vite.config.shared.ts';
 
 export default defineConfig({
   root: path.resolve(projectRoot, 'admin'),

@@ -3,7 +3,7 @@ import tailwindcss from '@tailwindcss/vite';
 import path from 'path';
 import type { UserConfig } from 'vite';
 
-const ROOT = path.resolve(__dirname);
+const ROOT = import.meta.dirname;
 
 export const sharedPlugins = [tailwindcss(), react()];
 
