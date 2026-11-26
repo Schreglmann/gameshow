@@ -124,6 +124,14 @@ export interface TeamState {
    */
   orderSwapped?: boolean;
   /**
+   * Random mode only: whether the show may display the rosters. The draw happens
+   * in the background on page load and stays hidden (only the gamemaster sees
+   * it) until "Teams zuweisen" sets this. Missing on legacy state, where it is
+   * derived as "any roster non-empty". Rides the cached gamemaster-team-state-v2
+   * channel + localStorage. See specs/team-management.md ("Verdeckte Auslosung").
+   */
+  teamsRevealed?: boolean;
+  /**
    * Monotonic revision counter (Lamport clock) guarding against a client
    * publishing a snapshot older than one already in circulation. Every local
    * mutation sets `rev = (highest rev this client has seen) + 1`; the server
@@ -363,6 +371,13 @@ export interface GamemasterButtonDef {
   variant?: 'success' | 'danger' | 'primary';
   active?: boolean;
   disabled?: boolean;
+  /**
+   * When set, tapping the button does NOT send its own id: it opens a popover
+   * next to the button listing these entries, and tapping an entry sends that
+   * entry's id. Entries' own `menu` is ignored (one level only). See
+   * specs/team-management.md ("GM button menu").
+   */
+  menu?: GamemasterButtonDef[];
 }
 
 export interface GamemasterInputDef {
@@ -376,7 +391,16 @@ export interface GamemasterInputDef {
 
 export type GamemasterControl =
   | { type: 'button'; id: string; label: string; variant?: 'success' | 'danger' | 'primary'; disabled?: boolean }
-  | { type: 'button-group'; id: string; label?: string; buttons: GamemasterButtonDef[] }
+  | {
+      type: 'button-group';
+      id: string;
+      label?: string;
+      buttons: GamemasterButtonDef[];
+      /** `grid`: equal-width cells instead of centred, content-sized rows — for long lists (many players). */
+      layout?: 'grid';
+      /** Renders the group as a card marked with this team's colour (dot + accent edge). */
+      team?: TeamKey;
+    }
   | { type: 'input-group'; id: string; inputs: GamemasterInputDef[]; submitLabel: string; submitDisabled?: boolean }
   | { type: 'info'; id: string; text: string }
   | { type: 'nav'; id: string; hideBack?: boolean; hideForward?: boolean };

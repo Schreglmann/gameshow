@@ -116,7 +116,7 @@ function sendCommand(controlId: string, value?: string | Record<string,string>) 
 `gamemaster-controls.data.controls` is an array of `GamemasterControl` union members. Render each according to its `type` field:
 
 - `button` — single button. Emit `gamemaster-command` with the button's `id` on click. Styling: `variant` is `success | danger | primary` or undefined.
-- `button-group` — multiple buttons laid out together (often one per team). Buttons carry `sublabel` (e.g. team member names), `active` (highlighted), `disabled`.
+- `button-group` — multiple buttons laid out together (often one per team). Buttons carry `sublabel` (e.g. team member names), `active` (highlighted), `disabled`, and optionally `menu`: a list of entries shown in a popover when the button is tapped — send the chosen **entry's** id, never the button's own (the start screen uses it for the per-player "→ Team X" / "Entfernen" menu). A group may also carry `layout: 'grid'` (equal-width cells for long lists) and `team` (draw it as a card in that team's colour).
 - `input-group` — inputs + a single submit button. Emit `gamemaster-command` with `{ controlId: submit-button-id, value: { [inputId]: enteredText } }`. If any input has `emitOnChange: true`, emit on change too.
 - `info` — read-only text card. No interaction.
 - `nav` — implicit back/next navigation control. Respect `hideBack`.

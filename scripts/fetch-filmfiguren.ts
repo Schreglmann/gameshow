@@ -8,7 +8,10 @@
  * Idempotent: skips files already present.
  *
  * Usage (from repo root):
- *   npx tsx scripts/fetch-filmfiguren.ts [--dry-run]
+ *   npx tsx scripts/fetch-filmfiguren.ts [--dry-run] [--villains]
+ *
+ * --villains fetches the VILLAINS list instead of CHARACTERS. Set WIKIMEDIA_CONTACT
+ * to put a contact into the User-Agent, as Wikimedia asks.
  */
 
 import fs from 'fs';
@@ -22,9 +25,11 @@ if (proxyUrl) {
 
 const SAVE_DIR = path.join(process.cwd(), 'local-assets', 'images', 'Filmfiguren');
 const DRY_RUN = process.argv.includes('--dry-run');
+const VILLAINS_ONLY = process.argv.includes('--villains');
 
-const USER_AGENT =
-  'Gameshow-DAM-Fetch/1.0 (https://github.com/vivid-planet/gameshow; georg.schreglmann@vivid-planet.com)';
+// Wikimedia asks for a contact in the User-Agent; set WIKIMEDIA_CONTACT to add one.
+const CONTACT = process.env.WIKIMEDIA_CONTACT;
+const USER_AGENT = CONTACT ? `Gameshow-DAM-Fetch/1.0 (${CONTACT})` : 'Gameshow-DAM-Fetch/1.0';
 
 type Entry = {
   /** filename stem (becomes "<name>.jpg") */
@@ -88,6 +93,37 @@ const CHARACTERS: Entry[] = [
   { name: 'Maximus', titleEn: 'Maximus Decimus Meridius', titleDe: 'Gladiator (2000)' },
 ];
 
+/**
+ * Villains for games/wie-heisst-der-boesewicht.json (`--villains`) that have a usable
+ * film still on Wikipedia. Wikipedia only has comic art or posters for most MCU and
+ * Disney villains of that game, so those were picked by hand through the DAM's
+ * DuckDuckGo image search and are not in this list.
+ */
+const VILLAINS: Entry[] = [
+  { name: 'Wilson Fisk', titleEn: 'Wilson Fisk (Marvel Cinematic Universe)' },
+  { name: 'Grand Moff Tarkin' },
+  { name: 'General Grievous' },
+  { name: 'Count Dooku' },
+  { name: 'Claude Frollo', titleEn: 'Judge Claude Frollo' },
+  { name: 'Mutter Gothel', titleEn: 'Mother Gothel' },
+  { name: 'Hans Landa' },
+  { name: 'Anton Chigurh' },
+  { name: 'Agent Smith' },
+  { name: 'Hans Gruber' },
+  { name: 'Le Chiffre' },
+  { name: 'Raoul Silva' },
+  { name: 'Annie Wilkes' },
+  { name: 'Mildred Ratched', titleEn: 'Nurse Ratched' },
+  { name: 'Ernst Stavro Blofeld' },
+  { name: 'Kurgan', titleEn: 'The Kurgan' },
+  { name: 'Ramsay Bolton' },
+  { name: 'Tywin Lannister' },
+  { name: 'Gustavo Fring', titleEn: 'Gus Fring' },
+  { name: 'Negan' },
+  { name: 'Homelander' },
+  { name: 'Vecna', titleEn: 'Vecna (Stranger Things)' },
+];
+
 function extFromUrl(url: string): string {
   const p = new URL(url).pathname.toLowerCase();
   const known = ['.jpg', '.jpeg', '.png', '.webp', '.svg', '.gif', '.avif'];
@@ -116,6 +152,16 @@ function isImageBuffer(buf: Buffer): boolean {
   const headAscii = head.toString('ascii').trimStart();
   const isSvg = headAscii.startsWith('<svg') || headAscii.startsWith('<?xml');
   return isJpeg || isPng || isGif || isWebp || isAvif || isSvg;
+}
+
+/** The file type comes from the bytes, as some image URLs have no file extension. */
+function extFromBuffer(buf: Buffer): string | null {
+  if (buf[0] === 0xff && buf[1] === 0xd8) return '.jpg';
+  if (buf[0] === 0x89 && buf[1] === 0x50) return '.png';
+  if (buf[0] === 0x47 && buf[1] === 0x49) return '.gif';
+  if (buf.subarray(8, 12).toString('ascii') === 'WEBP') return '.webp';
+  if (buf.subarray(4, 8).toString('ascii') === 'ftyp') return '.avif';
+  return null;
 }
 
 type SummaryImage = { url: string; lang: 'en' | 'de'; isOriginal: boolean };
@@ -203,7 +249,8 @@ function existingNormalizedNames(): Set<string> {
 }
 
 async function main() {
-  console.log(`🎬 Fetching ${CHARACTERS.length} movie-character portraits...\n`);
+  const entries = VILLAINS_ONLY ? VILLAINS : CHARACTERS;
+  console.log(`🎬 Fetching ${entries.length} movie-character portraits...\n`);
 
   if (!DRY_RUN) fs.mkdirSync(SAVE_DIR, { recursive: true });
 
@@ -216,7 +263,7 @@ async function main() {
   const failures: string[] = [];
 
   let firstRealFetch = true;
-  for (const entry of CHARACTERS) {
+  for (const entry of entries) {
     const norm = normalizeForDedup(entry.name);
 
     if (existing.has(norm)) {
@@ -236,10 +283,6 @@ async function main() {
         continue;
       }
 
-      const ext = extFromUrl(img.url);
-      const filename = `${entry.name}${ext}`;
-      const outPath = path.join(SAVE_DIR, filename);
-
       if (DRY_RUN) {
         const tag = img.isOriginal ? 'orig' : 'thumb';
         console.log(`  🔍 ${entry.name} → ${img.lang}/${tag}: ${img.url}`);
@@ -248,6 +291,9 @@ async function main() {
       }
 
       const buf = await downloadBuffer(img.url);
+      const ext = extFromBuffer(buf) ?? extFromUrl(img.url);
+      const filename = `${entry.name}${ext}`;
+      const outPath = path.join(SAVE_DIR, filename);
       fs.writeFileSync(outPath, buf);
       const tag = img.isOriginal ? 'orig' : 'THUMB-LOWRES';
       const kb = (buf.length / 1024).toFixed(0);

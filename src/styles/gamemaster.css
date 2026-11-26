@@ -2942,3 +2942,108 @@ body.gamemaster-embedded .gm-toolbar {
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }
+
+/* ── Button menu popover ──
+   A GM button with a `menu` (e.g. a player on the start screen) opens this next
+   to itself: "Zu Team 2" / "Entfernen". Portalled to <body> (see
+   GmButtonMenu.tsx); the backdrop only dims lightly so the tapped button stays
+   readable. Above the run-of-show drawer (40), like the confirm dialog. See
+   specs/team-management.md ("GM button menu"). */
+.gm-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.25);
+  z-index: 50;
+}
+
+.gm-menu-popover {
+  position: fixed;
+  z-index: 51;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: min(200px, calc(100vw - 16px));
+  max-width: calc(100vw - 16px);
+  padding: 10px;
+  border-radius: var(--radius-md, 10px);
+  background: var(--card-bg, rgba(var(--glass-rgb), calc(var(--glass-opacity) + 0.12)));
+  backdrop-filter: blur(var(--card-backdrop-blur, var(--glass-blur-heavy, 16px)));
+  border: var(--card-border, 1px solid rgba(var(--glass-rgb), var(--glass-border-opacity)));
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  color: var(--card-text, var(--text-primary));
+}
+
+.gm-menu-title {
+  padding: 2px 4px 4px;
+  font-weight: 700;
+  font-size: clamp(0.85rem, 1.6vw, 1rem);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.gm-menu-popover .gm-menu-item {
+  width: 100%;
+  white-space: normal;
+  text-align: center;
+}
+
+/* The button whose menu is open stays marked while the popover is up. */
+.gm-btn--menu-open {
+  outline: 2px solid rgba(var(--text-rgb), 0.7);
+  outline-offset: 2px;
+}
+
+/* ── Team card + grid button groups ──
+   The start screen lists every player as a button, grouped per team. With 30+
+   names the default centred, content-sized rows turned into a ragged wall, so
+   these groups (`team` + `layout: 'grid'` on the control) become one card per
+   team, marked with the team's accent edge, holding equal-width cells. Names
+   wrap inside their cell rather than widen it. See specs/team-management.md. */
+.gm-button-group--team {
+  gap: 8px;
+  padding: 10px;
+  border-radius: var(--radius-md, 10px);
+  background: rgba(var(--glass-rgb), 0.06);
+  border: 1px solid rgba(var(--glass-rgb), 0.15);
+  box-shadow: var(--team-edge-left) var(--team-color);
+}
+
+.gm-button-group--team .gm-group-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.gm-button-row.gm-button-row--grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 96px), 1fr));
+  gap: 6px;
+}
+
+.gm-button-row--grid .gm-btn {
+  min-width: 0;
+  min-height: 40px;
+  padding: 8px 6px;
+  font-size: clamp(0.8rem, 1.4vw, 0.95rem);
+  line-height: 1.2;
+}
+
+/* From tablet width the team cards sit two per row instead of stretching over
+   the whole panel (eight thin columns, with one name orphaned on a second row).
+   Everything else in the panel keeps its full-width line. */
+@media (min-width: 768px) {
+  .gamemaster-controls-panel:has(> .gm-button-group--team) {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .gamemaster-controls-panel:has(> .gm-button-group--team) > * {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .gamemaster-controls-panel:has(> .gm-button-group--team) > .gm-button-group--team {
+    flex: 1 1 calc(50% - 8px);
+  }
+}

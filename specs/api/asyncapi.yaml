@@ -906,6 +906,14 @@ components:
             type: { const: button-group }
             id: { type: string }
             label: { type: string }
+            layout:
+              type: string
+              enum: [grid]
+              description: "Optional. `grid` lays the buttons out as equal-width cells instead of centred, content-sized rows — for long lists such as the players of a team."
+            team:
+              type: string
+              enum: [team1, team2, team3, team4]
+              description: "Optional. Renders the group as a card marked with this team's colour (dot + accent edge). See specs/team-colors.md."
             buttons:
               type: array
               items:
@@ -918,6 +926,23 @@ components:
                   variant: { type: string, enum: [success, danger, primary] }
                   active: { type: boolean }
                   disabled: { type: boolean }
+                  menu:
+                    type: array
+                    description: >-
+                      Optional. When present, tapping the button does NOT send its own id:
+                      the GM opens a popover next to the button listing these entries, and
+                      tapping an entry sends that entry's id as the `controlId`. One level
+                      only (an entry's own `menu` is ignored). Used on the start screen for
+                      the per-player "→ Team X" / "Entfernen" menu. See
+                      specs/team-management.md ("GM button menu").
+                    items:
+                      type: object
+                      required: [id, label]
+                      properties:
+                        id: { type: string }
+                        label: { type: string }
+                        variant: { type: string, enum: [success, danger, primary] }
+                        disabled: { type: boolean }
         - type: object
           required: [type, id, inputs, submitLabel]
           properties:
@@ -1093,6 +1118,13 @@ components:
             display order (with two teams: team2 left, team1 right); the gamemaster
             always shows the mirror of the frontend order. Team identities/points are
             unaffected. Optional; defaults to false. See specs/team-order-mirror.md.
+        teamsRevealed:
+          type: boolean
+          description: >-
+            Random mode only: whether the show may display the rosters. The draw is
+            made in the background and stays hidden (the gamemaster previews it)
+            until "Teams zuweisen" sets this. When absent (older peer or cache),
+            read it as "any roster non-empty". See specs/team-management.md.
         rev:
           type: number
           description: >-

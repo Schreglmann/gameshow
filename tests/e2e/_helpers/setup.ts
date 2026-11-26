@@ -133,15 +133,23 @@ export async function isolateShowWsState(page: Page): Promise<void> {
 }
 
 /**
- * Open the show landing screen and return the team-name textarea, ready to type
- * into. Relies on the spec's `beforeEach(isolateShowWsState)` so no stale
- * team-state burst can unmount the form.
+ * Open the show landing screen and return the hidden draw's "Name hinzufügen"
+ * field, ready to type into. Relies on the spec's `beforeEach(isolateShowWsState)`
+ * so no stale team-state burst can unmount the form. The active gameshow's
+ * configured players may already be in the draw. See specs/team-management.md.
  */
 export async function openShowHomeForm(page: Page): Promise<Locator> {
   await page.goto('/show/');
-  const textarea = page.locator('.name-form textarea');
-  await textarea.waitFor({ state: 'visible', timeout: 10_000 });
-  return textarea;
+  const input = page.locator('.draw-add-form input');
+  await input.waitFor({ state: 'visible', timeout: 10_000 });
+  return input;
+}
+
+/** Add comma-separated players to the hidden draw through the show's add field. */
+export async function addShowPlayers(page: Page, names: string): Promise<void> {
+  const input = page.locator('.draw-add-form input');
+  await input.fill(names);
+  await page.locator('.draw-add-form button[type="submit"]').click();
 }
 
 /**
@@ -166,6 +174,8 @@ export async function seedTeams(
       localStorage.setItem('team2', JSON.stringify(t2));
       localStorage.setItem('team1Points', String(p1));
       localStorage.setItem('team2Points', String(p2));
+      // Seeded teams are on screen, not a hidden draw (specs/team-management.md).
+      localStorage.setItem('teamsRevealed', 'true');
     },
     { t1: team1, t2: team2, p1: opts.team1Points ?? 0, p2: opts.team2Points ?? 0 },
   );

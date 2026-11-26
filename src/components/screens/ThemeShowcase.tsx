@@ -673,6 +673,29 @@ function FrontendShowcase() {
         </div>
       </Section>
 
+      {/* The popover a GM button with a `menu` opens next to itself (a player on
+          the start screen). Shown in place here; live it is portalled to <body>
+          and positioned from the tapped button. See GmButtonMenu.tsx. */}
+      <Section title="Gamemaster Spieler-Menü (Auslosung)">
+        <div className="gamemaster-card" style={{ textAlign: 'center' }}>
+          <div className="gm-info">Vorschau – auf der Show noch verborgen. Spieler antippen zum Verschieben oder Entfernen.</div>
+          <div className="gm-button-group gm-button-group--team" data-team="team1">
+            <div className="gm-group-label"><TeamDot team="team1" />Team 1 (6)</div>
+            <div className="gm-button-row gm-button-row--grid">
+              {['Bartholomäus-Maximilian', 'Jo', 'Kathi', 'Michi H.', 'Péter', 'Steffi'].map(name => (
+                <button key={name} className={`gm-btn${name === 'Kathi' ? ' gm-btn--menu-open' : ''}`}>{name}</button>
+              ))}
+            </div>
+          </div>
+          <div className="gm-menu-popover" role="menu" aria-label="Kathi" style={{ position: 'static', margin: '10px auto 0', width: 'fit-content' }}>
+            <div className="gm-menu-title">Kathi</div>
+            <button type="button" role="menuitem" className="gm-btn gm-menu-item">→ Team 2</button>
+            <button type="button" role="menuitem" className="gm-btn gm-menu-item">→ Team 3</button>
+            <button type="button" role="menuitem" className="gm-btn gm-menu-item gm-btn--danger">Entfernen</button>
+          </div>
+        </div>
+      </Section>
+
       <Section title="Gamemaster mit versteckten Antworten">
         <div className="gamemaster-card" style={{ textAlign: 'center' }}>
           <div className="gamemaster-meta">Frage 3 / 10</div>
@@ -1259,11 +1282,47 @@ function FrontendShowcase() {
         </GlassCard>
       </Section>
 
-      <Section title="Form / Name Entry">
-        <div className="name-form" style={{ marginBottom: 0 }}>
-          <h2 style={{ fontSize: '1.4em' }}>Namen zuweisen</h2>
-          <textarea placeholder="Name 1, Name 2, ..." style={{ height: 80, margin: 0 }} readOnly />
-          <button>Teams zuweisen</button>
+      {/* The hidden draw before "Teams zuweisen": alphabetical name grid (the ✕
+          shows on hover), add field, reveal button. See specs/team-management.md
+          ("Verdeckte Auslosung"). */}
+      <Section title="Verdeckte Auslosung (vor „Teams zuweisen“)">
+        <div className="draw-setup">
+          <p className="draw-pool-count">7 Spieler · die Teams werden gleich ausgelost</p>
+          <ul className="draw-pool" aria-label="Spieler">
+            {['Alex', 'Andi', 'Bianca', 'Carina', 'Fabian Sp.', 'Isabella', 'Michael M.'].map(name => (
+              <li key={name} className="draw-pool-name">
+                <span className="draw-pool-label">{name}</span>
+                <button type="button" className="draw-pool-remove" aria-label={`${name} entfernen`}><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" fill="none" /></svg></button>
+              </li>
+            ))}
+          </ul>
+          <form className="name-form draw-add-form" onSubmit={e => e.preventDefault()}>
+            <input placeholder="Name hinzufügen" aria-label="Name hinzufügen" readOnly />
+            <button type="submit">Hinzufügen</button>
+          </form>
+          <button type="button" className="draw-reveal-button">Teams zuweisen</button>
+        </div>
+      </Section>
+
+      {/* A long roster after the reveal: the members share a column grid
+          (measured by rosterFit.ts → data-columns) so the card stays on a 1080p screen. */}
+      <Section title="Zwei Teams mit vielen Spielern">
+        <div id="teams" data-team-count={2} style={{ marginTop: 0 }}>
+          {[
+            ['Jo', 'Kathi', 'Michi H.', 'David', 'Phillip L.', 'Kerstin', 'Steffi', 'Julia', 'Péter', 'Mike', 'Manuel', 'Tom'],
+            ['Obi', 'Gerhard', 'Ines', 'Andi', 'Maxi', 'Rainer', 'Theresa', 'Ricky', 'Thomas', 'Martin', 'Sebi', 'Michael M.'],
+          ].map((members, i) => (
+            <div className="team" data-team={`team${i + 1}`} key={i}>
+              <TeamCardName team={`team${i + 1}` as TeamKey} name={`Team ${i + 1}`} />
+              <ul className="team-members team-members-editable" data-columns={2}>
+                {members.map(m => (
+                  <li className="team-member-row" key={m}>
+                    <input className="team-member-input" defaultValue={m} readOnly />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </div>
       </Section>
 

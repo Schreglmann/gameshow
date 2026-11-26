@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type FormEvent } from 'react';
+import { useState, useEffect, useRef, useCallback, type FormEvent } from 'react';
 import { useGamemasterAnswer, useGamemasterControls, useSendGamemasterCommand, requestShowReemit } from '@/hooks/useGamemasterSync';
 import { useGameContext } from '@/context/GameContext';
 import { getJoker } from '@/data/jokers';
@@ -16,6 +16,7 @@ import { teamDisplayOrder } from '@/utils/teamOrder';
 import { teamJokersUsed, teamKeys, trailingTeams } from '@/utils/teams';
 import '@/styles/gamemaster.css';
 import TeamDot from './TeamDot';
+import GmButtonMenu from './GmButtonMenu';
 
 /** Neutral stand-in for a masked answer text — never derived from the answer, so its
  *  length gives nothing away. */
@@ -27,13 +28,17 @@ interface GamemasterViewProps {
    *  info, next-question preview) so the host can show the GM screen to the players.
    *  See specs/gamemaster-hide-answers.md. */
   hideAnswers?: boolean;
+  /** Raised while a control's popover (a button `menu`) is open, so the
+   *  /gamemaster screen's document-level click/key handlers don't advance the
+   *  show behind it. See specs/team-management.md ("GM button menu"). */
+  onOverlayActiveChange?: (active: boolean) => void;
 }
 
 /**
  * Shared gamemaster view: answer card + controls panel.
  * Used by both /gamemaster (full-screen) and /admin#answers (embedded).
  */
-export default function GamemasterView({ showAnswerImages = false, hideAnswers = false }: GamemasterViewProps = {}) {
+export default function GamemasterView({ showAnswerImages = false, hideAnswers = false, onOverlayActiveChange }: GamemasterViewProps = {}) {
   const data = useGamemasterAnswer();
   const controlsData = useGamemasterControls();
   const sendCommand = useSendGamemasterCommand();
@@ -252,6 +257,7 @@ export default function GamemasterView({ showAnswerImages = false, hideAnswers =
               key={control.id}
               control={control}
               onCommand={sendCommand}
+              onOverlayActiveChange={onOverlayActiveChange}
             />
           ))}
         </div>
@@ -511,16 +517,17 @@ function JokerTeamCard({ team, label, enabled, used, canUseComeback, onToggle }:
 interface ControlRendererProps {
   control: GamemasterControl;
   onCommand: (controlId: string, value?: string | Record<string, string>) => void;
+  onOverlayActiveChange?: (active: boolean) => void;
 }
 
-function ControlRenderer({ control, onCommand }: ControlRendererProps) {
+function ControlRenderer({ control, onCommand, onOverlayActiveChange }: ControlRendererProps) {
   switch (control.type) {
     case 'nav':
       return <NavControl control={control} onCommand={onCommand} />;
     case 'button':
       return <ButtonControl control={control} onCommand={onCommand} />;
     case 'button-group':
-      return <ButtonGroupControl control={control} onCommand={onCommand} />;
+      return <ButtonGroupControl control={control} onCommand={onCommand} onOverlayActiveChange={onOverlayActiveChange} />;
     case 'input-group':
       return <InputGroupControl control={control} onCommand={onCommand} />;
     case 'info':
@@ -564,23 +571,45 @@ function ButtonControl({ control, onCommand }: {
   );
 }
 
-function ButtonGroupControl({ control, onCommand }: {
+function ButtonGroupControl({ control, onCommand, onOverlayActiveChange }: {
   control: Extract<GamemasterControl, { type: 'button-group' }>;
   onCommand: (id: string) => void;
+  onOverlayActiveChange?: (active: boolean) => void;
 }) {
+  // A button with a `menu` opens a popover instead of sending its own id.
+  const [openMenu, setOpenMenu] = useState<{ id: string; anchor: HTMLElement } | null>(null);
+  const closeMenu = useCallback(() => setOpenMenu(null), []);
+  const menuButton = openMenu ? control.buttons.find(b => b.id === openMenu.id) : undefined;
+  // The button vanished (e.g. the player was moved by another device): drop the menu.
+  const menuOpen = !!(openMenu && menuButton?.menu?.length);
+  useEffect(() => {
+    if (!onOverlayActiveChange) return;
+    onOverlayActiveChange(menuOpen);
+    return () => { if (menuOpen) onOverlayActiveChange(false); };
+  }, [menuOpen, onOverlayActiveChange]);
   return (
-    <div className="gm-button-group">
-      {control.label && <div className="gm-group-label">{control.label}</div>}
-      <div className="gm-button-row">
+    <div className={`gm-button-group${control.team ? ' gm-button-group--team' : ''}`} data-team={control.team}>
+      {control.label && (
+        <div className="gm-group-label">
+          {control.team && <TeamDot team={control.team} />}
+          {control.label}
+        </div>
+      )}
+      <div className={`gm-button-row${control.layout === 'grid' ? ' gm-button-row--grid' : ''}`}>
         {control.buttons.map((btn: GamemasterButtonDef) => {
           const variantClass = btn.variant ? ` gm-btn--${btn.variant}` : '';
           const activeClass = btn.active ? ' gm-btn--active' : '';
           return (
             <button
               key={btn.id}
-              className={`gm-btn${variantClass}${activeClass}${btn.sublabel ? ' gm-btn--stacked' : ''}`}
+              className={`gm-btn${variantClass}${activeClass}${btn.sublabel ? ' gm-btn--stacked' : ''}${openMenu?.id === btn.id ? ' gm-btn--menu-open' : ''}`}
               disabled={btn.disabled}
-              onClick={() => onCommand(btn.id)}
+              aria-haspopup={btn.menu ? 'menu' : undefined}
+              aria-expanded={btn.menu ? openMenu?.id === btn.id : undefined}
+              onClick={e => {
+                if (btn.menu?.length) setOpenMenu({ id: btn.id, anchor: e.currentTarget });
+                else onCommand(btn.id);
+              }}
             >
               <span className="gm-btn-label">{btn.label}</span>
               {btn.sublabel && <span className="gm-btn-sublabel">{btn.sublabel}</span>}
@@ -588,6 +617,15 @@ function ButtonGroupControl({ control, onCommand }: {
           );
         })}
       </div>
+      {menuOpen && openMenu && menuButton && (
+        <GmButtonMenu
+          anchor={openMenu.anchor}
+          title={menuButton.label}
+          items={menuButton.menu!}
+          onSelect={onCommand}
+          onClose={closeMenu}
+        />
+      )}
     </div>
   );
 }

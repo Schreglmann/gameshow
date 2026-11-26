@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { seedTeams, openShowHomeForm, isolateShowWsState } from '../_helpers/setup';
+import { seedTeams, openShowHomeForm, addShowPlayers, isolateShowWsState } from '../_helpers/setup';
 
 // Spec: specs/app-navigation-flow.md
 test.describe('App navigation flow', () => {
@@ -9,8 +9,8 @@ test.describe('App navigation flow', () => {
   test.beforeEach(async ({ page }) => { await isolateShowWsState(page); });
 
   test('landing → rules → game path is reachable', async ({ page }) => {
-    const textarea = await openShowHomeForm(page);
-    await textarea.fill('Alice, Bob');
+    await openShowHomeForm(page);
+    await addShowPlayers(page, 'Alice, Bob');
     await page.locator('button:has-text("Teams zuweisen")').click();
 
     // HomeScreen advances on ArrowRight / Space / any click once teams are set.

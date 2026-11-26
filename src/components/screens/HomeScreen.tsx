@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGameContext } from '@/context/GameContext';
 import { useGamemasterSync, useGamemasterControlsSync, useGamemasterCommandListener } from '@/hooks/useGamemasterSync';
@@ -11,11 +11,17 @@ import TeamCountWarning from '@/components/screens/TeamCountWarning';
 import CacheStatusBanner from './CacheStatusBanner';
 import InstallButton from '@/components/common/InstallButton';
 import TeamCardName from '@/components/common/TeamCardName';
+import { isInactiveShowTab, onBecameActive } from '@/services/showPresenceState';
+import { drawnPlayers, movePlayer, normalizePlayerName, parsePlayerNames, removePlayerByName } from '@/utils/teamDraw';
+import { fitRosterLayout, maxRosterColumns } from '@/utils/rosterFit';
+
+/** The player grid before the reveal is alphabetical, so team order can't give the draw away. */
+const alphabetical = (names: readonly string[]) => [...names].sort((a, b) => a.localeCompare(b, 'de'));
 
 export default function HomeScreen() {
-  const { state, dispatch, assignTeams } = useGameContext();
+  const { state, dispatch, assignTeams, reconcileTeamDraw, revealTeams } = useGameContext();
   const navigate = useNavigate();
-  const [nameInput, setNameInput] = useState('');
+  const [addInput, setAddInput] = useState('');
   // Inline editing on the show (team names AND member rosters): while any field
   // is focused, `editingRef` is true. The window-level "click anywhere to
   // advance" listener uses this — but the click that ENDS editing (clicking on
@@ -50,6 +56,7 @@ export default function HomeScreen() {
   // instead of naming team1/team2. See specs/team-count.md.
   const activeTeams = useMemo(() => teamKeys(teamCount), [teamCount]);
   const hasTeams = activeTeams.some(key => teamRoster(state.teams, key).length > 0);
+  const teamsRevealed = state.teams.teamsRevealed === true;
   // Whether this show has TEAMS to set up at all. Two things switch it off, and
   // both suppress the entire assignment/overview UI so the host just starts:
   //   0 teams — the point system is off, there is nothing to score.
@@ -66,18 +73,103 @@ export default function HomeScreen() {
   const jokerCount = (state.settings.enabledJokers ?? []).length;
   const isNameLong = useTeamNameCheck({ jokerCount, teamCount: activeTeams.length, totalGames: state.settings.totalGames });
 
-  // When the active gameshow has a configured roster (`GameshowConfig.players`),
-  // prefill the randomization textarea once so the host only has to click "Teams
-  // zuweisen". Runs only while the textarea is actually shown (random mode, no
-  // teams yet) and only if the host hasn't already typed something — never
-  // clobber their input. The ref makes this a one-shot after settings load.
-  const prefilledRef = useRef(false);
+  // ── Hidden draw (random mode) ──
+  // The draw lives in the normal rosters — the only list of names — and is made
+  // in the background as soon as this screen has its settings; `teamsRevealed`
+  // keeps it off the show until "Teams zuweisen". Adding or removing a player
+  // keeps everyone else where they are. See specs/team-management.md
+  // ("Verdeckte Auslosung").
+  const hiddenDraw = teamsEnabled && teamRandomizationEnabled && !teamsRevealed;
+  // In manual mode the rosters are always on screen; in random mode only once revealed.
+  const teamsVisible = !teamRandomizationEnabled || teamsRevealed;
+  const drawn = useMemo(() => drawnPlayers(state.teams, activeTeams), [state.teams, activeTeams]);
+  const drawEmpty = drawn.length === 0;
+
+  // An inactive show tab must not author a draw; re-run once it takes over.
+  const [activeTick, setActiveTick] = useState(0);
+  useEffect(() => onBecameActive(() => setActiveTick(t => t + 1)), []);
+
+  // Draw the configured players once, on load, when there is no draw yet. A
+  // reload with a draw in place keeps it — and does not bring back players the
+  // gamemaster removed.
+  const initialDrawRef = useRef(false);
   useEffect(() => {
-    if (prefilledRef.current) return;
-    if (!teamsEnabled || !teamRandomizationEnabled || hasTeams || players.length === 0) return;
-    prefilledRef.current = true;
-    setNameInput(prev => (prev.trim() === '' ? players.join(', ') : prev));
-  }, [players, teamsEnabled, teamRandomizationEnabled, hasTeams]);
+    if (initialDrawRef.current || !state.settingsLoaded || !hiddenDraw || isInactiveShowTab()) return;
+    initialDrawRef.current = true;
+    if (drawEmpty && players.length > 0) reconcileTeamDraw(players);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.settingsLoaded, hiddenDraw, activeTick]);
+
+  // Configured players changed at runtime before the reveal (admin Gameshows
+  // tab, live reload): place the added names and drop the removed ones, the
+  // same way the add field and the ✕ do.
+  const prevPlayersRef = useRef<string[] | null>(null);
+  useEffect(() => {
+    if (!state.settingsLoaded) return;
+    const prev = prevPlayersRef.current;
+    prevPlayersRef.current = players;
+    if (prev === null || !hiddenDraw || isInactiveShowTab()) return;
+    if (prev.join('\n') === players.join('\n')) return;
+    const count = (list: readonly string[]) => {
+      const m = new Map<string, number>();
+      for (const n of list) {
+        const k = normalizePlayerName(n).toLowerCase();
+        m.set(k, (m.get(k) ?? 0) + 1);
+      }
+      return m;
+    };
+    const before = count(prev);
+    const after = count(players);
+    const names = [...drawn];
+    for (const [k, n] of before) {
+      for (let i = 0; i < n - (after.get(k) ?? 0); i++) {
+        const idx = names.findIndex(x => normalizePlayerName(x).toLowerCase() === k);
+        if (idx >= 0) names.splice(idx, 1);
+      }
+    }
+    const added = new Map(after);
+    for (const [k, n] of before) added.set(k, (added.get(k) ?? 0) - n);
+    for (const p of players) {
+      const k = normalizePlayerName(p).toLowerCase();
+      const left = added.get(k) ?? 0;
+      if (left <= 0) continue;
+      added.set(k, left - 1);
+      names.push(p);
+    }
+    reconcileTeamDraw(names);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [players, state.settingsLoaded]);
+
+  /** Add one or more (comma-separated) players: each joins the smallest team. */
+  const addPlayers = useCallback((raw: string) => {
+    const names = parsePlayerNames(raw);
+    if (names.length > 0) reconcileTeamDraw([...drawn, ...names]);
+  }, [drawn, reconcileTeamDraw]);
+
+  /** Remove one player by name (the show's ✕), wherever the draw put them. */
+  const removePlayer = useCallback((name: string) => {
+    const patch = removePlayerByName(state.teams, activeTeams, name);
+    if (patch) dispatch({ type: 'SET_TEAMS', payload: patch });
+  }, [state.teams, activeTeams, dispatch]);
+
+  /** "Teams zuweisen": show the draw as it is — never reshuffles. */
+  const revealDraw = useCallback(() => {
+    if (drawn.length > 0) revealTeams();
+  }, [drawn.length, revealTeams]);
+
+  /** GM popover "→ Team X": move the player at `index` of team `from`. */
+  const moveTo = useCallback((from: TeamKey, index: number, to: TeamKey) => {
+    const name = teamRoster(state.teams, from)[index];
+    if (name === undefined) return;
+    const patch = movePlayer(state.teams, from, name, to);
+    if (patch) dispatch({ type: 'SET_TEAMS', payload: patch });
+  }, [dispatch, state.teams]);
+
+  /** "Neu mischen": redraw everyone in the draw (or the configured players if it is empty). */
+  const reshuffle = useCallback(() => {
+    const pool = drawn.length > 0 ? drawn : players;
+    if (pool.length > 0) assignTeams(pool);
+  }, [drawn, players, assignTeams]);
 
   // Broadcast screen info to gamemaster
   useGamemasterSync({
@@ -121,6 +213,42 @@ export default function HomeScreen() {
     label: teamName(state.teams, teamKey),
     variant: 'primary' as const,
   }));
+  // Random mode: every team as a card of player buttons — the GM's preview of
+  // the draw. Tapping a player opens a popover next to the name with
+  // "→ <other team>" for every other team and "Entfernen" (the button `menu`).
+  // Within a card the names are alphabetical so one is quick to find among 30+;
+  // ids keep the roster index, which is what the commands address.
+  // See specs/team-management.md ("Verdeckte Auslosung").
+  const gmDrawControls: GamemasterControl[] = gmTeamOrder.map(teamKey => {
+    const members = teamRoster(state.teams, teamKey);
+    const byName = members
+      .map((m, i) => ({ m, i }))
+      .sort((a, b) => a.m.localeCompare(b.m, 'de'));
+    return {
+      type: 'button-group',
+      id: `draw-${teamKey}`,
+      label: `${teamName(state.teams, teamKey)} (${members.length})`,
+      layout: 'grid',
+      team: teamKey,
+      buttons: byName.map(({ m, i }) => ({
+        id: `player-${teamKey}-${i}`,
+        label: m,
+        menu: [
+          ...gmTeamOrder
+            .filter(k => k !== teamKey)
+            .map(k => ({ id: `mvto-${teamKey}-${i}-${k}`, label: `→ ${teamName(state.teams, k)}` })),
+          { id: `rm-${teamKey}-${i}`, label: 'Entfernen', variant: 'danger' as const },
+        ],
+      })),
+    };
+  });
+  const gmAddPlayerControl: GamemasterControl = {
+    type: 'input-group',
+    id: 'add-player',
+    inputs: [{ id: 'name', label: 'Spieler hinzufügen', inputType: 'text', placeholder: 'Name (mehrere mit Komma)' }],
+    submitLabel: 'Hinzufügen',
+  };
+  const gmReshuffleControl: GamemasterControl = { type: 'button', id: 'reshuffle-teams', label: 'Neu mischen' };
   const gmSwapControl: GamemasterControl[] = mirrorEnabled
     ? [{ type: 'button', id: 'swap-teams', label: 'Teams tauschen' }]
     : [];
@@ -185,22 +313,30 @@ export default function HomeScreen() {
       ...gmSwapControl,
       { type: 'nav', id: 'nav', hideBack: true },
     ];
-  } else if (!hasTeams) {
+  } else if (!teamsRevealed) {
+    // No "Weiter" here: advancing is blocked until the reveal, so it would only
+    // compete with "Teams zuweisen". The actions sit ABOVE the team cards, so
+    // the GM never has to scroll past 30+ names to reveal or reshuffle.
     gamemasterControls = [
       {
-        type: 'input-group',
-        id: 'assign-teams',
-        // The roster is mirrored both ways: the show's prefilled/typed value seeds
-        // the GM field (`value`), and every GM keystroke is echoed back to the show
-        // (`emitOnChange` → 'assign-teams:change' → setNameInput) so the frontend
-        // textarea reflects GM edits live. See specs/team-management.md.
-        inputs: [{ id: 'names', label: 'Namen', inputType: 'text', placeholder: 'Name 1, Name 2, ...', value: nameInput, emitOnChange: true }],
-        submitLabel: 'Teams zuweisen',
+        type: 'info',
+        id: 'draw-preview',
+        text: 'Vorschau – auf der Show noch verborgen. Spieler antippen zum Verschieben oder Entfernen.',
       },
-      { type: 'nav', id: 'nav', hideBack: true },
+      { type: 'button', id: 'reveal-teams', label: 'Teams zuweisen', variant: 'primary', disabled: drawEmpty },
+      gmReshuffleControl,
+      gmAddPlayerControl,
+      ...gmDrawControls,
     ];
   } else {
+    // Same layout as before the reveal: the actions on top, in the same slots —
+    // "Zuweisung verbergen" (undo the reveal; the draw stays) where "Teams zuweisen"
+    // was — then the team cards, then rename / swap / "Weiter" at the bottom.
     gamemasterControls = [
+      { type: 'button', id: 'hide-teams', label: 'Zuweisung verbergen' },
+      gmReshuffleControl,
+      gmAddPlayerControl,
+      ...gmDrawControls,
       {
         type: 'button-group',
         id: 'edit-team',
@@ -214,16 +350,21 @@ export default function HomeScreen() {
   useGamemasterControlsSync(gamemasterControls);
 
   useGamemasterCommandListener(useCallback((cmd: GamemasterCommand) => {
-    if (cmd.controlId === 'nav-forward' && (!teamsEnabled || hasTeams || !teamRandomizationEnabled)) {
+    if (cmd.controlId === 'nav-forward' && (!teamsEnabled || teamsVisible)) {
       navigate('/rules');
-    } else if (cmd.controlId === 'assign-teams:change' && cmd.value && typeof cmd.value === 'object') {
-      // Live mirror: every keystroke in the GM's roster field is reflected in the
-      // frontend textarea so the host/spectators see the names being edited.
-      setNameInput((cmd.value as Record<string, string>).names ?? '');
-    } else if (cmd.controlId === 'assign-teams' && cmd.value && typeof cmd.value === 'object') {
-      const names = ((cmd.value as Record<string, string>).names ?? '')
-        .split(/[,\n]/).map(n => n.trim()).filter(Boolean);
-      if (names.length > 0) assignTeams(names);
+    } else if (cmd.controlId === 'reshuffle-teams') {
+      reshuffle();
+    } else if (cmd.controlId === 'reveal-teams') {
+      revealDraw();
+    } else if (cmd.controlId === 'hide-teams') {
+      // Back to the hidden draw: only the flag moves, the rosters stay as they are.
+      dispatch({ type: 'SET_TEAMS_REVEALED', payload: { revealed: false } });
+    } else if (cmd.controlId === 'add-player' && cmd.value && typeof cmd.value === 'object') {
+      addPlayers((cmd.value as Record<string, string>).name ?? '');
+    } else if (cmd.controlId.startsWith('mvto-')) {
+      // `mvto-<from>-<index>-<to>` from a player's popover.
+      const [, from, index, to] = cmd.controlId.split('-');
+      if (from && to && isTeamKey(from) && isTeamKey(to)) moveTo(from, parseInt(index ?? '', 10), to);
     } else if (cmd.controlId.startsWith('add-team') && cmd.value && typeof cmd.value === 'object') {
       const key = cmd.controlId.slice('add-'.length);
       if (isTeamKey(key)) addMember(key, (cmd.value as Record<string, string>).name ?? '');
@@ -252,18 +393,12 @@ export default function HomeScreen() {
       }
       setGmEditingTeam(null);
     }
-  }, [teamsEnabled, hasTeams, teamRandomizationEnabled, navigate, assignTeams, addMember, removeMember, dispatch, state.teams, gmEditingTeam]));
+  }, [teamsEnabled, teamsVisible, navigate, revealDraw, reshuffle, addPlayers, moveTo, addMember, removeMember, dispatch, state.teams, gmEditingTeam]));
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
-    const names = nameInput
-      .split(/[,\n]/)
-      .map(n => n.trim())
-      .filter(Boolean);
-    if (names.length > 0) {
-      assignTeams(names);
-      setNameInput('');
-    }
+    addPlayers(addInput);
+    setAddInput('');
   };
 
   // ── Inline team-name editing (show) ──
@@ -327,7 +462,7 @@ export default function HomeScreen() {
     if (Object.keys(patch).length > 0) dispatch({ type: 'SET_TEAMS', payload: patch });
   };
 
-  const canAdvance = !teamsEnabled || hasTeams || !teamRandomizationEnabled;
+  const canAdvance = !teamsEnabled || teamsVisible;
 
   useEffect(() => {
     if (!canAdvance) return;
@@ -362,10 +497,35 @@ export default function HomeScreen() {
   // remove). In MANUAL mode a trailing blank "ghost" slot is appended so you can
   // add players by typing into it (teams were formed outside the show — you build
   // them by hand here and/or on the gamemaster). In RANDOM mode the ghost slot is
-  // hidden — names come from the pool textarea/shuffle. The card stops click
+  // hidden — players come from the draw and the GM's add field. The card stops click
   // propagation so editing the roster (or renaming a team) never triggers the
   // window "click to advance" listener — advancing happens via empty-space
   // clicks, the arrow/space keys, or the gamemaster forward control.
+  // Member columns per card, MEASURED: one column of names while the card fits
+  // the screen without scrolling, more only when it does not; a multi-column
+  // card keeps the 1-column font unless a name does not fit its cell. Refit
+  // whenever what is shown (names, team names, team count) or the viewport
+  // changes. See src/utils/rosterFit.ts and specs/team-management.md.
+  const teamsGridRef = useRef<HTMLDivElement>(null);
+  const [memberCols, setMemberCols] = useState<Record<string, number>>({});
+  const [layoutTick, setLayoutTick] = useState(0);
+  useEffect(() => {
+    const refit = () => setLayoutTick(t => t + 1);
+    window.addEventListener('resize', refit);
+    // The theme's web font changes every width; fit again once it is in.
+    document.fonts?.ready.then(refit).catch(() => {});
+    return () => window.removeEventListener('resize', refit);
+  }, []);
+  const layoutKey = activeTeams
+    .map(k => `${(memberDrafts[k] ?? []).join('\u0001')}|${state.teams[`${k}Name`] ?? ''}`)
+    .join('\u0002');
+  useLayoutEffect(() => {
+    const grid = teamsGridRef.current;
+    if (!grid) return;
+    const next = fitRosterLayout(grid, maxRosterColumns(activeTeams.length));
+    setMemberCols(prev => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
+  }, [layoutKey, layoutTick, teamsVisible, activeTeams.length]);
+
   const renderTeam = (key: TeamKey) => {
     const n = teamNumber(key);
     const members = memberDrafts[key] ?? [];
@@ -399,7 +559,7 @@ export default function HomeScreen() {
           onClick={e => { e.stopPropagation(); startEdit(key); }}
         />
       )}
-      <ul className="team-members team-members-editable">
+      <ul className="team-members team-members-editable" data-columns={memberCols[key] ?? 1}>
         {(!teamRandomizationEnabled ? displayMemberSlots(members) : members).map((value, idx) => {
           const isGhost = idx >= members.length;
           return (
@@ -439,21 +599,57 @@ export default function HomeScreen() {
         // Point system off → no teams. Just a start prompt; advancing is handled
         // by the window click/key listener (and the GM forward control).
         <p id="startPrompt">Zum Starten klicken</p>
-      ) : teamRandomizationEnabled && !hasTeams ? (
-        <>
-          <p id="teamAssignmentText">
-            Namen eingeben, um sie den Teams zuzuweisen:
+      ) : hiddenDraw ? (
+        <div className="draw-setup">
+          <p className="draw-pool-count">
+            {drawEmpty ? 'Noch keine Spieler' : `${drawn.length} Spieler · die Teams werden gleich ausgelost`}
           </p>
-          <form onSubmit={handleSubmit} className="name-form">
-            <textarea
-              value={nameInput}
-              onChange={e => setNameInput(e.target.value)}
-              placeholder="Name 1, Name 2, ..."
-              required
+          {!drawEmpty && (
+            <ul className="draw-pool" aria-label="Spieler">
+              {alphabetical(drawn).map((name, i) => (
+                <li key={`${name}-${i}`} className="draw-pool-name">
+                  <span className="draw-pool-label">{name}</span>
+                  <button
+                    type="button"
+                    className="draw-pool-remove"
+                    aria-label={`${name} entfernen`}
+                    title={`${name} entfernen`}
+                    onClick={() => removePlayer(name)}
+                  >
+                    {/* An SVG, not the "×" character: the glyph sits off-centre in its
+                        line box in most theme fonts. */}
+                    <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" fill="none" /></svg>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <form onSubmit={handleAdd} className="name-form draw-add-form">
+            <input
+              value={addInput}
+              onChange={e => setAddInput(e.target.value)}
+              placeholder="Name hinzufügen"
+              title="Mehrere Namen mit Komma trennen"
+              aria-label="Name hinzufügen"
             />
-            <button type="submit">Teams zuweisen</button>
+            <button type="submit" disabled={!addInput.trim()}>Hinzufügen</button>
           </form>
-        </>
+          <button
+            type="button"
+            className="draw-reveal-button"
+            disabled={drawEmpty}
+            onClick={e => {
+              // The reveal makes the screen advanceable, and React attaches the
+              // window "click to continue" listener while THIS click is still
+              // bubbling — which then fired and skipped straight to the rules,
+              // so the audience never saw the teams.
+              e.stopPropagation();
+              revealDraw();
+            }}
+          >
+            Teams zuweisen
+          </button>
+        </div>
       ) : (
         <>
           {!teamRandomizationEnabled && (
@@ -461,7 +657,7 @@ export default function HomeScreen() {
               Spieler den Teams zuweisen:
             </p>
           )}
-          <div id="teams" data-team-count={activeTeams.length}>
+          <div id="teams" ref={teamsGridRef} data-team-count={activeTeams.length}>
             {/* Crowd-facing setup screen → follow the frontend team order. */}
             {teamDisplayOrder(state.teams.orderSwapped, false, mirrorEnabled, teamCount).map(renderTeam)}
           </div>

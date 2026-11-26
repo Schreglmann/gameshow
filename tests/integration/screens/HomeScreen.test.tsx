@@ -44,6 +44,14 @@ function renderHomeScreen() {
   );
 }
 
+/** Type names into the add field, add them, then press "Teams zuweisen". */
+async function addAndReveal(user: ReturnType<typeof userEvent.setup>, names: string) {
+  const input = await screen.findByLabelText('Name hinzufügen');
+  await user.type(input, names);
+  await user.click(screen.getByRole('button', { name: 'Hinzufügen' }));
+  await user.click(screen.getByRole('button', { name: 'Teams zuweisen' }));
+}
+
 describe('HomeScreen', () => {
   beforeEach(() => {
     localStorage.clear();
@@ -205,31 +213,30 @@ describe('HomeScreen', () => {
     sendWsSpy.mockRestore();
   });
 
-  it('shows team assignment form when team randomization is enabled', async () => {
+  it('shows the player list and an add field when team randomization is enabled', async () => {
     renderHomeScreen();
-    await waitFor(() => {
-      expect(
-        screen.getByText('Namen eingeben, um sie den Teams zuzuweisen:')
-      ).toBeInTheDocument();
-    });
+    expect(await screen.findByLabelText('Name hinzufügen')).toBeInTheDocument();
+    expect(screen.getByText('Noch keine Spieler')).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('Name 1, Name 2, ...')).not.toBeInTheDocument();
   });
 
-  it('prefills the randomization textarea with the configured gameshow roster', async () => {
+  it('draws the configured gameshow roster on load and lists it alphabetically', async () => {
     mockedFetchSettings.mockResolvedValue({
       pointSystemEnabled: true,
       teamRandomizationEnabled: true,
       globalRules: ['Rule 1'],
-      players: ['Alice', 'Bob', 'Charlie'],
+      players: ['Charlie', 'Alice', 'Bob'],
     });
     renderHomeScreen();
-
-    const textarea = await screen.findByPlaceholderText('Name 1, Name 2, ...');
     await waitFor(() => {
-      expect((textarea as HTMLTextAreaElement).value).toBe('Alice, Bob, Charlie');
+      const names = Array.from(document.querySelectorAll('.draw-pool-label')).map(n => n.textContent);
+      expect(names).toEqual(['Alice', 'Bob', 'Charlie']);
     });
+    expect(screen.getByText('3 Spieler · die Teams werden gleich ausgelost')).toBeInTheDocument();
+    expect(document.querySelector('#teams')).toBeNull();
   });
 
-  it('mirrors the prefilled roster to the gamemaster assign-teams control', async () => {
+  it('gives the gamemaster an add field and "Teams zuweisen" but no "Weiter" before the reveal', async () => {
     mockedFetchSettings.mockResolvedValue({
       pointSystemEnabled: true,
       teamRandomizationEnabled: true,
@@ -239,61 +246,39 @@ describe('HomeScreen', () => {
     const sendWsSpy = vi.spyOn(backendSocket, 'sendWs');
     renderHomeScreen();
 
-    type Input = { id: string; value?: string };
-    type Ctrl = { id: string; inputs?: Input[] };
+    type Ctrl = { id: string; type: string; disabled?: boolean };
     type Payload = { controls?: Ctrl[] } | null;
-    // The roster loads async from /api/settings, so the value arrives on a later
-    // broadcast than the control's first emit — poll until it lands.
     await waitFor(() => {
-      const assignControls = sendWsSpy.mock.calls
-        .filter(([ch]) => ch === 'gamemaster-controls')
-        .map(([, d]) => (d as Payload)?.controls?.find(c => c.id === 'assign-teams'))
-        .filter((c): c is Ctrl => Boolean(c));
-      expect(assignControls.length).toBeGreaterThan(0);
-      const namesInput = assignControls.at(-1)!.inputs?.find(i => i.id === 'names');
-      expect(namesInput?.value).toBe('Alice, Bob, Charlie');
+      const last = sendWsSpy.mock.calls.filter(([ch]) => ch === 'gamemaster-controls').at(-1);
+      const controls = (last?.[1] as Payload)?.controls ?? [];
+      expect(controls.find(c => c.id === 'add-player')?.type).toBe('input-group');
+      expect(controls.find(c => c.id === 'reveal-teams')?.disabled).toBe(false);
+      expect(controls.find(c => c.type === 'nav')).toBeUndefined();
     });
     sendWsSpy.mockRestore();
   });
 
-  it('leaves the textarea blank when the gameshow has no configured roster', async () => {
+  it('disables "Teams zuweisen" while nobody is in the draw', async () => {
     renderHomeScreen();
-
-    const textarea = await screen.findByPlaceholderText('Name 1, Name 2, ...');
-    // settings have loaded (globalRules applied) but no roster → still empty
-    await waitFor(() => expect(screen.getByText('Teams zuweisen')).toBeInTheDocument());
-    expect((textarea as HTMLTextAreaElement).value).toBe('');
+    await screen.findByLabelText('Name hinzufügen');
+    expect(screen.getByRole('button', { name: 'Teams zuweisen' })).toBeDisabled();
   });
 
   it('does not show "Weiter" button when no teams are assigned', async () => {
     renderHomeScreen();
-    await waitFor(() => {
-      expect(
-        screen.getByText('Namen eingeben, um sie den Teams zuzuweisen:')
-      ).toBeInTheDocument();
-    });
-    // Weiter should not be visible without teams
+    await screen.findByLabelText('Name hinzufügen');
     expect(screen.queryByText('Weiter')).not.toBeInTheDocument();
   });
 
-  it('assigns teams when names are submitted', async () => {
+  it('assigns teams when names are added and revealed', async () => {
     const user = userEvent.setup();
     renderHomeScreen();
+    await addAndReveal(user, 'Alice, Bob, Charlie, Dave');
 
-    await waitFor(() => {
-      expect(screen.getByPlaceholderText('Name 1, Name 2, ...')).toBeInTheDocument();
-    });
-
-    const textarea = screen.getByPlaceholderText('Name 1, Name 2, ...');
-    await user.type(textarea, 'Alice, Bob, Charlie, Dave');
-    await user.click(screen.getByText('Teams zuweisen'));
-
-    // Teams should be displayed
     await waitFor(() => {
       expect(screen.getByText('Team 1')).toBeInTheDocument();
       expect(screen.getByText('Team 2')).toBeInTheDocument();
     });
-
     // All names should appear as editable roster inputs (values, not text nodes).
     expect(screen.getByDisplayValue('Alice')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Bob')).toBeInTheDocument();
@@ -304,16 +289,7 @@ describe('HomeScreen', () => {
   it('navigates to /rules on click after teams are assigned', async () => {
     const user = userEvent.setup();
     renderHomeScreen();
-
-    await waitFor(() => {
-      expect(screen.getByPlaceholderText('Name 1, Name 2, ...')).toBeInTheDocument();
-    });
-
-    await user.type(
-      screen.getByPlaceholderText('Name 1, Name 2, ...'),
-      'Alice, Bob'
-    );
-    await user.click(screen.getByText('Teams zuweisen'));
+    await addAndReveal(user, 'Alice, Bob');
 
     await waitFor(() => {
       expect(screen.getByText('Team 1')).toBeInTheDocument();
@@ -327,10 +303,7 @@ describe('HomeScreen', () => {
   it('renames a team by clicking its heading (no navigation)', async () => {
     const user = userEvent.setup();
     renderHomeScreen();
-
-    const input = await screen.findByPlaceholderText('Name 1, Name 2, ...');
-    await user.type(input, 'Alice, Bob');
-    await user.click(screen.getByText('Teams zuweisen'));
+    await addAndReveal(user, 'Alice, Bob');
 
     await waitFor(() => {
       expect(screen.getByText('Team 1')).toBeInTheDocument();
@@ -349,32 +322,28 @@ describe('HomeScreen', () => {
     expect(mockedNavigate).not.toHaveBeenCalled();
   });
 
-  it('reflects a gamemaster edit of the roster field in the show textarea', async () => {
+  it('adds players from the gamemaster add field', async () => {
     renderHomeScreen();
-    const textarea = await screen.findByPlaceholderText('Name 1, Name 2, ...');
-    expect((textarea as HTMLTextAreaElement).value).toBe('');
+    await screen.findByLabelText('Name hinzufügen');
 
-    // Simulate the GM typing in its "Namen" field (emitOnChange → assign-teams:change).
     act(() => {
       __emitChannelForTests('gamemaster-command', {
-        controlId: 'assign-teams:change',
-        value: { names: 'Zoe, Max' },
+        controlId: 'add-player',
+        value: { name: 'Zoe, Max' },
         timestamp: Date.now() + Math.random(),
       });
     });
 
     await waitFor(() => {
-      expect((textarea as HTMLTextAreaElement).value).toBe('Zoe, Max');
+      const names = Array.from(document.querySelectorAll('.draw-pool-label')).map(n => n.textContent);
+      expect(names).toEqual(['Max', 'Zoe']);
     });
   });
 
   it('capitalizes every word of a multi-word name on assignment', async () => {
     const user = userEvent.setup();
     renderHomeScreen();
-
-    const textarea = await screen.findByPlaceholderText('Name 1, Name 2, ...');
-    await user.type(textarea, 'john smith, mary jane');
-    await user.click(screen.getByText('Teams zuweisen'));
+    await addAndReveal(user, 'john smith, mary jane');
 
     await waitFor(() => {
       expect(screen.getByDisplayValue('John Smith')).toBeInTheDocument();

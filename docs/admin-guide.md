@@ -650,7 +650,7 @@ From here you can:
 
 1. Open `http://localhost:3000` on the display (projector/TV)
 2. Open `http://localhost:3000/admin` on your host device (tablet/laptop)
-3. Players enter their names on the home screen
+3. The gameshow's players are drawn into teams in the background and listed on the home screen without their teams; add or remove names there or on the gamemaster. The gamemaster previews the draw, taps a player to move or remove them, can press **Neu mischen**, and reveals the teams with **Teams zuweisen** (**Zuweisung verbergen** takes them off the show again, keeping the draw)
 4. Navigate with **arrow keys** or by **clicking**
 5. After each game, award points to the winning team
 6. The app ends automatically on the summary screen

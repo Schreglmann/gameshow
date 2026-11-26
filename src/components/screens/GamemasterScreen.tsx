@@ -273,7 +273,7 @@ export default function GamemasterScreen() {
           onOverlayActiveChange={setOverlayActive}
         />
       </div>
-      <GamemasterView showAnswerImages={showAnswerImages} hideAnswers={hideAnswers} />
+      <GamemasterView showAnswerImages={showAnswerImages} hideAnswers={hideAnswers} onOverlayActiveChange={setOverlayActive} />
       {!gameActive && <InstallButton variant="gamemaster" label="Gamemaster installieren" />}
     </div>
   );

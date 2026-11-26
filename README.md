@@ -29,13 +29,9 @@ Open the app in a browser. You will see the **Home Screen**.
 
 ![Home Screen](./docs/screenshots/home-screen.png)
 
-Enter the names of all players into the text field, separated by commas:
+The players configured for the gameshow are listed on the home screen. Add anyone else with the **Name hinzufügen** field (several at once, separated by commas), or remove a name with the ✕ next to it.
 
-```
-Anna, Ben, Clara, David
-```
-
-Click **Weiter**. The app randomly assigns players to **Team 1** and **Team 2**.
+The app draws the teams in the background straight away and keeps them hidden. The gamemaster sees the draw on their phone: tapping a player opens a menu to move them to another team or remove them, and **Neu mischen** draws again. Adding or removing a player later only places or removes that one player. Click **Teams zuweisen** to show the teams; moving players and **Neu mischen** keep working after that. Revealed too early? **Zuweisung verbergen** on the gamemaster puts the show back to the player list without changing the draw.
 
 > **Tip:** If the team randomization screen does not appear, the host has disabled it — the game starts directly.
 

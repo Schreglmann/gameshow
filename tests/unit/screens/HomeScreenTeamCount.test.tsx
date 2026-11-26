@@ -69,7 +69,8 @@ describe('team setup at 3-4 teams', () => {
     const user = userEvent.setup();
     renderHome({ teamCount: 3, teamRandomizationEnabled: true });
     await waitFor(() => expect(screen.getByRole('button', { name: 'Teams zuweisen' })).toBeInTheDocument());
-    await user.type(screen.getByRole('textbox'), 'Ann, Ben, Cara, Dan, Eve');
+    await user.type(screen.getByLabelText('Name hinzufügen'), 'Ann, Ben, Cara, Dan, Eve');
+    await user.click(screen.getByRole('button', { name: 'Hinzufügen' }));
     await user.click(screen.getByRole('button', { name: 'Teams zuweisen' }));
     await waitFor(() => expect(teamCards()).toHaveLength(3));
     // Five players round-robin over three teams → 2 / 2 / 1, all of them shown.

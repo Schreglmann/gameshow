@@ -101,15 +101,9 @@ describe('App Navigation Integration', () => {
     renderApp();
 
     // Enter team names
-    await waitFor(() => {
-      expect(screen.getByPlaceholderText('Name 1, Name 2, ...')).toBeInTheDocument();
-    });
-
-    await user.type(
-      screen.getByPlaceholderText('Name 1, Name 2, ...'),
-      'Alice, Bob'
-    );
-    await user.click(screen.getByText('Teams zuweisen'));
+    await user.type(await screen.findByLabelText('Name hinzufügen'), 'Alice, Bob');
+    await user.click(screen.getByRole('button', { name: 'Hinzufügen' }));
+    await user.click(screen.getByRole('button', { name: 'Teams zuweisen' }));
 
     // Should show teams
     await waitFor(() => {
