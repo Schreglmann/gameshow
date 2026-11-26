@@ -33,7 +33,7 @@ import {
   type VideoReferenceMap,
 } from './video-reference-map.js';
 import { probeVideoTracks, buildTonemapVf, type ProbeResult } from './video-probe.js';
-import { computeSyncOps, buildNewSyncState, resolvePrevFiles, parseSyncState, applySnapshotOp, applyDeletionSafety, checkBulkDelete, makeRunId, type SyncState, type SyncOp, type DeletionSafetyResult, type BulkDeleteCheck, type FileMeta } from './nas-sync.js';
+import { computeSyncOps, buildNewSyncState, parseSyncState, applySnapshotOp, applyDeletionSafety, checkBulkDelete, makeRunId, type SyncState, type SyncOp, type DeletionSafetyResult, type BulkDeleteCheck, type FileMeta } from './nas-sync.js';
 import { readNasSyncConflicts, reconcileNasSyncConflicts, getNasSyncConflict, removeNasSyncConflict, countNasSyncConflicts, type DetectedConflict } from './nas-sync-conflicts.js';
 import { readPendingMoves, recordPendingMove, clearPendingMove, savePendingMoves, expirePendingMoves, computeMovedAwayRels, type PendingMove, type PendingMoveMap } from './nas-sync-moves.js';
 import { collectFileMetadata, collectTrashedRelPaths } from './nas-walk.js';
@@ -1699,7 +1699,7 @@ let nasSyncRunning = false;
 let nasQueueGeneration = 0;
 
 // In-memory sync-state snapshot. Mutated only after a NAS op succeeds, then
-// persisted to both .sync-state.json files (debounced). Seeded lazily on first
+// persisted to the per-device local-assets/.sync-state.json (debounced). Seeded lazily on first
 // use from LOCAL_ASSETS_BASE so it reflects whatever the last successful sync
 // wrote. Never rebuilt from a single-sided disk walk — doing so would claim the
 // NAS is in sync when a queued op had failed, causing the next bidirectional
@@ -1709,7 +1709,7 @@ function getSyncStateSnapshot(): SyncState {
   if (_syncStateSnapshot === null) {
     // Synchronous LOCAL-only read: LOCAL_ASSETS_BASE never goes stale, so this
     // is safe on the main thread and keeps the getter synchronous for its many
-    // callers. (The NAS-side `.sync-state.json` is read via async readSyncState.)
+    // callers. The sync state is per device, so there is no NAS-side read.
     const p = path.join(LOCAL_ASSETS_BASE, SYNC_STATE_FILE);
     _syncStateSnapshot = existsSync(p)
       ? parseSyncState(readFileSync(p, 'utf8'))
@@ -2029,7 +2029,13 @@ setInterval(() => {
 
 const SYNC_STATE_FILE = '.sync-state.json';
 
-// Async so a stale NAS mount can never block the main thread (see
+// The sync state is PER DEVICE: read and written only under LOCAL_ASSETS_BASE.
+// A legacy `.sync-state.json` on the NAS (written by older versions) is ignored —
+// it describes another device's tree, and using it as `prev` on a fresh clone
+// turned every NAS file into a `delete-nas` (see specs/sync-bidirectional.md
+// "Per-device sync state").
+//
+// Async so a slow disk can never block the main thread (see
 // specs/nas-freeze-resilience.md). ENOENT → empty state (fresh tree); any other
 // read error PROPAGATES so the sync run aborts rather than proceeding with an
 // empty `prev`, which would disable Layer 2's loss-ratio veto.
@@ -2073,8 +2079,8 @@ function debouncedSaveSyncState(): void {
     const snap = getSyncStateSnapshot();
     snap.lastSync = new Date().toISOString();
     // Fire-and-forget: writeSyncState handles its own errors and must not block.
+    // Local only: the snapshot is per device (specs/sync-bidirectional.md).
     void writeSyncState(LOCAL_ASSETS_BASE, snap);
-    void writeSyncState(NAS_BASE, snap);
   }, 2000);
 }
 
@@ -2271,9 +2277,10 @@ async function startupSyncInner(): Promise<void> {
     const runId = makeRunId();
     const queueGenAtStart = nasQueueGeneration;
 
-    const localState = await readSyncState(LOCAL_ASSETS_BASE);
-    const nasState = await readSyncState(NAS_BASE);
-    const prevFiles = resolvePrevFiles(localState, nasState);
+    // Per-device prev: only THIS tree's snapshot. Another device's snapshot (the
+    // legacy NAS-side copy) made a fresh clone read every NAS file as "deleted
+    // locally". No local snapshot ⇒ {} ⇒ union only, never a delete.
+    const prevFiles = (await readSyncState(LOCAL_ASSETS_BASE)).files;
 
     const [localFiles, nasFiles, trashedRels] = await Promise.all([
       collectFileMetadata(LOCAL_ASSETS_BASE, ASSET_FOLDERS),
@@ -2402,9 +2409,8 @@ async function startupSyncInner(): Promise<void> {
     // Build new state AFTER ops have run so failedOps reflects actual results.
     const newState = buildNewSyncState(localFiles, nasFiles, ops, failedOps);
 
-    // Write updated sync state to both sides
+    // Persist the per-device sync state (local only — see readSyncState note)
     await writeSyncState(LOCAL_ASSETS_BASE, newState);
-    await writeSyncState(NAS_BASE, newState);
     setSyncStateSnapshot(newState);
 
     nasSyncStats.startupSync = { phase: 'done', total: ops.length, done: ops.length };
@@ -2450,9 +2456,10 @@ async function periodicRescan(): Promise<void> {
     const runId = makeRunId();
     const queueGenAtStart = nasQueueGeneration;
 
-    const localState = await readSyncState(LOCAL_ASSETS_BASE);
-    const nasState = await readSyncState(NAS_BASE);
-    const prevFiles = resolvePrevFiles(localState, nasState);
+    // Per-device prev: only THIS tree's snapshot. Another device's snapshot (the
+    // legacy NAS-side copy) made a fresh clone read every NAS file as "deleted
+    // locally". No local snapshot ⇒ {} ⇒ union only, never a delete.
+    const prevFiles = (await readSyncState(LOCAL_ASSETS_BASE)).files;
 
     const [localFiles, nasFiles, trashedRels] = await Promise.all([
       collectFileMetadata(LOCAL_ASSETS_BASE, ASSET_FOLDERS),
@@ -2575,7 +2582,6 @@ async function periodicRescan(): Promise<void> {
     const newState = buildNewSyncState(localFiles, nasFiles, ops, failedOps);
 
     await writeSyncState(LOCAL_ASSETS_BASE, newState);
-    await writeSyncState(NAS_BASE, newState);
     setSyncStateSnapshot(newState);
     bgTaskDone(taskId);
     console.log(`[periodic-rescan] Done: ${ops.length} file(s) synced`);

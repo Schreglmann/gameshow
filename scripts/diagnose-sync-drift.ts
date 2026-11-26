@@ -32,7 +32,6 @@ import { existsSync, readFileSync, statSync } from 'fs';
 import { stat } from 'fs/promises';
 import {
   parseSyncState,
-  resolvePrevFiles,
   SAFETY_FOLDERS,
   type SyncState,
 } from '../server/nas-sync.js';
@@ -129,11 +128,11 @@ async function main(): Promise<void> {
   const localState = readSyncState(LOCAL_ASSETS_BASE);
   const nasState = readSyncState(NAS_BASE);
   console.log(`\nlocal .sync-state.json: ${localState.lastSync || '(empty)'}  (${Object.keys(localState.files).length} entries)`);
-  console.log(`NAS   .sync-state.json: ${nasState.lastSync || '(empty)'}  (${Object.keys(nasState.files).length} entries)`);
+  console.log(`NAS   .sync-state.json: ${nasState.lastSync || '(empty)'}  (${Object.keys(nasState.files).length} entries)  — legacy, ignored by the sync`);
 
-  const prevFiles = resolvePrevFiles(localState, nasState);
-  const winner = localState.lastSync >= nasState.lastSync ? 'local' : 'NAS';
-  console.log(`prev-state authoritative side: ${winner}  (${Object.keys(prevFiles).length} entries)\n`);
+  // The sync state is per device: prev is always the local file.
+  const prevFiles = localState.files;
+  console.log(`prev-state (local, per device): ${Object.keys(prevFiles).length} entries\n`);
 
   console.log('Walking local + NAS …');
   const t0 = Date.now();

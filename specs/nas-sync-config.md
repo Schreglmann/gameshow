@@ -31,7 +31,7 @@ Mirrors the existing editable-setting pattern (background-encoding cache mode, b
 - **`NAS_BASE`** in `asset-paths.ts` is resolved from the sidecar **once at module load**. All existing
   consumers keep reading the same constant, so the path change is picked up **after a server restart**.
   This is deliberate: the sync safety layers (loss-ratio veto, bulk-delete cap) and the
-  `.sync-state.json` files are tied to one stable NAS identity — re-targeting a running sync mid-flight
+  per-device `.sync-state.json` are tied to one stable NAS identity — re-targeting a running sync mid-flight
   would split operations across two mounts. Restart-to-apply is the safe boundary.
 - **`enabled`** is read **live** (`getNasSyncEnabled()`) at each sync trigger, so toggling it takes
   effect without a restart. It gates sync *write/propagation* only; NAS *reads* (e.g. random-frame
