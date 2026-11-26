@@ -13,11 +13,13 @@ const LOCK_STORAGE_KEY = 'gm-input-locked';
 const SHOW_ANSWER_IMAGES_STORAGE_KEY = 'gm-show-answer-images';
 const HIDE_ANSWERS_STORAGE_KEY = 'gm-hide-answers';
 
+// Default ON: a stray click or key press on the GM device must not advance the
+// show. Only an explicitly stored 'false' (the host unlocked) starts unlocked.
 function readStoredLock(): boolean {
   try {
-    return localStorage.getItem(LOCK_STORAGE_KEY) === 'true';
+    return localStorage.getItem(LOCK_STORAGE_KEY) !== 'false';
   } catch {
-    return false;
+    return true;
   }
 }
 

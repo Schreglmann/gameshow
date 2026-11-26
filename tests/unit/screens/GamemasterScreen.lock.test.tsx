@@ -45,7 +45,30 @@ describe('GamemasterScreen — input lock toggle', () => {
     sendCommandMock.mockClear();
   });
 
-  it('starts unlocked and forwards keyboard + click events', () => {
+  it('starts locked by default and ignores keyboard + click events', () => {
+    renderScreen();
+
+    const toggle = screen.getByRole('button', { name: 'Steuerung gesperrt' });
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+
+    act(() => {
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+      document.body.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowRight', bubbles: true }));
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+    });
+
+    act(() => {
+      const blank = document.createElement('div');
+      document.body.appendChild(blank);
+      blank.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      blank.remove();
+    });
+
+    expect(sendCommandMock).not.toHaveBeenCalled();
+  });
+
+  it('restores unlocked state from localStorage and forwards keyboard + click events', () => {
+    localStorage.setItem('gm-input-locked', 'false');
     renderScreen();
 
     const toggle = screen.getByRole('button', { name: 'Steuerung sperren' });
@@ -62,9 +85,30 @@ describe('GamemasterScreen — input lock toggle', () => {
       document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
     });
     expect(sendCommandMock).toHaveBeenCalledWith('nav-back');
+
+    sendCommandMock.mockClear();
+    act(() => {
+      const blank = document.createElement('div');
+      document.body.appendChild(blank);
+      blank.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      blank.remove();
+    });
+    expect(sendCommandMock).toHaveBeenCalledWith('nav-forward');
+  });
+
+  it('unlocking persists the choice', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+
+    await user.click(screen.getByRole('button', { name: 'Steuerung gesperrt' }));
+
+    const toggle = screen.getByRole('button', { name: 'Steuerung sperren' });
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+    expect(localStorage.getItem('gm-input-locked')).toBe('false');
   });
 
   it('locks and prevents keyboard + document-click events from sending commands', async () => {
+    localStorage.setItem('gm-input-locked', 'false');
     const user = userEvent.setup();
     renderScreen();
 
