@@ -119,7 +119,9 @@ beforeEach(() => {
   // The playthrough store (shuffle seed + reconciled question order + how far the
   // show got) is module-level and session-scoped, so without this a test would
   // inherit the deck and progress of the previous test that used the same
-  // gameId. Clearing it models a fresh page load. See specs/live-question-order.md.
+  // gameId. Clearing it (memory + sessionStorage) models a fresh tab. See
+  // specs/live-question-order.md and specs/crash-recovery.md.
+  sessionStorage.clear();
   clearPlaythroughStore();
   // The admin save queue is module-level and deliberately outlives every component,
   // so a queued payload, a live retry timer or a leftover listener would follow a

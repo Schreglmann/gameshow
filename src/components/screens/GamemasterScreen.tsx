@@ -6,6 +6,7 @@ import RunOfShowPanel from '@/components/common/RunOfShowPanel';
 import GamemasterMusicControls from '@/components/screens/GamemasterMusicControls';
 import DeadlineTimer from '@/components/common/DeadlineTimer';
 import InstallButton from '@/components/common/InstallButton';
+import GmConnectionBanner from '@/components/common/GmConnectionBanner';
 import type { ShowHoldState } from '@/types/game';
 
 const LOCK_STORAGE_KEY = 'gm-input-locked';
@@ -244,6 +245,8 @@ export default function GamemasterScreen() {
 
   return (
     <div className="gamemaster-screen">
+      {/* Server unreachable / command dropped. See specs/crash-recovery.md. */}
+      <GmConnectionBanner />
       {/* The sidebar is `display: contents` below 1280px, so the toolbar keeps
           its existing inline layout unchanged; at ≥1280px this wrapper owns the
           272px left gutter that the toolbar alone used to occupy. */}

@@ -1652,6 +1652,9 @@ export interface SystemStatusResponse {
     ffmpegAvailable: boolean;
     ytDlpAvailable: boolean;
     ytDlpPath: string | null;
+    /** Last unplanned server exit, from logs/last-crash.json; null when there was none.
+     *  See specs/crash-recovery.md. */
+    lastCrash: { at: string; reason: string } | null;
   };
   storage: {
     nasMount: { reachable: boolean };

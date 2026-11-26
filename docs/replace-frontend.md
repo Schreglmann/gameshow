@@ -32,6 +32,7 @@ All return `application/json` unless noted. Full schemas: [openapi.yaml](../spec
 | `GET` | `/videos-sdr/:start/:end/:path` | Range-GET HDR→SDR tone-mapped segment stream. |
 | `GET` | `/api/random-frame?path=<asset>&seed=<n>&variant=<n>&qindex=<n>&start=<s>&end=<s>` | `image/jpeg` — a random still frame from a video (random-frame game). Re-roll by bumping `variant` (the GM rotate counter); for a reachable source it's folded into the seed, for an unreachable source it cycles the per-question prerendered fallback frames (matched by `qindex`). Add `&prerendered=1` to force the downloaded frame (stopgap while a live frame loads). |
 | `GET` | `/local-assets/**` | Raw asset files (images, audio, videos, background-music, bandle-audio). |
+| `GET` | `/api/health` | **Optional.** `{ ok, uptimeSeconds, startedAt }`. The reference show polls it before an automatic page reload, so a reload never lands on the browser's error page while the server is restarting. See [specs/crash-recovery.md](../specs/crash-recovery.md). |
 
 ## Required WebSocket channels
 
@@ -101,6 +102,10 @@ The reference implementation writes these keys to `localStorage`:
 | `correctAnswersByQuestion` | `Record<gameIndex, Record<questionKey, { team1, team2 }>>` | Correct-answer tally, nested per question. Mirrored to WS cache. |
 
 A replacement is free to pick different keys but must not leak admin-specific state into show localStorage (they share the same origin).
+
+In `sessionStorage` (per tab, so a spare show tab never overwrites the projector's position) the reference show keeps `show:playthrough`: per game the shuffle seed, play order, high-water mark and current question, plus the show's position (game index, gameId, phase). A reload of the tab reopens the same game, phase and question in the same order. Optional for a replacement. See [specs/crash-recovery.md](../specs/crash-recovery.md).
+
+The reference show also shows a small dot in the top-left corner when the WebSocket has been closed for more than 3 s, so the host notices a server outage.
 
 ## Build & serve contract
 

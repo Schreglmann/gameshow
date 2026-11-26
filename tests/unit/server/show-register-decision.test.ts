@@ -42,3 +42,25 @@ describe('decideShowRegister', () => {
     expect(decideShowRegister(false, 'A', '', true)).toBe('ignore');
   });
 });
+
+// After a server restart the owner id is restored from `.show-presence.json` and,
+// for SHOW_RESTART_GRACE_MS, other tabs may not auto-claim the empty slot — the
+// projector is most likely still reconnecting. See specs/crash-recovery.md.
+describe('decideShowRegister — restart grace window', () => {
+  it('the restored owner reclaims its slot during the grace window', () => {
+    expect(decideShowRegister(false, 'A', 'A', false, true)).toBe('claim');
+    expect(decideShowRegister(false, 'A', 'A', true, true)).toBe('claim');
+  });
+
+  it('a DIFFERENT frontend that is alone does NOT claim during the grace window', () => {
+    expect(decideShowRegister(false, 'A', 'B', false, true)).toBe('ignore');
+  });
+
+  it('the same lone frontend claims once the grace window is over', () => {
+    expect(decideShowRegister(false, 'A', 'B', false, false)).toBe('claim');
+  });
+
+  it('a fresh server with no restored owner lets the first show claim, grace or not', () => {
+    expect(decideShowRegister(false, null, 'B', false, true)).toBe('claim');
+  });
+});

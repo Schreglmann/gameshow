@@ -25,7 +25,7 @@ Applies to the games that already support stepping back through their questions:
 Out of scope: `quizjagd`, `final-quiz`, `guessing-game`, `fact-or-fake` (see AC). Reconstructing the live bet/count *result* UI for `bet-quiz`/`wer-kennt-mehr` is out of scope — the resumed answer view shows the question and its correct answer; the per-team bet/count outcome from the live round is not re-displayed.
 
 ## State / data changes
-- Session-scoped store `src/utils/gamePlaythroughStore.ts`: `Map<gameId, { seed, order, highWater }>` — the shuffle seed, the reconciled play order ([live-question-order.md](live-question-order.md)) and the furthest play index reached. In-memory only (cleared on page reload — matches "no resume after reload"), and cleared before every test in `tests/setup.ts`.
+- Per-tab store `src/utils/gamePlaythroughStore.ts`: `Map<gameId, { seed, order, highWater, cursor }>` — the shuffle seed, the reconciled play order ([live-question-order.md](live-question-order.md)), the furthest play index reached and the question on screen. Written through to the tab's `sessionStorage`, so back-review after a reload still shows the order the game was played in ([crash-recovery.md](crash-recovery.md)). Cleared (memory + storage) before every test in `tests/setup.ts`.
 - `useQuestionOrder(questions, shouldRandomize, limit, gameId?)`: when `gameId` is given, both the seed and the reconciled order come from the store (stable across remounts); without it they live for the component's lifetime. The paired `useLiveQuestionIndex(order, resumeAtEnd)` resolves the resume position as `min(lastIndex, highWater)`.
 - Resume signal via React Router: `GameScreen.handlePrevGame` navigates with `{ state: { resumeAtEnd: true } }` for the previous-game case. `GameScreen` reads `useLocation().state?.resumeAtEnd` and passes it as a new optional prop.
 - New optional prop `resumeAtEnd?: boolean` on `GameComponentProps` and `BaseGameWrapperProps`.
@@ -36,6 +36,6 @@ Out of scope: `quizjagd`, `final-quiz`, `guessing-game`, `fact-or-fake` (see AC)
 - Everything else (forward play, first-game back to global rules / start page) unchanged — see [app-navigation-flow.md](app-navigation-flow.md).
 
 ## Out of scope
-- Persisting playthrough across a full page reload
+- Resuming a back-review across a reload at its *review* position: a reload reopens the question that was on screen (see [crash-recovery.md](crash-recovery.md)), with the answer hidden
 - Re-displaying live per-round scoring outcomes (bet results, per-team counts) on a resumed answer screen
 - Resume-at-end for `quizjagd` / `final-quiz` / `guessing-game` / `fact-or-fake`

@@ -105,6 +105,15 @@ import {
   type UpscaleModel,
   type UpscaleScale,
 } from './upscale.js';
+import { installCrashHandlers, readLastCrash, STARTED_AT } from './crash-log.js';
+import { sendFileStream } from './send-file-stream.js';
+
+// Before anything else runs: an uncaught exception is written to logs/crash.log
+// and exits (the supervisor restarts), an unhandled rejection is only logged.
+// See specs/crash-recovery.md.
+installCrashHandlers();
+// Read once at boot — the file only changes when this process is not running.
+const LAST_CRASH = readLastCrash();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -680,6 +689,14 @@ function broadcastSystemStatus(): void {
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Liveness probe for the supervisor's hang watchdog and for clients waiting out
+// an outage. Registered first and kept free of file system / NAS access, so it
+// answers whenever the event loop does. See specs/crash-recovery.md.
+app.get('/api/health', (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({ ok: true, uptimeSeconds: process.uptime(), startedAt: STARTED_AT });
+});
 
 app.use(express.json({ limit: '10mb' }));
 
@@ -3168,8 +3185,7 @@ app.get('/videos-compressed/:start/:end/*splat', async (req, res) => {
       'Content-Type': 'video/mp4',
       'Cache-Control': 'private, max-age=3600',
     });
-    const { createReadStream } = await import('fs');
-    createReadStream(cacheFile, { start, end }).pipe(res);
+    sendFileStream(res, cacheFile, { start, end });
   } else {
     res.writeHead(200, {
       'Content-Length': fileStat.size,
@@ -3177,8 +3193,7 @@ app.get('/videos-compressed/:start/:end/*splat', async (req, res) => {
       'Accept-Ranges': 'bytes',
       'Cache-Control': 'private, max-age=3600',
     });
-    const { createReadStream } = await import('fs');
-    createReadStream(cacheFile).pipe(res);
+    sendFileStream(res, cacheFile);
   }
 });
 
@@ -3260,8 +3275,7 @@ app.get('/videos-sdr/:start/:end/*splat', async (req, res) => {
       'Content-Type': 'video/mp4',
       'Cache-Control': 'private, max-age=3600',
     });
-    const { createReadStream } = await import('fs');
-    createReadStream(cacheFile, { start, end }).pipe(res);
+    sendFileStream(res, cacheFile, { start, end });
   } else {
     res.writeHead(200, {
       'Content-Length': fileStat.size,
@@ -3269,8 +3283,7 @@ app.get('/videos-sdr/:start/:end/*splat', async (req, res) => {
       'Accept-Ranges': 'bytes',
       'Cache-Control': 'private, max-age=3600',
     });
-    const { createReadStream } = await import('fs');
-    createReadStream(cacheFile).pipe(res);
+    sendFileStream(res, cacheFile);
   }
 });
 
@@ -3496,7 +3509,7 @@ app.get('/api/random-frame', async (req, res) => {
     if (!file) return false;
     res.setHeader('Content-Type', 'image/jpeg');
     res.setHeader('Cache-Control', 'private, max-age=3600');
-    createReadStream(file).pipe(res);
+    sendFileStream(res, file);
     return true;
   };
 
@@ -3514,7 +3527,8 @@ app.get('/api/random-frame', async (req, res) => {
   if (existsSync(cacheFile)) {
     res.setHeader('Content-Type', 'image/jpeg');
     res.setHeader('Cache-Control', 'private, max-age=3600');
-    return createReadStream(cacheFile).pipe(res);
+    sendFileStream(res, cacheFile);
+    return;
   }
 
   const fullPath = resolveVideoPath(filePath);
@@ -6086,6 +6100,7 @@ async function buildSystemStatusPayload(): Promise<Record<string, unknown>> {
       ffmpegAvailable,
       ytDlpAvailable,
       ytDlpPath: ytDlpAvailable ? YT_DLP_BIN : null,
+      lastCrash: LAST_CRASH,
     },
     storage: {
       nasMount: { reachable: nas },
@@ -6950,6 +6965,13 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
           if (code === 0) resolve(out.trim().split('\n'));
           else reject(new Error(`yt-dlp metadata exit ${code}`));
         });
+        // A failed spawn (missing binary, EACCES) emits 'error'; unhandled, it
+        // kills the whole server. See specs/crash-recovery.md.
+        proc.on('error', (err) => {
+          clearTimeout(metaTimeout);
+          jobAbort.signal.removeEventListener('abort', onAbort);
+          reject(err);
+        });
       });
 
       for (const line of metaLines) {
@@ -7032,6 +7054,9 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
           `https://www.youtube.com/watch?v=${track.id}`,
         ];
         const ytdlp = spawn(YT_DLP_BIN, ytdlpArgs);
+        // Settles the exit-code promise below as a failure instead of crashing the server.
+        let spawnFailed = false;
+        ytdlp.on('error', (err) => { spawnFailed = true; console.warn(`[yt-dlp] track spawn failed: ${err.message}`); });
 
         // Kill child process if job is cancelled
         const onAbort = () => { ytdlp.kill('SIGTERM'); };
@@ -7064,12 +7089,13 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
         ytdlp.stdout.on('data', onData);
 
         const exitCode = await new Promise<number>((resolve) => {
-          ytdlp.on('close', resolve);
+          ytdlp.on('close', (code) => resolve(code ?? -1));
+          ytdlp.on('error', () => resolve(-1));
         });
 
         jobAbort.signal.removeEventListener('abort', onAbort);
 
-        if (jobAbort.signal.aborted || exitCode !== 0) return null;
+        if (jobAbort.signal.aborted || spawnFailed || exitCode !== 0) return null;
 
         const files = (await readdir(trackDir)).filter(f => !f.startsWith('.'));
         // yt-dlp writes the media file + a .jpg thumbnail (via --write-thumbnail). Pick the
@@ -7179,6 +7205,12 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
         clearTimeout(t);
         jobAbort.signal.removeEventListener('abort', onAbort);
         resolve(out.trim().split('\n')[0] ?? '');
+      });
+      // Probe is best-effort: a failed spawn just means "no title", never a crash.
+      proc.on('error', () => {
+        clearTimeout(t);
+        jobAbort.signal.removeEventListener('abort', onAbort);
+        resolve('');
       });
     });
     if (probedTitle) {
@@ -7300,7 +7332,8 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
     ytdlp.stdout.on('data', onData);
 
     const exitCode = await new Promise<number>((resolve) => {
-      ytdlp.on('close', resolve);
+      ytdlp.on('close', (code) => resolve(code ?? -1));
+      ytdlp.on('error', (err) => { downloadError += `\n${err.message}`; resolve(-1); });
     });
 
     if (exitCode !== 0) {
@@ -9403,7 +9436,19 @@ async function runStartupMaintenance(): Promise<void> {
   });
 }
 
-const httpServer = app.listen(PORT, async () => {
+const httpServer = app.listen(PORT, async (err?: Error) => {
+  // Express 5 hands a listen error (e.g. EADDRINUSE) to this callback. Without
+  // this check the startup work below ran on a server that never listened.
+  // Exit so the supervisor retries with backoff. See specs/crash-recovery.md.
+  if (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    const msg = code === 'EADDRINUSE'
+      ? `Port ${PORT} is already in use — is another gameshow server still running?`
+      : `Server could not listen on port ${PORT}: ${err.message}`;
+    console.error(`[startup] ${msg}`);
+    flushAndExit(1);
+    return;
+  }
   // Warm the public-IP cache in the background so the System tab can show it
   // immediately on first open (best-effort — no-op when offline).
   getPublicIpCached();
@@ -9465,6 +9510,9 @@ const httpServer = app.listen(PORT, async () => {
 // across Node restarts. The next start picks them back up via PID liveness check.
 function flushAndExit(code: number = 0): void {
   try { whisperJobs.flushSync(); } catch { /* ignore */ }
+  // Stop accepting connections and drop the open ones so the port is free for
+  // the supervisor's restart right away. process.exit() follows synchronously.
+  try { httpServer.close(); httpServer.closeAllConnections(); } catch { /* ignore */ }
   process.exit(code);
 }
 process.on('SIGTERM', () => flushAndExit(0));

@@ -20,8 +20,11 @@ export function useLiveQuestionIndex(
   order: QuestionOrderHandle,
   resumeAtEnd?: boolean,
 ): [number, React.Dispatch<React.SetStateAction<number>>, number] {
+  // A reload of the show tab resumes the question that was on screen; it takes
+  // precedence over a back-review `resumeAtEnd` left in the history state.
+  // See specs/crash-recovery.md.
   const [state, setState] = useState(() => ({
-    idx: resumeAtEnd ? order.resumeIndex : 0,
+    idx: order.bootResumeIndex() ?? (resumeAtEnd ? order.resumeIndex : 0),
     rev: order.revision,
   }));
 

@@ -201,6 +201,24 @@ paths:
                 items: { type: string }
               example: ["bg-calm.mp3", "bg-intense.mp3"]
 
+  /api/health:
+    get:
+      operationId: shared_getHealth
+      tags: [shared]
+      summary: Liveness probe
+      description: |
+        Answers whenever the server's event loop does. Touches neither the file
+        system nor the NAS. Polled by the `npm start` supervisor's hang watchdog
+        (`scripts/supervise.cjs`) and by clients that wait for the server before
+        reloading the page. Responses are `Cache-Control: no-store`.
+        See specs/crash-recovery.md.
+      responses:
+        "200":
+          description: Server is up
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HealthResponse" }
+
   /api/settings:
     get:
       operationId: shared_getSettings
@@ -5052,13 +5070,21 @@ components:
 
     # ─── System status + whisper ───
 
+    HealthResponse:
+      type: object
+      required: [ok, uptimeSeconds, startedAt]
+      properties:
+        ok: { type: boolean, const: true }
+        uptimeSeconds: { type: number }
+        startedAt: { type: string, format: date-time, description: When this server process started. }
+
     SystemStatusResponse:
       type: object
       required: [server, storage, caches, processes, config, nasSync]
       properties:
         server:
           type: object
-          required: [uptimeSeconds, nodeVersion, memoryMB, cpu, network, ffmpegAvailable, ytDlpAvailable, ytDlpPath]
+          required: [uptimeSeconds, nodeVersion, memoryMB, cpu, network, ffmpegAvailable, ytDlpAvailable, ytDlpPath, lastCrash]
           properties:
             uptimeSeconds: { type: number }
             nodeVersion: { type: string }
@@ -5103,6 +5129,17 @@ components:
             ffmpegAvailable: { type: boolean }
             ytDlpAvailable: { type: boolean }
             ytDlpPath: { type: [string, "null"] }
+            lastCrash:
+              description: |
+                Last unplanned server exit, read once at boot from `logs/last-crash.json`;
+                null when there was none. See specs/crash-recovery.md.
+              oneOf:
+                - type: "null"
+                - type: object
+                  required: [at, reason]
+                  properties:
+                    at: { type: string, format: date-time }
+                    reason: { type: string, description: "One line: error message, exit code or signal." }
         storage:
           type: object
           required: [nasMount, mode, basePath, categories]

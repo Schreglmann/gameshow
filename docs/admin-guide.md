@@ -66,6 +66,8 @@ npm run build
 npm start
 ```
 
+`npm start` runs the server under a small supervisor (`scripts/supervise.cjs`): if the server process dies, it is restarted within about a second, and the crash is written to `logs/crash.log`. Server output is also kept in `logs/server-YYYY-MM-DD.log`. `npm run start:unsupervised` runs the server without it.
+
 **4. Open the app**
 
 ```
@@ -658,6 +660,15 @@ From here you can:
 - The admin panel never interrupts the game — you can check or correct things at any time
 - Points can be manually corrected in the **Session tab** if you make a mistake
 - Use **keyboard shortcuts** (`→` to advance, `←` to go back) for smooth presenting
+
+### If the server crashes
+
+With `npm start`, a crashed server restarts by itself within about a second. Nothing needs to be reloaded:
+
+- The show and the gamemaster reconnect on their own. While the server is unreachable, the show displays a small red dot in the top-left corner (after 3 s), and the gamemaster displays "Server getrennt – verbinde neu…". A command tapped in that state is **not** sent ("Befehl nicht gesendet") — tap it again once the banner is gone.
+- The projector stays the main show, even if a second show tab is open.
+- If you do reload the show tab, it reopens the same game, phase and question, in the same order. Within the question it starts over: the answer is hidden again. Points already awarded stay — don't award the resumed question twice.
+- The **System** tab shows "Letzter Absturz" with the time and reason. The full trace is in `logs/crash.log`.
 
 ---
 

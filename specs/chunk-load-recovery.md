@@ -26,6 +26,10 @@ automatically so a live show doesn't get stuck on a blank screen.
 - [ ] If the retry also fails, the page reloads automatically once per tab
       session (guarded by `sessionStorage`) so the browser picks up the
       current `index.html` and the current hashed chunks.
+- [ ] Before that reload, the client waits until `GET /api/health` answers
+      (polled every 2 s). A chunk that failed because the server is down
+      would otherwise reload onto the browser's error page, which only a
+      manual reload gets out of. See [crash-recovery.md](crash-recovery.md).
 - [ ] Once any lazy import succeeds, the reload guard is cleared so a later
       stale-chunk failure in the same tab can also recover.
 - [ ] Game state (current game index, team rosters, team points, jokers,

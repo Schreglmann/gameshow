@@ -26,6 +26,8 @@ import ConflictBanner from '@/components/backend/ConflictBanner';
 import SaveStatusToast from '@/components/backend/SaveStatusToast';
 import RetryImage from '@/components/common/RetryImage';
 import AssetReloadButton from '@/components/common/AssetReloadButton';
+import ConnectionDot from '@/components/common/ConnectionDot';
+import GmConnectionBanner from '@/components/common/GmConnectionBanner';
 import type { RulesPreset } from '@/types/config';
 import '@/admin.css';
 import '@/backend.css';
@@ -357,6 +359,15 @@ function FrontendShowcase() {
         </div>
       </Section>
 
+      {/* Real component, forced visible and rendered in-flow instead of pinned
+          to the viewport corner. See specs/crash-recovery.md. */}
+      <Section title="Server getrennt (Punkt auf der Show)">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <ConnectionDot forceVisible inline />
+          <span>Erscheint oben links, wenn der Server länger als 3 s nicht erreichbar ist.</span>
+        </div>
+      </Section>
+
       <Section title="Quiz — Question & Answer">
         <GlassCard>
           <div className="quiz-question-number">Frage 3 von 10</div>
@@ -680,6 +691,13 @@ function FrontendShowcase() {
           <button type="button" className="gm-btn gm-btn--primary gm-desync-btn">
             Jetzt synchronisieren
           </button>
+        </div>
+      </Section>
+
+      <Section title="Gamemaster Server getrennt">
+        <div style={{ display: 'grid', gap: 12 }}>
+          <GmConnectionBanner forceState="offline" inline />
+          <GmConnectionBanner forceState="dropped" inline />
         </div>
       </Section>
 

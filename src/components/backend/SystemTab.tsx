@@ -19,6 +19,16 @@ function formatUptime(seconds: number): string {
   return parts.join(' ');
 }
 
+/** "26.11., 21:43 – Exit-Code 1" — the date only when it wasn't today. See specs/crash-recovery.md. */
+export function formatLastCrash(crash: { at: string; reason: string }, now: Date = new Date()): string {
+  const at = new Date(crash.at);
+  if (Number.isNaN(at.getTime())) return crash.reason;
+  const time = at.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+  const sameDay = at.toDateString() === now.toDateString();
+  const when = sameDay ? time : `${at.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}, ${time}`;
+  return `${when} – ${crash.reason}`;
+}
+
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -484,6 +494,9 @@ export default function SystemTab() {
         <StatRow label="Heap" value={`${server.memoryMB.heapUsed} / ${server.memoryMB.heapTotal} MB`} />
         <StatRow label="ffmpeg" value={<><StatusDot ok={server.ffmpegAvailable} />{server.ffmpegAvailable ? 'Verfügbar' : 'Nicht gefunden'}</>} />
         <StatRow label="yt-dlp" value={<><StatusDot ok={server.ytDlpAvailable} />{server.ytDlpAvailable ? 'Verfügbar' : 'Nicht installiert'}</>} />
+        {server.lastCrash && (
+          <StatRow label="Letzter Absturz" value={formatLastCrash(server.lastCrash)} />
+        )}
       </div>
 
       {/* ── CPU ── */}

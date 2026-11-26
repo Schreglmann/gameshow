@@ -17,13 +17,13 @@ Each walk is internally sequential, but run concurrently *across tasks* they put
 - [ ] `detectLtDockerOnStartup()` runs **before** the deferred NAS maintenance, so a warm local LanguageTool container is routed within ~1–2 s of boot (not minutes).
 - [ ] The heavy NAS-walking tasks — `cleanupStaleTranscodeFiles`, `purgeStaleTrash`, `purgeStaleNasTrash`, `backfillYoutubeAudioCovers`, `startupSync` — are deferred `STARTUP_MAINTENANCE_DELAY_MS` (5 s) past `app.listen` and run **sequentially** (each `await`ed before the next) via `runStartupMaintenance()`, instead of fire-and-forget all at once.
 - [ ] With the NAS mounted, the first request to `/show` and `/admin` is served within ~1–2 s of the `Server is running` log — it is not blocked behind the NAS walk.
-- [ ] `UV_THREADPOOL_SIZE` is raised to **32** for the server process (set in the environment before any libuv use, via the `start` and `dev:server` npm scripts) so concurrent fs work cannot starve page-serving fs ops.
+- [ ] `UV_THREADPOOL_SIZE` is raised to **32** for the server process (set in the environment before any libuv use — by the `npm start` supervisor `scripts/supervise.cjs`, and by the `start:unsupervised` and `dev:server` npm scripts) so concurrent fs work cannot starve page-serving fs ops.
 - [ ] Background sync still runs and completes; the Layer 1–3 deletion-safety guards in [sync-bidirectional.md](sync-bidirectional.md) are unchanged (this change only reschedules *when* `startupSync` runs, never *what* it does).
 - [ ] Each maintenance step logs its duration (`[startup-maint] <step> done in <ms>ms`) so a slow phase is visible on the next cold start.
 
 ## State / data changes
 - No changes to `AppState`, `localStorage`, or any HTTP/WS API → no OpenAPI/AsyncAPI changes.
-- New environment variable consumed by the process: `UV_THREADPOOL_SIZE=32`, set in [package.json](../package.json) `start` + `dev:server` scripts via `cross-env`.
+- New environment variable consumed by the process: `UV_THREADPOOL_SIZE=32`, set by [scripts/supervise.cjs](../scripts/supervise.cjs) (`npm start`) and in the [package.json](../package.json) `start:unsupervised` + `dev:server` scripts via `cross-env`. Supervision, crash log and the listen-error exit: see [crash-recovery.md](crash-recovery.md).
 - New internal helper in [server/index.ts](../server/index.ts): `runStartupMaintenance()` + `STARTUP_MAINTENANCE_DELAY_MS`. Not exported, no behavioural contract beyond ordering.
 
 ## Why the threadpool size must be set in the environment, not in JS

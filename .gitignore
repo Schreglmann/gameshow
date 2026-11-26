@@ -75,3 +75,11 @@ scheduled_tasks.lock
 # Persistent Chromium profile for `npm run bandle-sync` — holds a logged-in
 # bandle.app session (auth tokens), never committed
 .bandle-browser-data
+
+# Server logs written by the supervisor and the crash handler (npm start) —
+# crash.log, last-crash.json, server-YYYY-MM-DD.log. See specs/crash-recovery.md.
+logs/
+
+# Which show tab owns the main-show slot, persisted across server restarts
+# (server/ws.ts). Machine-local runtime state. See specs/crash-recovery.md.
+.show-presence.json

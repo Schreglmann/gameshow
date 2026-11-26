@@ -1,0 +1,72 @@
+/* ── Server connection indicators — see specs/crash-recovery.md ── */
+
+/* Show: a small dot, deliberately unobtrusive for the audience. Top-left,
+   because the timers own the bottom-left corner and the music controls the
+   bottom-right. */
+.connection-dot {
+  position: fixed;
+  top: clamp(6px, 1vw, 12px);
+  left: clamp(6px, 1vw, 12px);
+  z-index: 100002; /* above the show-hold overlay (100001) */
+  width: clamp(10px, 0.9vw, 16px);
+  height: clamp(10px, 0.9vw, 16px);
+  border-radius: 50%;
+  background: var(--error);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35);
+  opacity: 0.85;
+  animation: connection-dot-pulse 2s ease-in-out infinite;
+  pointer-events: auto;
+}
+
+/* Showcase: render in-flow instead of pinned to the viewport corner. */
+.connection-dot--inline {
+  position: relative;
+  top: auto;
+  left: auto;
+  display: inline-block;
+}
+
+@keyframes connection-dot-pulse {
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 0.4; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .connection-dot { animation: none; }
+}
+
+/* Gamemaster: a clear banner across the top. */
+.gm-connection-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100002;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: clamp(8px, 1.5vw, 12px) clamp(12px, 3vw, 24px);
+  padding-top: calc(clamp(8px, 1.5vw, 12px) + env(safe-area-inset-top, 0px));
+  background: rgba(var(--error-deep-rgb), 0.95);
+  color: #fff;
+  font-size: clamp(0.9rem, 2.4vw, 1.05rem);
+  font-weight: 600;
+  line-height: 1.3;
+  text-align: center;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+.gm-connection-banner--inline {
+  position: relative;
+  padding-top: clamp(8px, 1.5vw, 12px);
+  border-radius: 8px;
+}
+
+.gm-connection-banner__dropped {
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.3);
+  font-weight: 700;
+}

@@ -21,7 +21,11 @@ It is the smallest of the three PWAs — two HTTP endpoints and a handful of Web
 | `GET` | `/api/game/:index` | Look up game metadata (mainly `title`, `totalQuestions`) when rendering answer cards. |
 | `GET` | `/api/run-of-show` | **Optional.** `{ games: [{ index, gameId, title, type, missing? }] }` — the active gameshow's running order. Fetch it if you render a run-of-show overview or offer jump-to-game; the WebSocket channels only ever tell you about the CURRENT game. See [specs/gamemaster-run-of-show.md](../specs/gamemaster-run-of-show.md). |
 
+| `GET` | `/api/health` | **Optional.** `{ ok, uptimeSeconds, startedAt }` — liveness probe. See [specs/crash-recovery.md](../specs/crash-recovery.md). |
+
 That's it for HTTP. Everything else flows over WebSocket.
+
+Commands (`gamemaster-command`, `music-command`, `show-hold`) are never queued while the socket is down — a stale "next" replayed later would jump the show. The reference gamemaster shows "Server getrennt – verbinde neu…" after 1.5 s offline and flashes "Befehl nicht gesendet" when a tap could not be sent. A replacement should tell the operator the same way.
 
 ## Required WebSocket channels
 

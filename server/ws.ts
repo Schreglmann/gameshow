@@ -39,7 +39,9 @@
  *                                   stable per-tab id (sessionStorage) so the server can tell a
  *                                   reload of the active frontend (same id → reclaim its slot)
  *                                   from a different/background frontend (different id → stays
- *                                   inactive; never steals a running show).
+ *                                   inactive; never steals a running show). The owner id is
+ *                                   persisted to `.show-presence.json`; for 15 s after a restart
+ *                                   only that owner may auto-claim (specs/crash-recovery.md).
  *   { type: 'show-claim', id }    — show PWA explicitly takes over as the active show ("übernehmen")
  *   { type: 'gm-register' }       — gamemaster PWA announces itself on every connect
  *   { type: 'gm-request-reemit' } — gamemaster asks the active show to re-emit its
@@ -49,6 +51,8 @@
 
 import { WebSocketServer, WebSocket } from 'ws';
 import type { Server } from 'http';
+import path from 'path';
+import { readFileSync, renameSync, writeFileSync } from 'fs';
 
 export type WsChannel =
   | 'yt-download-status'
@@ -134,11 +138,54 @@ let activeShowWs: WebSocket | null = null;
 // reload but differs between tabs. This is how the server tells "the active
 // frontend is reloading" (same id → reclaim) apart from "a different/background
 // frontend connected" (different id → stays inactive, never steals). Retained
-// when the active socket disconnects so the reload reconnecting reclaims it; only
-// changes on an explicit `show-claim` (or the first show ever).
+// when the active socket disconnects so the reload reconnecting reclaims it. It
+// changes when a tab takes the slot (first show, lone tab, explicit `show-claim`)
+// and is persisted to `.show-presence.json` so it also survives a server restart.
 let activeShowId: string | null = null;
 // Per-socket id map so a `show-claim` can look up the claimer's id.
 const showClientIds = new WeakMap<WebSocket, string>();
+
+// `activeShowId` survives a server restart in this sidecar, so after a crash the
+// projector reclaims its slot instead of whichever show tab reconnects first.
+// See specs/crash-recovery.md.
+let showPresencePath = path.join(process.cwd(), '.show-presence.json');
+// After a restart with a restored owner, other tabs may not auto-claim the slot
+// until this deadline: longer than the client's 10 s maximum reconnect delay, so
+// the owner gets a fair chance to come back first.
+export const SHOW_RESTART_GRACE_MS = 15_000;
+let restartGraceUntil = 0;
+
+/** Reads the persisted owner id, or null when missing or malformed. */
+export function loadShowPresence(file: string): string | null {
+  try {
+    const parsed = JSON.parse(readFileSync(file, 'utf8')) as { activeShowId?: unknown };
+    return typeof parsed.activeShowId === 'string' && parsed.activeShowId !== '' ? parsed.activeShowId : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Writes the owner id atomically (tmp + rename). Never throws. */
+export function saveShowPresence(file: string, id: string | null): void {
+  try {
+    const tmp = `${file}.tmp`;
+    writeFileSync(tmp, JSON.stringify({ activeShowId: id }) + '\n');
+    renameSync(tmp, file);
+  } catch (e) {
+    console.warn('[ws] could not persist show presence:', (e as Error).message);
+  }
+}
+
+/** Overrides the sidecar path. Tests only. */
+export function setShowPresencePathForTests(file: string): void {
+  showPresencePath = file;
+}
+
+function setActiveShowId(id: string | null): void {
+  if (id === activeShowId) return;
+  activeShowId = id;
+  saveShowPresence(showPresencePath, id);
+}
 
 export type ShowRegisterDecision = 'claim' | 'ignore';
 
@@ -157,14 +204,18 @@ export type ShowRegisterDecision = 'claim' | 'ignore';
  *   when an inactive sibling is present — requires explicit claim).
  * - Empty registering id never auto-claims an owned slot (degraded storage →
  *   manual claim is the intended fallback).
+ * - Within the restart grace window (owner restored from disk after a server
+ *   restart), a DIFFERENT frontend never auto-claims the empty slot, even when it
+ *   is alone — the owner is most likely still reconnecting. See specs/crash-recovery.md.
  * - Occupied slot + id matches owner → the owner reconnecting while a stale
  *   predecessor socket lingers (half-open reload) → take over.
  * - Occupied slot + different/empty id → ignore (never steal a running show).
  */
-export function decideShowRegister(slotOccupied: boolean, ownerId: string | null, registeringId: string, hasOtherShowClients: boolean): ShowRegisterDecision {
+export function decideShowRegister(slotOccupied: boolean, ownerId: string | null, registeringId: string, hasOtherShowClients: boolean, withinRestartGrace = false): ShowRegisterDecision {
   if (!slotOccupied) {
     if (!ownerId) return 'claim';
     if (registeringId !== '' && registeringId === ownerId) return 'claim';
+    if (withinRestartGrace) return 'ignore';
     if (registeringId !== '' && !hasOtherShowClients) return 'claim';
     return 'ignore';
   }
@@ -211,7 +262,14 @@ export function setupWebSocket(server: Server, g: WsGetters): void {
   // Seed gm-presence so the first show client connecting before any GM has
   // ever registered still receives an explicit "GM absent" signal.
   channelCache.set('gm-presence', { connected: false });
+  restoreShowPresence();
   const wss = new WebSocketServer({ server, path: '/api/ws' });
+  // The ws server re-emits the HTTP server's errors (e.g. EADDRINUSE). Without a
+  // listener that is an uncaught exception; the listen callback in index.ts
+  // already handles it. See specs/crash-recovery.md.
+  wss.on('error', (err) => {
+    console.warn('[ws] server error:', err.message);
+  });
 
   wss.on('connection', (ws) => {
     clients.add(ws);
@@ -382,10 +440,12 @@ function handleControlMessage(origin: WebSocket, type: ClientControlType, id: st
     // is already in `showClients`, so "other" = any OTHER open show socket; when
     // there are none, an alone tab claims rather than stranding behind the overlay.
     const hasOtherShowClients = [...showClients].some(ws => ws !== origin && ws.readyState === WebSocket.OPEN);
-    if (decideShowRegister(activeShowWs !== null, activeShowId, id, hasOtherShowClients) === 'claim') {
+    if (decideShowRegister(activeShowWs !== null, activeShowId, id, hasOtherShowClients, Date.now() < restartGraceUntil) === 'claim') {
       const stale = activeShowWs;
       activeShowWs = origin;
-      if (!activeShowId) activeShowId = id || null;
+      // The tab that now runs the show is the owner — also when it claimed a slot
+      // whose previous owner is gone, so a later restart restores THIS tab.
+      if (id) setActiveShowId(id);
       // Retire a lingering predecessor socket of the SAME frontend (half-open
       // reload) so it doesn't sit around until the heartbeat reaps it.
       if (stale && stale !== origin && stale.readyState === WebSocket.OPEN) {
@@ -399,7 +459,7 @@ function handleControlMessage(origin: WebSocket, type: ClientControlType, id: st
     if (!showClients.has(origin)) showClients.add(origin);
     if (id) showClientIds.set(origin, id);
     activeShowWs = origin;
-    activeShowId = showClientIds.get(origin) ?? id ?? null;
+    setActiveShowId(showClientIds.get(origin) ?? (id || null));
     sendPresenceToAllShowClients();
   } else if (type === 'gm-register') {
     const wasEmpty = gmClients.size === 0;
@@ -436,6 +496,34 @@ function handleShowDisconnect(ws: WebSocket): void {
   // cleared the cache we'd flash the GM back to its waiting state in the
   // meantime. The stale value is always overwritten by the new active
   // show's first emit (or by show-reemit-request on the next connect).
+}
+
+/**
+ * Restores the owner id persisted before a restart and opens the grace window.
+ * When the window ends with the slot still empty, the connected show tabs are
+ * re-evaluated without the grace rule, so a lone spare tab still becomes active.
+ */
+function restoreShowPresence(): void {
+  const restored = loadShowPresence(showPresencePath);
+  if (!restored) return;
+  activeShowId = restored;
+  restartGraceUntil = Date.now() + SHOW_RESTART_GRACE_MS;
+  console.log(`[ws] restored main show tab ${restored.slice(0, 8)}… — other tabs wait ${SHOW_RESTART_GRACE_MS / 1000} s`);
+  setTimeout(() => {
+    restartGraceUntil = 0;
+    if (activeShowWs) return;
+    const open = [...showClients].filter(ws => ws.readyState === WebSocket.OPEN);
+    for (const ws of open) {
+      const id = showClientIds.get(ws) ?? '';
+      const hasOther = open.some(other => other !== ws);
+      if (decideShowRegister(false, activeShowId, id, hasOther) === 'claim') {
+        activeShowWs = ws;
+        if (id) setActiveShowId(id);
+        break;
+      }
+    }
+    sendPresenceToAllShowClients();
+  }, SHOW_RESTART_GRACE_MS).unref();
 }
 
 function sendPresenceToAllShowClients(): void {

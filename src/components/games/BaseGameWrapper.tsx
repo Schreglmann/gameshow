@@ -15,6 +15,7 @@ import { FullscreenProvider, type FullscreenMedia } from '@/context/FullscreenCo
 import { Lightbox, VideoLightbox } from '@/components/layout/Lightbox';
 import { useWsChannel } from '@/services/useBackendSocket';
 import type { QuestionOrderHandle } from '@/hooks/useQuestionOrder';
+import { bootResumePhase, clearBootResume, noteShowPhase } from '@/utils/gamePlaythroughStore';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand, GamemasterScrollAnchor, GamePhase, ShowHoldState } from '@/types/game';
 import { PHASE_SCREEN_LABELS } from '@/types/game';
 
@@ -127,9 +128,21 @@ export default function BaseGameWrapper({
   order,
   children,
 }: BaseGameWrapperProps) {
-  // Back-arrival resumes in the game phase (skips landing/rules); a normal
-  // forward/fresh entry starts at the title. See specs/game-back-review.md.
-  const [phase, setPhase] = useState<Phase>(resumeAtEnd ? 'game' : 'landing');
+  // A reload of the show tab resumes the phase it was in (specs/crash-recovery.md).
+  // Otherwise a back-arrival resumes in the game phase (skips landing/rules) and
+  // a normal forward/fresh entry starts at the title (specs/game-back-review.md).
+  const [initialPhase] = useState<Phase>(() =>
+    (typeof currentIndex === 'number' ? bootResumePhase(currentIndex) : null) ?? (resumeAtEnd ? 'game' : 'landing'),
+  );
+  const [phase, setPhase] = useState<Phase>(initialPhase);
+  // Record the phase so a reload can resume it, and drop the reload token once
+  // the resumed phase is left — re-entering the game phase later starts at
+  // question 0 as usual, not at the question the reload resumed.
+  useEffect(() => {
+    if (typeof currentIndex !== 'number') return;
+    noteShowPhase(currentIndex, phase);
+    if (phase !== initialPhase) clearBootResume();
+  }, [currentIndex, phase, initialPhase]);
   // The resume is a ONE-SHOT: once the game phase is left (reviewed back to the
   // start), a later forward re-entry must start at question 0, so we stop
   // signalling resume to the game the moment we first leave the game phase.

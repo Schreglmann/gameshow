@@ -41,6 +41,7 @@ Source files (line numbers link to the declaration):
 |--------|------|------|------|---------|---------------|----------------|
 | `GET` | `/api/background-music` | `frontend` | [2059](../../server/index.ts#L2059) | List `.mp3` filenames in `local-assets/background-music/`. Optional `?theme=` filters to a theme subfolder. | Query: `theme?: string` | `string[]` (bare array of filenames) |
 | `GET` | `/api/settings` | `shared` | [2073](../../server/index.ts#L2073) | Returns active gameshow's global settings (resolved `showTitle` — landing-page heading / gamemaster label / tab title, active key, team sizes, point system, teamRandomizationEnabled — forced false below 2 teams, joker config incl. `jokersInLastGame` + operator-editable `jokerRules` explanation text, `backgroundMusicSource` — theme soundtrack vs. default playlist, activeGameshowTitle, isCleanInstall, `totalGames` — the show's game count, sizing the header counter in the team-name length check, `players` roster for the HomeScreen randomization prefill, `teamCount` 0-4, `pointMode` — how the gameshow scores (`positional` / `flat` / `per-correct-answer`), `incompatibleGames` — the gameOrder entries that cannot be scored at that count, and `teamColors` — the operator's per-team accent colours with the master switch already applied). | — | `SettingsResponse` |
+| `GET` | `/api/health` | `shared` | [server/index.ts](../../server/index.ts) | Liveness probe `{ ok, uptimeSeconds, startedAt }`. No file system or NAS access. Polled by the `npm start` supervisor's hang watchdog and by clients before an automatic reload. See [specs/crash-recovery.md](../crash-recovery.md). | — | `HealthResponse` |
 | `GET` | `/api/run-of-show` | `shared` | [server/index.ts](../../server/index.ts) | The active gameshow's running order with resolved titles — backs the gamemaster's "Ablauf" panel, which otherwise only ever mirrors the CURRENT game. One entry per `gameOrder` slot; an unresolvable ref is returned as a `missing` entry rather than dropped, so every `index` still matches its `gameOrder` position. See [specs/gamemaster-run-of-show.md](../gamemaster-run-of-show.md). | — | `RunOfShowResponse` |
 | `GET` | `/api/theme` | `shared` | [2124](../../server/index.ts#L2124) | Current theme selection for frontend and admin PWAs. | — | `{ frontend: string; admin: string }` |
 | `PUT` | `/api/theme` | `shared` | [2128](../../server/index.ts#L2128) | Update one or both theme names. Persisted to `theme-settings.json`. | Body: `Partial<{ frontend: string; admin: string }>` | `{ frontend: string; admin: string }` |
@@ -222,7 +223,7 @@ All channels multiplex on a single WebSocket endpoint. The wire format is `{ cha
 
 | Channel | Direction | Cached? | Emitter(s) | Zone | Purpose |
 |---------|-----------|---------|------------|------|---------|
-| `system-status` | S→C (periodic 2s) | no | [server/index.ts:522](../../server/index.ts#L522) | `admin` | Server metrics, processes, caches, NAS sync status (incl. `nasSync.conflictCount`). Payload shape: `SystemStatusResponse`. |
+| `system-status` | S→C (periodic 2s) | no | [server/index.ts:522](../../server/index.ts#L522) | `admin` | Server metrics, processes, caches, NAS sync status (incl. `nasSync.conflictCount`), last crash (`server.lastCrash`). Payload shape: `SystemStatusResponse`. |
 | `asset-storage` | S→C (periodic 5s) | no | [server/ws.ts:138](../../server/ws.ts#L138) | `admin` | Storage mode + NAS mount reachable flag. |
 | `asset-duration` | S→C (batch) | no | [server/index.ts:747](../../server/index.ts#L747) | `admin` | `{ category; durations: Record<fileName, seconds> }`. Pushed while the admin enumerates a category. |
 | `assets-changed` | S→C | no | [server/index.ts:870](../../server/index.ts#L870) | `admin`, `show` | Any DAM mutation. Payload: `{ category: AssetCategory }`. Admin invalidates its asset list cache; the show re-fetches the background-music playlist on `category === 'background-music'` (live DAM reload). |
@@ -276,6 +277,7 @@ This is the raw material for the three `docs/replace-*.md` guides. For each zone
 - `GET /videos-sdr/:start/:end/*splat`
 - `GET /api/random-frame` (random-frame game: random still extraction; offline prerendered fallback)
 - `GET /local-assets/**` (asset serving)
+- `GET /api/health` (optional — waited on before an automatic reload)
 
 **WebSocket channels (subscribe):**
 - `gamemaster-controls` — receive phase/gameIndex changes pushed by gamemaster
@@ -327,6 +329,7 @@ This is the raw material for the three `docs/replace-*.md` guides. For each zone
 **REST:**
 - `GET /api/settings`
 - `GET /api/game/:index`
+- `GET /api/health` (optional)
 
 **WebSocket channels (subscribe):**
 - `gamemaster-answer` — read current answer state from active show
@@ -357,6 +360,7 @@ Types marked with `🆕` have no TS definition today and will be introduced as J
 |------|-----------|---------|
 | `SettingsResponse` | ✅ [src/types/config.ts](../../src/types/config.ts) | `GET /api/settings` |
 | `GameDataResponse` | ✅ [src/types/config.ts](../../src/types/config.ts) | `GET /api/game/:index` |
+| `HealthResponse` | 🆕 | `GET /api/health` |
 | `AppConfig` | ✅ [src/types/config.ts](../../src/types/config.ts) | `GET/PUT /api/backend/config` |
 | `GameConfig` (union) | ✅ [src/types/config.ts](../../src/types/config.ts) | `GET/PUT /api/backend/games/:fileName` |
 | `GameFileSummary` | ✅ [src/types/config.ts](../../src/types/config.ts) | `GET /api/backend/games` |

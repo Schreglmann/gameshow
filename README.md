@@ -240,6 +240,8 @@ npm start
 
 `npm start` serves the compiled build from `dist/`, so `npm run build` must run first on a fresh clone. (For development use `npm run dev` instead — it hot-reloads and needs no prior build.)
 
+`npm start` runs the server under a small supervisor (`scripts/supervise.cjs`): if the server process dies, it is restarted within about a second, and the crash is written to `logs/crash.log`. Server output is also kept in `logs/server-YYYY-MM-DD.log`. `npm run start:unsupervised` runs the server without it. See [specs/crash-recovery.md](./specs/crash-recovery.md).
+
 Open `http://localhost:3000` — admin panel at `http://localhost:3000/admin`, gamemaster remote at `http://localhost:3000/gamemaster`.
 
 ---

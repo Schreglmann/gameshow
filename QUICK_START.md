@@ -21,6 +21,7 @@ npm run build
 ```bash
 npm start
 ```
+`npm start` runs the server under a small supervisor (`scripts/supervise.cjs`): if the server process dies, it is restarted within about a second, and the crash is written to `logs/crash.log`. Server output is also kept in `logs/server-YYYY-MM-DD.log`. `npm run start:unsupervised` runs the server without it.
 
 ### Step 4: Open the Admin Panel
 ```
