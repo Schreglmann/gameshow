@@ -16,6 +16,12 @@ swap, …) are clutter on the projector. A GM toolbar toggle hides all of them o
   (re)loads while hiding is on comes back with its buttons hidden, and a reloaded GM shows the correct
   toggle state.
 - [ ] **Off by default**: with nothing cached (fresh server) the show renders its buttons as before.
+- [ ] **Only while a GM is connected**: the show applies the hiding only while the cached `gm-presence`
+  channel reports `{ connected: true }`. The cached `show-controls-hidden` value outlives the GM, and
+  without a GM the show's own buttons are the only way forward (the points screen has no keyboard
+  navigation), so a show left with `hidden: true` and no GM would be stuck. When the last GM
+  disconnects the buttons come back; when a GM reconnects while the cached value is still
+  `hidden: true`, they hide again without anyone touching the toggle.
 - [ ] **Server restart**: the cache is in memory. When the GM's socket reconnects, it re-sends the
   value it knows. A GM that has not learned a value yet (nothing cached, never clicked) sends nothing,
   so opening a GM never resets the setting.
@@ -34,7 +40,7 @@ swap, …) are clutter on the projector. A GM toolbar toggle hides all of them o
     (bets, guesses, counts and team members the GM mirrors onto the show).
   - **Still usable**: the inactive-show "übernehmen" button (the only control without a GM
     equivalent), lightbox clicks on images, and keyboard / click navigation on the show page itself
-    (useful as a backup if the GM device fails).
+    (useful as a backup if the GM device fails; once its socket drops, the buttons come back too).
 - [ ] New buttons added to the show later are hidden automatically (the rule targets `button`, not a
   list of classes). A button that is a display for the audience opts out with `data-show-display`.
 - [ ] Not applied on `/show/theme-showcase`, so the showcase keeps rendering every button.
@@ -55,7 +61,8 @@ swap, …) are clutter on the projector. A GM toolbar toggle hides all of them o
   (subscribe with `useWsChannel`, send with `sendWs`), styled through the shared toggle selector lists
   in `gamemaster.css`.
 - Show: `useShowControlsHidden()` (mounted once in `AppContent`, `src/entries/frontend.tsx`) subscribes
-  to the channel and toggles the `<html>` class. All hiding is CSS; no game component branches on it.
+  to the channel and to `gm-presence` (via `useGmConnected()`) and sets the `<html>` class while both
+  say so. All hiding is CSS; no game component branches on it.
 
 ## Out of scope
 - Hiding non-interactive show content (scores, questions, timers, the connection dot).

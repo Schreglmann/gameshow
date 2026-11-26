@@ -212,7 +212,9 @@ channels:
       control buttons (Weiter, Richtig/Falsch, music player, …) because the
       gamemaster drives the show; displays the audience reads (joker icons,
       award team cards, mirrored inputs) stay visible but not clickable.
-      Client-writable (the GM emits it) and cached last-value, so a show that
+      The show applies it only while `gm-presence` reports a connected
+      gamemaster: the cached value outlives the GM, and a show without one
+      needs its buttons to advance. Client-writable (the GM emits it) and cached last-value, so a show that
       reloads while hiding is on comes back with its buttons hidden. A GM
       re-sends its known value after reconnecting when the server's
       initial-state burst carried none (server restart). Zone: shared

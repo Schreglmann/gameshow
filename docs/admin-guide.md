@@ -660,7 +660,7 @@ From here you can:
 - The admin panel never interrupts the game — you can check or correct things at any time
 - Points can be manually corrected in the **Session tab** if you make a mistake
 - Use **keyboard shortcuts** (`→` to advance, `←` to go back) for smooth presenting
-- If you run the show from the gamemaster, press **Show-Buttons ausblenden** in its toolbar. The projector then hides its own buttons (Weiter, Richtig/Falsch, the music player, …). Joker icons, the team picks on the points screen and the entered bets and guesses stay visible. Press **Show-Buttons einblenden** to bring the buttons back. The setting applies to every show screen and stays on when the projector reloads.
+- If you run the show from the gamemaster, press **Show-Buttons ausblenden** in its toolbar. The projector then hides its own buttons (Weiter, Richtig/Falsch, the music player, …). Joker icons, the team picks on the points screen and the entered bets and guesses stay visible. Press **Show-Buttons einblenden** to bring the buttons back. The setting applies to every show screen and stays on when the projector reloads. It only takes effect while a gamemaster is connected: if the gamemaster device drops out, the projector shows its buttons again so the show can carry on without it.
 
 ### If the server crashes
 
