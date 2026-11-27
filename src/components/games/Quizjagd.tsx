@@ -6,8 +6,9 @@ import BaseGameWrapper from './BaseGameWrapper';
 import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
 import { useQuestionOrder } from '@/hooks/useQuestionOrder';
 import { useGameContext } from '@/context/GameContext';
+import { useRosterDisplayNames } from '@/hooks/useRosterDisplayNames';
 import { teamName } from '@/utils/teamNames';
-import { ALL_TEAM_KEYS, teamKeys, teamRoster, type TeamKey } from '@/utils/teams';
+import { ALL_TEAM_KEYS, teamKeys, type TeamKey } from '@/utils/teams';
 import TeamDot from '@/components/common/TeamDot';
 
 type Difficulty = 'easy' | 'medium' | 'hard';
@@ -82,6 +83,7 @@ interface InnerProps {
 
 function QuizjagdInner({ config, gameId, pointSystemEnabled, onGameComplete, setNavHandler, onAwardPoints, setGamemasterData, setGamemasterControls, setCommandHandler, setNavState, setAnswerRevealed }: InnerProps) {
   const { state } = useGameContext();
+  const playerLabels = useRosterDisplayNames();
   const questionsPerTeam = config.questionsPerTeam || 10;
 
   // Split the questions into the three difficulty pools. Supports both the flat
@@ -384,7 +386,7 @@ function QuizjagdInner({ config, gameId, pointSystemEnabled, onGameComplete, set
 
   const currentTeamCount = askedOf(turn.team);
   const teamLabel = teamName(state.teams, turn.team);
-  const teamPlayers: string[] = teamRoster(state.teams, turn.team);
+  const teamPlayers: string[] = playerLabels[turn.team];
 
   return (
     <>

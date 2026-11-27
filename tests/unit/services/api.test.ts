@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fetchSettings, fetchGameData, fetchBackgroundMusic } from '@/services/api';
+import { fetchSettings, fetchGameData, fetchBackgroundMusic, syncLivePlayers } from '@/services/api';
 
 describe('API Service', () => {
   beforeEach(() => {
@@ -37,6 +37,25 @@ describe('API Service', () => {
       globalThis.fetch = vi.fn().mockRejectedValue(new Error('Network error'));
 
       await expect(fetchSettings()).rejects.toThrow('Network error');
+    });
+  });
+
+  describe('syncLivePlayers', () => {
+    it('posts the adds and removes as JSON and returns the stored players', async () => {
+      const players = [{ id: 'kiki', firstName: '', lastName: '', nickname: 'Kiki' }];
+      globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ players }) });
+      const request = { add: [{ nickname: 'Kiki' }], remove: ['anna-mueller'] };
+      await expect(syncLivePlayers(request)).resolves.toEqual({ players });
+      expect(fetch).toHaveBeenCalledWith('/api/live-players', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(request),
+      });
+    });
+
+    it('throws with the status when the server refuses (e.g. an encrypted config)', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status: 409 });
+      await expect(syncLivePlayers({ remove: ['x'] })).rejects.toMatchObject({ status: 409 });
     });
   });
 

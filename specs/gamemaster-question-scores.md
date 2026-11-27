@@ -126,7 +126,7 @@ terminated only by the server's echo-dedup rather than by anything noticing. Und
 peer merely fails to sync the tally, which is visible. There is deliberately **no legacy migration**.
 
 ### Known limitations
-- `gamemaster-question-tally` has **no** Lamport `rev` guard (only `gamemaster-team-state-v2` does), so it
+- `gamemaster-question-tally` has **no** Lamport `rev` guard (only `gamemaster-team-state-v3` does), so it
   stays last-write-wins. Two gamemaster devices editing different rows at the same time can lose one
   edit. Pre-existing for this channel; out of scope here.
 - Admin Session-tab point edits go through `SET_TEAM_STATE` and are **not** logged, so panel rows will

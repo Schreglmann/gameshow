@@ -19,7 +19,9 @@ vi.mock('canvas-confetti', () => {
 
 const mockFetchGameData = vi.fn();
 
+const mockSyncLivePlayers = vi.hoisted(() => vi.fn().mockResolvedValue({ players: [] }));
 vi.mock('@/services/api', () => ({
+  syncLivePlayers: (...args: unknown[]) => mockSyncLivePlayers(...args),
   fetchSettings: vi.fn().mockResolvedValue({
     pointSystemEnabled: true,
     teamRandomizationEnabled: true,

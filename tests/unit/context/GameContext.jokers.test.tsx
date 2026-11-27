@@ -205,7 +205,7 @@ describe('GameContext — jokers', () => {
   it('cross-device WS team-state messages sync joker state', () => {
     renderWithProvider(<TestConsumer />);
     act(() => {
-      __emitChannelForTests('gamemaster-team-state-v2', {
+      __emitChannelForTests('gamemaster-team-state-v3', {
         team1: [],
         team2: [],
         team1Points: 0,

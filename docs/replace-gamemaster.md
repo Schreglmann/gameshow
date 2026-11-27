@@ -18,6 +18,8 @@ It is the smallest of the three PWAs — two HTTP endpoints and a handful of Web
 | Method | Path | Purpose |
 |--------|------|---------|
 | `GET` | `/api/settings` | Read enabled jokers, team randomization flag, global rules, `teamColors` (per-team accent colours, empty when off). |
+
+An `input-group` control's input may carry `suggestions` (`{ id, label }[]`, the "Spieler hinzufügen" fields): show the ones whose label contains the typed text (an entry with `fullMatch` — a disabled player — only when the typed text equals one of those names); a pick fills the label into the field, and the operator submits it like typed text (the show resolves the label to that player). A GM that ignores `suggestions` still works — the typed text is submitted as before. See [specs/players.md](../specs/players.md).
 | `GET` | `/api/game/:index` | Look up game metadata (mainly `title`, `totalQuestions`) when rendering answer cards. |
 | `GET` | `/api/run-of-show` | **Optional.** `{ games: [{ index, gameId, title, type, missing? }] }` — the active gameshow's running order. Fetch it if you render a run-of-show overview or offer jump-to-game; the WebSocket channels only ever tell you about the CURRENT game. See [specs/gamemaster-run-of-show.md](../specs/gamemaster-run-of-show.md). |
 
@@ -37,7 +39,7 @@ One socket at `/api/ws`. Wire format: `{ channel, data }`.
 |---------|---------|---------|
 | `gamemaster-answer` | yes | Current answer card state pushed by the active show. |
 | `gamemaster-controls` | yes | Current control panel + phase + gameIndex pushed by the active show. Also carries `pointsDisabled`: when true the playing game awards no points (0 teams, or a type the team count cannot score) — hide any per-question scoring breakdown, since `pointSystemEnabled` is resolved per game by `GET /api/game/:index` and you never fetch it. |
-| `gamemaster-team-state-v2` | yes | Team members, points, joker usage, and `scoreHistory` (scoring-undo audit log; ≤60 entries, each optionally carrying `gameIndex` + `questionNumber`). Teams 1-4; `team3`/`team4` only in a 3-4 team show. See specs/team-count.md. |
+| `gamemaster-team-state-v3` | yes | Team members, points, joker usage, and `scoreHistory` (scoring-undo audit log; ≤60 entries, each optionally carrying `gameIndex` + `questionNumber`). Teams 1-4; `team3`/`team4` only in a 3-4 team show. See specs/team-count.md. |
 | `gamemaster-question-tally` | yes | `{ [gameIndex]: { [questionKey]: { team1, team2 } } }` correct-answer tally, nested per question (`"0"` = example question, `"none"` = no question attributable). |
 | `music-state` | yes | **Optional.** `{ isPlaying, currentSong, currentTime, duration, volume }` — the active show's background-music snapshot (~1 Hz while playing). Subscribe to render a music remote-control player. See [specs/gamemaster-music-control.md](../specs/gamemaster-music-control.md). |
 | `content-changed` | no | **Optional.** `{ config?, theme?, games? }`. Subscribe if you fetch `GET /api/game/:index` / `GET /api/settings` directly and want those re-fetched live when config/games change on disk. |
@@ -49,7 +51,7 @@ One socket at `/api/ws`. Wire format: `{ channel, data }`.
 | Channel | Cached? | When to send |
 |---------|---------|--------------|
 | `gamemaster-command` | no | On every button tap or input submit. |
-| `gamemaster-team-state-v2` | yes | On every local team/joker state mutation (incl. a scoring undo, which mutates points + `scoreHistory`). Bump `rev` to `(highest rev seen) + 1`, and mutate the LAST RECEIVED state — publishing a snapshot this device captured earlier reverts points everywhere. The server drops a write that doesn't beat its cached rev and returns the cached value instead. |
+| `gamemaster-team-state-v3` | yes | On every local team/joker state mutation (incl. a scoring undo, which mutates points + `scoreHistory`). Bump `rev` to `(highest rev seen) + 1`, and mutate the LAST RECEIVED state — publishing a snapshot this device captured earlier reverts points everywhere. The server drops a write that doesn't beat its cached rev and returns the cached value instead. |
 | `gamemaster-question-tally` | yes | On every local tally mutation. |
 | `show-hold` | yes | `{ active, message? }` when toggling the panic/pause hold overlay on the show. |
 | `show-controls-hidden` | yes | **Optional.** `{ hidden }` when toggling whether the show hides its own control buttons. Subscribe to it to show the current state. The server cache is in memory: after reconnecting, re-send your value only if the server's initial burst brought none, so you don't overwrite a change another gamemaster made while you were offline. |
@@ -98,7 +100,7 @@ ws.addEventListener('message', (ev) => {
   switch (msg.channel) {
     case 'gamemaster-answer':    setAnswer(msg.data); break;
     case 'gamemaster-controls':  setControls(msg.data); break;
-    case 'gamemaster-team-state-v2': setTeams(msg.data); break;
+    case 'gamemaster-team-state-v3': setTeams(msg.data); break;
     case 'gamemaster-question-tally': setTally(msg.data); break;
   }
 });

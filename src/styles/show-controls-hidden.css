@@ -12,6 +12,7 @@ html.show-controls-hidden button:not([data-show-display], .header-joker, .award-
 html.show-controls-hidden .music-controls,
 html.show-controls-hidden .audio-ctrl-divider,
 html.show-controls-hidden .name-form,
+html.show-controls-hidden .draw-add-feedback,
 html.show-controls-hidden #teamAssignmentText,
 html.show-controls-hidden .team-member-row:has(.team-member-input:placeholder-shown),
 html.show-controls-hidden #startPrompt,

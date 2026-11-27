@@ -62,14 +62,14 @@ describe('SummaryScreen - Gaps', () => {
     });
   });
 
-  it('shows team1 wins with capitalized member names', async () => {
+  it('shows team1 wins with its member names', async () => {
     vi.mocked(fetchSettings).mockResolvedValue({
       pointSystemEnabled: true,
       teamRandomizationEnabled: true,
       globalRules: [],
     });
-    localStorage.setItem('team1', JSON.stringify(['alice', 'bob']));
-    localStorage.setItem('team2', JSON.stringify(['charlie']));
+    localStorage.setItem('team1', JSON.stringify([{ firstName: 'Alice', lastName: 'Arndt' }, { firstName: 'Bob', lastName: '' }]));
+    localStorage.setItem('team2', JSON.stringify([{ firstName: 'Charlie', lastName: '' }]));
     localStorage.setItem('team1Points', '20');
     localStorage.setItem('team2Points', '10');
 
@@ -79,7 +79,7 @@ describe('SummaryScreen - Gaps', () => {
       expect(screen.getByText(/Team 1 hat gewonnen/)).toBeInTheDocument();
     });
 
-    // Capitalized names should appear
+    // First names only — nobody shares one.
     await waitFor(() => {
       expect(screen.getByText(/Alice/)).toBeInTheDocument();
       expect(screen.getByText(/Bob/)).toBeInTheDocument();
@@ -92,8 +92,8 @@ describe('SummaryScreen - Gaps', () => {
       teamRandomizationEnabled: true,
       globalRules: [],
     });
-    localStorage.setItem('team1', JSON.stringify(['alice']));
-    localStorage.setItem('team2', JSON.stringify(['charlie', 'dave']));
+    localStorage.setItem('team1', JSON.stringify([{ firstName: 'Alice', lastName: '' }]));
+    localStorage.setItem('team2', JSON.stringify([{ firstName: 'Charlie', lastName: '' }, { firstName: 'Dave', lastName: '' }]));
     localStorage.setItem('team1Points', '5');
     localStorage.setItem('team2Points', '15');
 
@@ -133,13 +133,13 @@ describe('SummaryScreen - Gaps', () => {
     });
     localStorage.setItem('team1Points', '42');
     localStorage.setItem('team2Points', '37');
-    localStorage.setItem('team1', JSON.stringify(['alice', 'bob']));
+    // A pre-update roster (plain strings) still lists its members.
+    localStorage.setItem('team1', JSON.stringify(['Alice', 'Bob']));
 
     renderSummary();
 
     await waitFor(() => {
       expect(screen.getByText(/Team 1 hat gewonnen/)).toBeInTheDocument();
-      // Capitalized member names
       expect(screen.getByText('Alice')).toBeInTheDocument();
       expect(screen.getByText('Bob')).toBeInTheDocument();
     });

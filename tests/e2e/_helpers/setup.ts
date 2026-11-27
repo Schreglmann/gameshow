@@ -20,7 +20,7 @@ export async function clearWsState(): Promise<void> {
       const channels = [
         'gamemaster-answer',
         'gamemaster-controls',
-        'gamemaster-team-state-v2',
+        'gamemaster-team-state-v3',
         'gamemaster-question-tally',
       ];
       // Wait for each send to actually flush to the TCP socket before
@@ -47,7 +47,7 @@ export async function clearWsState(): Promise<void> {
 }
 
 /**
- * Publish a `gamemaster-team-state-v2` snapshot as a plain WS peer — stands in for
+ * Publish a `gamemaster-team-state-v3` snapshot as a plain WS peer — stands in for
  * another device (a show awarding points, a second GM) without having to drive a
  * whole game. `rev` must beat whatever the server has cached or the write is
  * rejected by the stale-write guard; pair with `clearWsState()` in beforeEach so
@@ -62,7 +62,7 @@ export async function publishTeamState(teams: Record<string, unknown>): Promise<
     const sent = await new Promise<boolean>((resolve) => {
       const ws = new WebSocket(WS_URL);
       ws.on('open', () => {
-        ws.send(JSON.stringify({ channel: 'gamemaster-team-state-v2', data: teams }), () => {
+        ws.send(JSON.stringify({ channel: 'gamemaster-team-state-v3', data: teams }), () => {
           setTimeout(() => { try { ws.close(); } catch { /* noop */ } resolve(true); }, 100);
         });
       });
@@ -76,7 +76,7 @@ export async function publishTeamState(teams: Record<string, unknown>): Promise<
 
 /**
  * What a newly-connecting device would receive: the server's cached
- * `gamemaster-team-state-v2`, read from the initial-state burst. Returns null if
+ * `gamemaster-team-state-v3`, read from the initial-state burst. Returns null if
  * nothing is cached within the timeout.
  */
 export async function readCachedTeamState(): Promise<Record<string, unknown> | null> {
@@ -88,7 +88,7 @@ export async function readCachedTeamState(): Promise<Record<string, unknown> | n
       try {
         const msg = JSON.parse(typeof raw === 'string' ? raw : raw.toString('utf-8')) as
           { channel?: string; data?: Record<string, unknown> | null };
-        if (msg.channel === 'gamemaster-team-state-v2' && msg.data) result = msg.data;
+        if (msg.channel === 'gamemaster-team-state-v3' && msg.data) result = msg.data;
       } catch { /* ignore non-JSON */ }
     });
     // The burst is synchronous on connect; give it a moment, then report.
@@ -100,7 +100,7 @@ export async function readCachedTeamState(): Promise<Record<string, unknown> | n
 /**
  * Isolate a show page from cross-test team-state leaks.
  *
- * The shared backend caches `gamemaster-team-state-v2` and asks any lingering
+ * The shared backend caches `gamemaster-team-state-v3` and asks any lingering
  * previous-test show to re-emit its state when a new client connects (see
  * server/ws.ts `sendInitialState` → `show-reemit-request`). Either path delivers
  * a stale team-state burst that flips `hasTeams` true — unmounting the "Teams
@@ -110,13 +110,13 @@ export async function readCachedTeamState(): Promise<Record<string, unknown> | n
  * racy.
  *
  * This intercepts the page's `/api/ws` socket, forwards everything to the real
- * server, but DROPS inbound `gamemaster-team-state-v2` / `gamemaster-question-tally`
+ * server, but DROPS inbound `gamemaster-team-state-v3` / `gamemaster-question-tally`
  * frames. Team state then comes solely from this test (the form, or seedTeams()),
  * deterministically. Page→server messages still auto-forward (we don't call
  * `ws.onMessage`); only server→page is filtered. Call BEFORE `page.goto()`.
  */
 export async function isolateShowWsState(page: Page): Promise<void> {
-  const BLOCKED = new Set(['gamemaster-team-state-v2', 'gamemaster-question-tally']);
+  const BLOCKED = new Set(['gamemaster-team-state-v3', 'gamemaster-question-tally']);
   await page.routeWebSocket(/\/api\/ws/, (ws) => {
     const server = ws.connectToServer();
     server.onMessage((message) => {
@@ -132,6 +132,22 @@ export async function isolateShowWsState(page: Page): Promise<void> {
   });
 }
 
+const blockedSync = new WeakSet<Page>();
+
+/**
+ * Keep the show's player adds/removes out of config.json. The show writes
+ * every add and remove into the active gameshow (`POST /api/live-players`,
+ * specs/players.md); the e2e run reuses a local dev server with the
+ * operator's real config, which must not collect "Alice" and "Bob". The
+ * request is answered as if nothing was stored. Idempotent per page.
+ */
+export async function blockLivePlayerSync(page: Page): Promise<void> {
+  if (blockedSync.has(page)) return;
+  blockedSync.add(page);
+  await page.route('**/api/live-players', route =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ players: [] }) }));
+}
+
 /**
  * Open the show landing screen and return the hidden draw's "Name hinzufügen"
  * field, ready to type into. Relies on the spec's `beforeEach(isolateShowWsState)`
@@ -139,6 +155,7 @@ export async function isolateShowWsState(page: Page): Promise<void> {
  * configured players may already be in the draw. See specs/team-management.md.
  */
 export async function openShowHomeForm(page: Page): Promise<Locator> {
+  await blockLivePlayerSync(page);
   await page.goto('/show/');
   const input = page.locator('.draw-add-form input');
   await input.waitFor({ state: 'visible', timeout: 10_000 });
@@ -147,6 +164,7 @@ export async function openShowHomeForm(page: Page): Promise<Locator> {
 
 /** Add comma-separated players to the hidden draw through the show's add field. */
 export async function addShowPlayers(page: Page, names: string): Promise<void> {
+  await blockLivePlayerSync(page);
   const input = page.locator('.draw-add-form input');
   await input.fill(names);
   await page.locator('.draw-add-form button[type="submit"]').click();
@@ -155,7 +173,9 @@ export async function addShowPlayers(page: Page, names: string): Promise<void> {
 /**
  * Seed team state in localStorage before the page navigates. Use when a test
  * depends on teams being present without going through the landing form each
- * time.
+ * time. The rosters are written as plain name strings on purpose — the form
+ * from before players had two names — so every caller also covers the
+ * conversion on read (specs/players.md).
  */
 export async function seedTeams(
   page: Page,

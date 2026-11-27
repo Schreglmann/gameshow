@@ -2,21 +2,64 @@ import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } fr
 import { useNavigate } from 'react-router-dom';
 import { useGameContext } from '@/context/GameContext';
 import { useGamemasterSync, useGamemasterControlsSync, useGamemasterCommandListener } from '@/hooks/useGamemasterSync';
-import type { GamemasterCommand, GamemasterControl } from '@/types/game';
+import type { GamemasterCommand, GamemasterControl, RosterPlayer } from '@/types/game';
+import type { LivePlayersRequest, Player } from '@/types/config';
+import { syncLivePlayers } from '@/services/api';
+import SuggestInput from '@/components/common/SuggestInput';
 import { teamName, teamNameLongHint } from '@/utils/teamNames';
 import { useTeamNameCheck } from '@/hooks/useTeamNameCheck';
 import { teamDisplayOrder } from '@/utils/teamOrder';
-import { ALL_TEAM_KEYS, teamKeys, teamNumber, teamRoster, isTeamKey, type TeamKey } from '@/utils/teams';
+import { teamKeys, teamNumber, teamRoster, isTeamKey, type TeamKey } from '@/utils/teams';
 import TeamCountWarning from '@/components/screens/TeamCountWarning';
 import CacheStatusBanner from './CacheStatusBanner';
 import InstallButton from '@/components/common/InstallButton';
 import TeamCardName from '@/components/common/TeamCardName';
 import { isInactiveShowTab, onBecameActive } from '@/services/showPresenceState';
-import { drawnPlayers, movePlayer, normalizePlayerName, parsePlayerNames, removePlayerByName } from '@/utils/teamDraw';
+import { drawnPlayers, movePlayer, removePlayer as removeFromDraw } from '@/utils/teamDraw';
+import {
+  additionFeedback,
+  adminLabel,
+  checkAdditions,
+  displayNames,
+  fullName,
+  knownPlayers,
+  nameKey,
+  normalizeWhitespace,
+  parsePlayerInput,
+  parsePlayerNames,
+  playerSuggestions,
+  rosterSignature,
+  samePlayer,
+  shownName,
+  type AdditionCheck,
+} from '@/utils/playerNames';
+import { useRosterDisplayNames } from '@/hooks/useRosterDisplayNames';
 import { fitRosterLayout, maxRosterColumns } from '@/utils/rosterFit';
 
-/** The player grid before the reveal is alphabetical, so team order can't give the draw away. */
-const alphabetical = (names: readonly string[]) => [...names].sort((a, b) => a.localeCompare(b, 'de'));
+/** Up to this many players the pre-reveal name grid uses larger chips. */
+const DRAW_POOL_LARGE_MAX = 12;
+
+/**
+ * React key for a roster row that follows the PLAYER, not the position, so a
+ * focused input stays with its player when the GM removes someone above it.
+ */
+function playerRowKeys(players: readonly RosterPlayer[]): string[] {
+  const seen = new Map<string, number>();
+  return players.map(p => {
+    const base = p.id ?? nameKey(p);
+    const n = seen.get(base) ?? 0;
+    seen.set(base, n + 1);
+    return n === 0 ? base : `${base}#${n}`;
+  });
+}
+
+/** A roster input being edited on the show: who it was, and the text so far. */
+interface SlotEdit {
+  team: TeamKey;
+  /** The player being edited; `null` for the "+ Spieler hinzufügen" ghost slot. */
+  original: RosterPlayer | null;
+  text: string;
+}
 
 export default function HomeScreen() {
   const { state, dispatch, assignTeams, reconcileTeamDraw, revealTeams } = useGameContext();
@@ -35,23 +78,38 @@ export default function HomeScreen() {
   // Guards against a second finishEdit() firing when the focused input unmounts
   // (Enter/Escape sets editingTeam=null → blur fires during React's commit).
   const committingRef = useRef(false);
-  // Manual team assignment (teamRandomizationEnabled === false): the roster is
-  // edited inline as a list of text inputs plus one trailing blank "ghost" slot.
-  // We keep a local draft while typing (so a cleared field doesn't vanish
-  // mid-keystroke) and commit to SET_TEAMS on blur; the resync effect below
-  // mirrors external changes (e.g. the gamemaster) back in when we're not typing.
-  const [memberDrafts, setMemberDrafts] = useState<Partial<Record<TeamKey, string[]>>>(() => {
-    const drafts: Partial<Record<TeamKey, string[]>> = {};
-    for (const key of ALL_TEAM_KEYS) drafts[key] = state.teams[key] ?? [];
-    return drafts;
-  });
-  const [membersEditing, setMembersEditing] = useState(false);
+  // Inline roster editing (manual mode, and after the reveal): only the input
+  // being typed in holds a draft; every other row renders straight from state,
+  // so GM changes show up immediately. Committed to SET_TEAMS on blur.
+  const [slotEdit, setSlotEdit] = useState<SlotEdit | null>(null);
+  // Feedback for an add or an edit ("schon dabei", first-name clash). Shown on
+  // the show and as a GM info line, cleared after a while. See specs/players.md.
+  const [addFeedback, setAddFeedback] = useState<{ text: string; n: number } | null>(null);
+  const feedbackCounter = useRef(0);
+  const reportAddition = useCallback((result: AdditionCheck) => {
+    const text = additionFeedback(result);
+    feedbackCounter.current += 1;
+    setAddFeedback(text ? { text, n: feedbackCounter.current } : null);
+  }, []);
+  useEffect(() => {
+    if (!addFeedback) return;
+    const timer = setTimeout(() => setAddFeedback(null), 8000);
+    return () => clearTimeout(timer);
+  }, [addFeedback]);
+  // Show/GM labels: first name, plus a surname prefix where two share one.
+  const playerLabels = useRosterDisplayNames();
   // GM-driven rename: which team the gamemaster is currently editing (null = none),
   // plus the value it's typing (mirrored via emitOnChange) so the show can surface
   // the long-name warning in the GM control panel.
   const [gmEditingTeam, setGmEditingTeam] = useState<TeamKey | null>(null);
   const [gmEditValue, setGmEditValue] = useState('');
+  // After the reveal the GM renames a team on its card header instead: the name
+  // being typed there (mirrored via `<id>:change`), for the long-name warning.
+  const [gmCardDraft, setGmCardDraft] = useState<{ team: TeamKey; value: string } | null>(null);
   const { pointSystemEnabled, teamRandomizationEnabled, players, teamCount, showTitle } = state.settings;
+  // What a typed name is matched against, and what the add fields suggest:
+  // the whole registry (the gameshow's players first). See specs/players.md.
+  const known = useMemo(() => knownPlayers(state.settings), [state.settings]);
   // The teams this gameshow runs with (0-4). Everything below iterates this list
   // instead of naming team1/team2. See specs/team-count.md.
   const activeTeams = useMemo(() => teamKeys(teamCount), [teamCount]);
@@ -84,6 +142,16 @@ export default function HomeScreen() {
   const teamsVisible = !teamRandomizationEnabled || teamsRevealed;
   const drawn = useMemo(() => drawnPlayers(state.teams, activeTeams), [state.teams, activeTeams]);
   const drawEmpty = drawn.length === 0;
+  // Autocomplete candidates: every registry player not in the draw yet.
+  const suggestions = useMemo(() => playerSuggestions(known, drawn), [known, drawn]);
+  // The grid before the reveal is alphabetical by label, so team order can't give the draw away.
+  const drawPool = useMemo(() => {
+    const labels = displayNames(drawn);
+    const keys = playerRowKeys(drawn);
+    return drawn
+      .map((player, i) => ({ player, label: labels[i]!, key: keys[i]! }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'de'));
+  }, [drawn]);
 
   // An inactive show tab must not author a draw; re-run once it takes over.
   const [activeTick, setActiveTick] = useState(0);
@@ -101,56 +169,76 @@ export default function HomeScreen() {
   }, [state.settingsLoaded, hiddenDraw, activeTick]);
 
   // Configured players changed at runtime before the reveal (admin Gameshows
-  // tab, live reload): place the added names and drop the removed ones, the
-  // same way the add field and the ✕ do.
-  const prevPlayersRef = useRef<string[] | null>(null);
+  // tab, live reload): follow by id — removed ids drop out, new ids join the
+  // smallest team, renamed players are updated in place. See specs/players.md.
+  const prevPlayersRef = useRef<Player[] | null>(null);
   useEffect(() => {
     if (!state.settingsLoaded) return;
     const prev = prevPlayersRef.current;
     prevPlayersRef.current = players;
     if (prev === null || !hiddenDraw || isInactiveShowTab()) return;
-    if (prev.join('\n') === players.join('\n')) return;
-    const count = (list: readonly string[]) => {
-      const m = new Map<string, number>();
-      for (const n of list) {
-        const k = normalizePlayerName(n).toLowerCase();
-        m.set(k, (m.get(k) ?? 0) + 1);
-      }
-      return m;
-    };
-    const before = count(prev);
-    const after = count(players);
-    const names = [...drawn];
-    for (const [k, n] of before) {
-      for (let i = 0; i < n - (after.get(k) ?? 0); i++) {
-        const idx = names.findIndex(x => normalizePlayerName(x).toLowerCase() === k);
-        if (idx >= 0) names.splice(idx, 1);
-      }
-    }
-    const added = new Map(after);
-    for (const [k, n] of before) added.set(k, (added.get(k) ?? 0) - n);
+    if (rosterSignature(prev) === rosterSignature(players)) return;
+    const current = new Map(players.map(p => [p.id, p]));
+    const removed = new Set(prev.filter(p => !current.has(p.id)).map(p => p.id));
+    const list: RosterPlayer[] = drawn
+      .filter(p => !(p.id && removed.has(p.id)))
+      .map(p => (p.id && current.get(p.id)) || p);
     for (const p of players) {
-      const k = normalizePlayerName(p).toLowerCase();
-      const left = added.get(k) ?? 0;
-      if (left <= 0) continue;
-      added.set(k, left - 1);
-      names.push(p);
+      if (prev.some(q => q.id === p.id)) continue;
+      const idx = list.findIndex(q => samePlayer(q, p));
+      if (idx < 0) list.push(p);
+      else if (!list[idx]!.id) list[idx] = p; // a typed "Anna Müller" becomes the configured one
     }
-    reconcileTeamDraw(names);
+    reconcileTeamDraw(list);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [players, state.settingsLoaded]);
 
-  /** Add one or more (comma-separated) players: each joins the smallest team. */
-  const addPlayers = useCallback((raw: string) => {
-    const names = parsePlayerNames(raw);
-    if (names.length > 0) reconcileTeamDraw([...drawn, ...names]);
-  }, [drawn, reconcileTeamDraw]);
+  /**
+   * Write adds and removes into the active gameshow's players (a new name
+   * becomes a registry player with only the nickname). Fire and forget: the
+   * live draw never waits for it, and a failed write leaves it as it is. Only
+   * the active show tab writes. See specs/players.md ("Sync to the gameshow").
+   */
+  const syncToGameshow = useCallback((added: readonly RosterPlayer[], removed: readonly RosterPlayer[]) => {
+    if (isInactiveShowTab()) return;
+    const request: LivePlayersRequest = {};
+    if (added.length > 0) {
+      request.add = added.map(p => (p.id
+        ? { id: p.id }
+        : { firstName: p.firstName, lastName: p.lastName, nickname: shownName(p) }));
+    }
+    const removeIds = removed.flatMap(p => (p.id ? [p.id] : []));
+    if (removeIds.length > 0) request.remove = removeIds;
+    if (!request.add && !request.remove) return;
+    syncLivePlayers(request).catch(err => {
+      console.warn('[players] Gameshow-Spieler nicht aktualisiert:', err);
+    });
+  }, []);
 
-  /** Remove one player by name (the show's ✕), wherever the draw put them. */
-  const removePlayer = useCallback((name: string) => {
-    const patch = removePlayerByName(state.teams, activeTeams, name);
-    if (patch) dispatch({ type: 'SET_TEAMS', payload: patch });
-  }, [state.teams, activeTeams, dispatch]);
+  /**
+   * Add one or more (comma-separated) players: each joins the smallest team.
+   * An autocomplete pick arrives as its label (`Michael „Michi“ Huber`), which
+   * resolves to that registry player. A player already in the draw is
+   * refused. See specs/players.md.
+   */
+  const addPlayers = useCallback((raw: string) => {
+    const { players: incoming, ambiguous } = parsePlayerNames(raw, known);
+    if (incoming.length === 0 && ambiguous.length === 0) return;
+    const result: AdditionCheck = { ...checkAdditions(drawn, incoming), ambiguous };
+    reportAddition(result);
+    if (result.accepted.length > 0) {
+      reconcileTeamDraw([...drawn, ...result.accepted]);
+      syncToGameshow(result.accepted, []);
+    }
+  }, [drawn, known, reconcileTeamDraw, reportAddition, syncToGameshow]);
+
+  /** Remove one player (the show's ✕), wherever the draw put them. */
+  const removePlayer = useCallback((player: RosterPlayer) => {
+    const patch = removeFromDraw(state.teams, activeTeams, player);
+    if (!patch) return;
+    dispatch({ type: 'SET_TEAMS', payload: patch });
+    syncToGameshow([], [player]);
+  }, [state.teams, activeTeams, dispatch, syncToGameshow]);
 
   /** "Teams zuweisen": show the draw as it is — never reshuffles. */
   const revealDraw = useCallback(() => {
@@ -159,9 +247,9 @@ export default function HomeScreen() {
 
   /** GM popover "→ Team X": move the player at `index` of team `from`. */
   const moveTo = useCallback((from: TeamKey, index: number, to: TeamKey) => {
-    const name = teamRoster(state.teams, from)[index];
-    if (name === undefined) return;
-    const patch = movePlayer(state.teams, from, name, to);
+    const player = teamRoster(state.teams, from)[index];
+    if (player === undefined) return;
+    const patch = movePlayer(state.teams, from, player, to);
     if (patch) dispatch({ type: 'SET_TEAMS', payload: patch });
   }, [dispatch, state.teams]);
 
@@ -186,17 +274,23 @@ export default function HomeScreen() {
   // SET_TEAMS is a patch, so only the edited team travels — the others keep
   // their rosters untouched.
   const addMember = useCallback((key: TeamKey, raw: string) => {
-    const name = raw.trim();
-    if (!name) return;
-    dispatch({ type: 'SET_TEAMS', payload: { [key]: [...teamRoster(state.teams, key), name] } });
-  }, [dispatch, state.teams]);
+    const { players: incoming, ambiguous } = parsePlayerNames(raw, known);
+    if (incoming.length === 0 && ambiguous.length === 0) return;
+    // Unique across the whole draw, not just this team.
+    const result: AdditionCheck = { ...checkAdditions(drawn, incoming), ambiguous };
+    reportAddition(result);
+    if (result.accepted.length === 0) return;
+    dispatch({ type: 'SET_TEAMS', payload: { [key]: [...teamRoster(state.teams, key), ...result.accepted] } });
+    syncToGameshow(result.accepted, []);
+  }, [dispatch, state.teams, drawn, known, reportAddition, syncToGameshow]);
 
   const removeMember = useCallback((key: TeamKey, index: number) => {
-    dispatch({
-      type: 'SET_TEAMS',
-      payload: { [key]: teamRoster(state.teams, key).filter((_, i) => i !== index) },
-    });
-  }, [dispatch, state.teams]);
+    const roster = teamRoster(state.teams, key);
+    const removed = roster[index];
+    if (removed === undefined) return;
+    dispatch({ type: 'SET_TEAMS', payload: { [key]: roster.filter((_, i) => i !== index) } });
+    syncToGameshow([], [removed]);
+  }, [dispatch, state.teams, syncToGameshow]);
 
   // Gamemaster controls. A rename in progress takes over regardless of mode.
   // Manual mode → per-team add-player inputs + tap-to-remove member lists.
@@ -217,12 +311,14 @@ export default function HomeScreen() {
   // the draw. Tapping a player opens a popover next to the name with
   // "→ <other team>" for every other team and "Entfernen" (the button `menu`).
   // Within a card the names are alphabetical so one is quick to find among 30+;
-  // ids keep the roster index, which is what the commands address.
+  // ids keep the roster index, which is what the commands address. After the
+  // reveal the card header (the team name) is tapped to rename the team.
   // See specs/team-management.md ("Verdeckte Auslosung").
   const gmDrawControls: GamemasterControl[] = gmTeamOrder.map(teamKey => {
     const members = teamRoster(state.teams, teamKey);
+    const labels = playerLabels[teamKey];
     const byName = members
-      .map((m, i) => ({ m, i }))
+      .map((_, i) => ({ m: labels[i] ?? '', i }))
       .sort((a, b) => a.m.localeCompare(b.m, 'de'));
     return {
       type: 'button-group',
@@ -230,9 +326,24 @@ export default function HomeScreen() {
       label: `${teamName(state.teams, teamKey)} (${members.length})`,
       layout: 'grid',
       team: teamKey,
+      ...(teamsRevealed
+        ? {
+            rename: {
+              id: `team-name-${teamKey}`,
+              value: state.teams[`${teamKey}Name`] ?? '',
+              placeholder: `Team ${teamNumber(teamKey)}`,
+              ariaLabel: `Name Team ${teamNumber(teamKey)}`,
+              ...(gmCardDraft?.team === teamKey && isNameLong(gmCardDraft.value)
+                ? { hint: teamNameLongHint(jokerCount) }
+                : {}),
+            },
+          }
+        : {}),
       buttons: byName.map(({ m, i }) => ({
         id: `player-${teamKey}-${i}`,
         label: m,
+        // The popover names the player in full (`Michael „Michi“ Huber`).
+        menuTitle: members[i] ? adminLabel(members[i]) : m,
         menu: [
           ...gmTeamOrder
             .filter(k => k !== teamKey)
@@ -245,22 +356,28 @@ export default function HomeScreen() {
   const gmAddPlayerControl: GamemasterControl = {
     type: 'input-group',
     id: 'add-player',
-    inputs: [{ id: 'name', label: 'Spieler hinzufügen', inputType: 'text', placeholder: 'Name (mehrere mit Komma)' }],
+    inputs: [{ id: 'name', label: 'Spieler hinzufügen', inputType: 'text', placeholder: 'Name (mehrere mit Komma)', suggestions }],
     submitLabel: 'Hinzufügen',
+    clearOnSubmit: true,
   };
+  // "Schon dabei" / first-name clash after an add, right under the add fields.
+  const gmFeedbackControls: GamemasterControl[] = addFeedback
+    ? [{ type: 'info', id: 'add-player-hint', text: addFeedback.text }]
+    : [];
   const gmReshuffleControl: GamemasterControl = { type: 'button', id: 'reshuffle-teams', label: 'Neu mischen' };
   const gmSwapControl: GamemasterControl[] = mirrorEnabled
     ? [{ type: 'button', id: 'swap-teams', label: 'Teams tauschen' }]
     : [];
   const manualTeamControls = (teamKey: TeamKey): GamemasterControl[] => {
     const label = teamName(state.teams, teamKey);
-    const members = teamRoster(state.teams, teamKey);
+    const members = playerLabels[teamKey];
     return [
       {
         type: 'input-group',
         id: `add-${teamKey}`,
-        inputs: [{ id: 'name', label: `${label} – Spieler hinzufügen`, inputType: 'text', placeholder: 'Name' }],
+        inputs: [{ id: 'name', label: `${label} – Spieler hinzufügen`, inputType: 'text', placeholder: 'Name', suggestions }],
         submitLabel: 'Hinzufügen',
+        clearOnSubmit: true,
       },
       ...(members.length > 0
         ? [{
@@ -303,6 +420,7 @@ export default function HomeScreen() {
     ];
   } else if (!teamRandomizationEnabled) {
     gamemasterControls = [
+      ...gmFeedbackControls,
       ...gmTeamOrder.flatMap(manualTeamControls),
       {
         type: 'button-group',
@@ -326,23 +444,20 @@ export default function HomeScreen() {
       { type: 'button', id: 'reveal-teams', label: 'Teams zuweisen', variant: 'primary', disabled: drawEmpty },
       gmReshuffleControl,
       gmAddPlayerControl,
+      ...gmFeedbackControls,
       ...gmDrawControls,
     ];
   } else {
     // Same layout as before the reveal: the actions on top, in the same slots —
     // "Zuweisung verbergen" (undo the reveal; the draw stays) where "Teams zuweisen"
-    // was — then the team cards, then rename / swap / "Weiter" at the bottom.
+    // was — then the team cards (tap a card's name to rename the team), then
+    // swap / "Weiter" at the bottom.
     gamemasterControls = [
       { type: 'button', id: 'hide-teams', label: 'Zuweisung verbergen' },
       gmReshuffleControl,
       gmAddPlayerControl,
+      ...gmFeedbackControls,
       ...gmDrawControls,
-      {
-        type: 'button-group',
-        id: 'edit-team',
-        label: 'Teamname ändern',
-        buttons: gmEditTeamButtons,
-      },
       ...gmSwapControl,
       { type: 'nav', id: 'nav', hideBack: true },
     ];
@@ -361,6 +476,7 @@ export default function HomeScreen() {
       dispatch({ type: 'SET_TEAMS_REVEALED', payload: { revealed: false } });
     } else if (cmd.controlId === 'add-player' && cmd.value && typeof cmd.value === 'object') {
       addPlayers((cmd.value as Record<string, string>).name ?? '');
+
     } else if (cmd.controlId.startsWith('mvto-')) {
       // `mvto-<from>-<index>-<to>` from a player's popover.
       const [, from, index, to] = cmd.controlId.split('-');
@@ -382,6 +498,18 @@ export default function HomeScreen() {
         setGmEditValue(state.teams[`${key}Name`] ?? '');
         setGmEditingTeam(key);
       }
+    } else if (cmd.controlId.startsWith('team-name-') && cmd.value && typeof cmd.value === 'object') {
+      // The rename on a GM team card: `team-name-<key>` saves, `…:change` mirrors the draft.
+      const [id, suffix] = cmd.controlId.split(':');
+      const key = id!.slice('team-name-'.length);
+      if (!isTeamKey(key)) return;
+      const name = (cmd.value as Record<string, string>).name ?? '';
+      if (suffix === 'change') {
+        setGmCardDraft({ team: key, value: name });
+      } else if (suffix === undefined) {
+        dispatch({ type: 'SET_TEAM_NAMES', payload: { [`${key}Name`]: name } });
+        setGmCardDraft(null);
+      }
     } else if (cmd.controlId === 'cancel-rename') {
       setGmEditingTeam(null);
     } else if (cmd.controlId === 'rename-team:change' && cmd.value && typeof cmd.value === 'object') {
@@ -401,6 +529,7 @@ export default function HomeScreen() {
     setAddInput('');
   };
 
+
   // ── Inline team-name editing (show) ──
   const startEdit = (key: TeamKey) => {
     editingRef.current = true;
@@ -418,48 +547,58 @@ export default function HomeScreen() {
     setTimeout(() => { committingRef.current = false; }, 0);
   };
 
-  // ── Inline member editing (show, manual mode) ──
-  // Mirror external roster changes into the draft whenever we're not typing.
-  // Keyed on EVERY team's roster, so a change to team 3 or 4 resyncs the drafts
-  // too — a key covering only team1/team2 left their rosters out of the draft and
-  // the show rendered them as empty.
-  const teamsKey = ALL_TEAM_KEYS.map(k => (state.teams[k] ?? []).join(' ')).join('|');
-  useEffect(() => {
-    if (!membersEditing) {
-      const drafts: Partial<Record<TeamKey, string[]>> = {};
-      for (const key of ALL_TEAM_KEYS) drafts[key] = state.teams[key] ?? [];
-      setMemberDrafts(drafts);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [teamsKey, membersEditing]);
-
-  // Render one empty "ghost" slot below the last real member so clicking it adds
-  // a player; an all-empty roster still shows a single slot.
-  const displayMemberSlots = (members: string[]): string[] =>
-    members.length === 0 || members[members.length - 1]!.trim() !== '' ? [...members, ''] : members;
-
-  const updateMemberSlot = (key: TeamKey, idx: number, value: string) => {
-    setMembersEditing(true);
-    setMemberDrafts(prev => {
-      const arr = [...(prev[key] ?? [])];
-      while (arr.length <= idx) arr.push('');
-      arr[idx] = value;
-      return { ...prev, [key]: arr };
-    });
+  // ── Inline member editing (show) ──
+  // A row shows the player's label; focusing it switches to the full name.
+  // On blur the edited player is found by identity (the GM may have changed
+  // the roster meanwhile), so the edit can never hit the wrong row.
+  const startSlotEdit = (team: TeamKey, original: RosterPlayer | null) => {
+    editingRef.current = true;
+    setSlotEdit({ team, original, text: original ? fullName(original) : '' });
   };
 
-  // Commit on blur: trim + drop every empty slot (so clearing a name's text
-  // removes it), and persist via SET_TEAMS only when something actually changed.
-  const commitMembers = () => {
-    setMembersEditing(false);
-    const clean = (arr: string[]) => arr.map(s => s.trim()).filter(Boolean);
-    // Only the teams that actually changed travel — SET_TEAMS is a patch.
-    const patch: Partial<Record<TeamKey, string[]>> = {};
-    for (const key of activeTeams) {
-      const next = clean(memberDrafts[key] ?? []);
-      if (next.join(' ') !== teamRoster(state.teams, key).join(' ')) patch[key] = next;
+  const commitSlotEdit = () => {
+    const edit = slotEdit;
+    setSlotEdit(null);
+    if (!edit) return;
+    const text = normalizeWhitespace(edit.text);
+    if (edit.original === null) {
+      // The "+ Spieler hinzufügen" ghost slot (a comma list works too).
+      if (text) addMember(edit.team, text);
+      return;
     }
-    if (Object.keys(patch).length > 0) dispatch({ type: 'SET_TEAMS', payload: patch });
+    const original = edit.original;
+    const roster = teamRoster(state.teams, edit.team);
+    const idx = roster.findIndex(p => samePlayer(p, original));
+    if (idx < 0 || text === fullName(original)) return;
+    if (!text) {
+      // Clearing the text removes the player.
+      removeMember(edit.team, idx);
+      return;
+    }
+    const edited = parsePlayerInput(text, known);
+    if (!edited) {
+      // A nickname several registry players share: say so, keep the player.
+      reportAddition({ accepted: [], duplicates: [], clashes: [], ambiguous: [text] });
+      return;
+    }
+    // The same registry player (case aside): their names come from the
+    // registry — rename them in the admin. Nothing to change here.
+    if (original.id && samePlayer(edited, original)) return;
+    const result = checkAdditions(drawn.filter(p => p !== roster[idx]), [edited]);
+    reportAddition(result);
+    if (result.accepted.length === 0) return; // a duplicate — the field reverts
+    dispatch({ type: 'SET_TEAMS', payload: { [edit.team]: roster.map((p, i) => (i === idx ? edited : p)) } });
+    // Another player now (not just a spelling fix): the gameshow swaps them too.
+    if (!samePlayer(original, edited)) syncToGameshow([edited], [original]);
+  };
+
+  /** Enter or Escape in a roster input ends the edit (blur commits it). */
+  const slotKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    e.stopPropagation();
+    if (e.key === 'Enter' || e.key === 'Escape') {
+      e.preventDefault();
+      (e.target as HTMLInputElement).blur();
+    }
   };
 
   const canAdvance = !teamsEnabled || teamsVisible;
@@ -517,7 +656,7 @@ export default function HomeScreen() {
     return () => window.removeEventListener('resize', refit);
   }, []);
   const layoutKey = activeTeams
-    .map(k => `${(memberDrafts[k] ?? []).join('\u0001')}|${state.teams[`${k}Name`] ?? ''}`)
+    .map(k => `${playerLabels[k].join('\u0001')}|${slotEdit?.team === k ? slotEdit.text : ''}|${state.teams[`${k}Name`] ?? ''}`)
     .join('\u0002');
   useLayoutEffect(() => {
     const grid = teamsGridRef.current;
@@ -528,7 +667,11 @@ export default function HomeScreen() {
 
   const renderTeam = (key: TeamKey) => {
     const n = teamNumber(key);
-    const members = memberDrafts[key] ?? [];
+    const members = teamRoster(state.teams, key);
+    const labels = playerLabels[key];
+    const rowKeys = playerRowKeys(members);
+    // In manual mode one trailing blank "ghost" slot adds a player.
+    const slots: (RosterPlayer | null)[] = !teamRandomizationEnabled ? [...members, null] : members;
     return (
     <div className="team" id={`${key}`} data-team={key} key={key} onClick={e => e.stopPropagation()}>
       {editingTeam === key ? (
@@ -560,27 +703,46 @@ export default function HomeScreen() {
         />
       )}
       <ul className="team-members team-members-editable" data-columns={memberCols[key] ?? 1}>
-        {(!teamRandomizationEnabled ? displayMemberSlots(members) : members).map((value, idx) => {
-          const isGhost = idx >= members.length;
+        {slots.map((player, idx) => {
+          const isGhost = player === null;
+          const editing = slotEdit !== null && slotEdit.team === key && (
+            isGhost ? slotEdit.original === null : slotEdit.original !== null && samePlayer(slotEdit.original, player)
+          );
+          const value = editing ? slotEdit.text : isGhost ? '' : labels[idx] ?? '';
           return (
-            <li key={idx} className="team-member-row">
-              <input
-                className="team-member-input"
-                value={value}
-                placeholder={isGhost ? '+ Spieler hinzufügen' : undefined}
-                aria-label={isGhost ? `Spieler zu Team ${n} hinzufügen` : `Spieler ${idx + 1} · Team ${n}`}
-                onClick={e => e.stopPropagation()}
-                onFocus={() => { editingRef.current = true; setMembersEditing(true); }}
-                onChange={e => updateMemberSlot(key, idx, e.target.value)}
-                onBlur={() => { commitMembers(); editingRef.current = false; }}
-                onKeyDown={e => {
-                  e.stopPropagation();
-                  if (e.key === 'Enter' || e.key === 'Escape') {
-                    e.preventDefault();
-                    (e.target as HTMLInputElement).blur();
-                  }
-                }}
-              />
+            <li key={isGhost ? 'ghost' : rowKeys[idx]} className="team-member-row">
+              {isGhost ? (
+                // The add slot suggests registry players; a pick fills in the
+                // name, Enter (or leaving the field) adds it.
+                <SuggestInput
+                  className="team-member-input"
+                  value={value}
+                  suggestions={suggestions}
+                  placeholder="+ Spieler hinzufügen"
+                  aria-label={`Spieler zu Team ${n} hinzufügen`}
+                  onClick={e => e.stopPropagation()}
+                  onFocus={() => startSlotEdit(key, null)}
+                  onValueChange={text => {
+                    setSlotEdit(prev => (prev ? { ...prev, text } : { team: key, original: null, text }));
+                  }}
+                  onBlur={() => { commitSlotEdit(); editingRef.current = false; }}
+                  onKeyDown={slotKeyDown}
+                />
+              ) : (
+                <input
+                  className="team-member-input"
+                  value={value}
+                  aria-label={`Spieler ${idx + 1} · Team ${n}`}
+                  onClick={e => e.stopPropagation()}
+                  onFocus={() => startSlotEdit(key, player)}
+                  onChange={e => {
+                    const text = e.target.value;
+                    setSlotEdit(prev => (prev ? { ...prev, text } : { team: key, original: player, text }));
+                  }}
+                  onBlur={() => { commitSlotEdit(); editingRef.current = false; }}
+                  onKeyDown={slotKeyDown}
+                />
+              )}
             </li>
           );
         })}
@@ -605,16 +767,20 @@ export default function HomeScreen() {
             {drawEmpty ? 'Noch keine Spieler' : `${drawn.length} Spieler · die Teams werden gleich ausgelost`}
           </p>
           {!drawEmpty && (
-            <ul className="draw-pool" aria-label="Spieler">
-              {alphabetical(drawn).map((name, i) => (
-                <li key={`${name}-${i}`} className="draw-pool-name">
-                  <span className="draw-pool-label">{name}</span>
+            <ul
+              className="draw-pool"
+              aria-label="Spieler"
+              data-size={drawn.length <= DRAW_POOL_LARGE_MAX ? 'large' : undefined}
+            >
+              {drawPool.map(({ player, label, key }) => (
+                <li key={key} className="draw-pool-name">
+                  <span className="draw-pool-label" title={fullName(player)}>{label}</span>
                   <button
                     type="button"
                     className="draw-pool-remove"
-                    aria-label={`${name} entfernen`}
-                    title={`${name} entfernen`}
-                    onClick={() => removePlayer(name)}
+                    aria-label={`${label} entfernen`}
+                    title={`${label} entfernen`}
+                    onClick={() => removePlayer(player)}
                   >
                     {/* An SVG, not the "×" character: the glyph sits off-centre in its
                         line box in most theme fonts. */}
@@ -625,15 +791,19 @@ export default function HomeScreen() {
             </ul>
           )}
           <form onSubmit={handleAdd} className="name-form draw-add-form">
-            <input
+            <SuggestInput
               value={addInput}
-              onChange={e => setAddInput(e.target.value)}
-              placeholder="Name hinzufügen"
+              onValueChange={setAddInput}
+              suggestions={suggestions}
+              placeholder="Name"
               title="Mehrere Namen mit Komma trennen"
               aria-label="Name hinzufügen"
             />
             <button type="submit" disabled={!addInput.trim()}>Hinzufügen</button>
           </form>
+          {addFeedback && (
+            <p className="draw-add-feedback" role="status" key={addFeedback.n}>{addFeedback.text}</p>
+          )}
           <button
             type="button"
             className="draw-reveal-button"
@@ -661,6 +831,9 @@ export default function HomeScreen() {
             {/* Crowd-facing setup screen → follow the frontend team order. */}
             {teamDisplayOrder(state.teams.orderSwapped, false, mirrorEnabled, teamCount).map(renderTeam)}
           </div>
+          {addFeedback && (
+            <p className="draw-add-feedback team-edit-feedback" role="status" key={addFeedback.n}>{addFeedback.text}</p>
+          )}
           {hasTeams && mirrorEnabled && (
             <button
               type="button"

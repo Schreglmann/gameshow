@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import type { GameType, RulesPreset, ContentChangedPayload } from '@/types/config';
 import { THEMES } from '@/context/ThemeContext';
-import { saveGame, saveGameBeacon, renameGame, unlockPrecheck, fetchConfig, deleteGameInstance, convertGameToMulti, fetchGame, fetchGames, ApiError } from '@/services/backendApi';
+import { saveGame, saveGameBeacon, renameGame, unlockPrecheck, fetchConfig, deleteGameInstance, convertGameToMulti, fetchGame, ApiError } from '@/services/backendApi';
 import {
   gameSaveKey,
   enqueueSave,
@@ -12,7 +12,7 @@ import {
   markSaved,
   onSaved,
 } from '@/services/saveQueue';
-import PlayerStatsModal from './PlayerStatsModal';
+import { openPlayer } from './openPlayer';
 import { useWsChannel } from '@/services/useBackendSocket';
 import { GAME_TYPE_INFO, GAME_TYPE_TEMPLATES, gameTypesShareQuestionShape, teamCountSupportLabel } from '@/data/gameTypeInfo';
 import RulesEditor from './RulesEditor';
@@ -29,8 +29,9 @@ import { useDragReorder } from './useDragReorder';
 import { slugifyGameName } from './slugifyGameName';
 import { useConfirm } from './ConfirmContext';
 import { instanceUsage, type InstanceUsage } from '@/utils/playerStats';
+import { playerById } from '@/utils/playerRegistry';
 import { DEFAULT_TEAM_COUNT, effectiveTeamCount } from '@/utils/teams';
-import type { GameshowConfig, GameFileSummary } from '@/types/config';
+import type { GameshowConfig, Player } from '@/types/config';
 
 interface Props {
   fileName: string;
@@ -64,9 +65,8 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
   // Gameshow membership → which players have played each instance (derived, read-only).
   const [gameshows, setGameshows] = useState<Record<string, GameshowConfig>>({});
   const [activeGameshow, setActiveGameshow] = useState<string>('');
-  // For the player-profile modal opened from a clicked player name.
-  const [games, setGames] = useState<GameFileSummary[]>([]);
-  const [statsPlayer, setStatsPlayer] = useState<string | null>(null);
+  // Registry ids → players, for the "Bereits gespielt von" names. See specs/players.md.
+  const [playerNames, setPlayerNames] = useState<ReadonlyMap<string, Player>>(() => new Map());
 
   // ── Spellcheck ("Lektorat") — per-game check; see specs/spellcheck.md ──
   const spellcheck = useSpellcheckSettings();
@@ -82,13 +82,11 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
         if (cancelled) return;
         setRulesPresets(cfg.rulesPresets ?? []);
         setGameshows(cfg.gameshows ?? {});
+        setPlayerNames(playerById(cfg.players ?? []));
         setActiveGameshow(cfg.activeGameshow ?? '');
         setPresetTeamCount(effectiveTeamCount(cfg));
       })
       .catch(() => { /* optional — fail silently */ });
-    fetchGames()
-      .then(gs => { if (!cancelled) setGames(gs); })
-      .catch(() => { /* only used to resolve titles in the profile modal */ });
     return () => { cancelled = true; };
   }, []);
   const prevData = useRef(data);
@@ -1017,7 +1015,8 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
           isArchive={isArchive(activeInstance)}
           initialQuestion={initialQuestion}
           instanceUsage={currentInstanceUsage}
-          onPlayerClick={setStatsPlayer}
+          onPlayerClick={openPlayer}
+          playerNames={playerNames}
         />
       </div>
 
@@ -1036,19 +1035,6 @@ export default function GameEditor({ fileName, initialData, initialInstance, ini
       )}
       </div>
 
-      {statsPlayer !== null && (
-        <PlayerStatsModal
-          player={statsPlayer}
-          games={games}
-          gameshows={gameshows}
-          referenceIndex={(() => {
-            const i = Object.keys(gameshows).indexOf(activeGameshow);
-            return i < 0 ? Object.keys(gameshows).length : i;
-          })()}
-          onNavigateToGameshow={gsId => { sessionStorage.setItem('focus-gameshow', gsId); window.location.hash = 'gameshows'; }}
-          onClose={() => setStatsPlayer(null)}
-        />
-      )}
     </SpellCheckProvider>
   );
 }

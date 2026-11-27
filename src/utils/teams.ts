@@ -1,4 +1,4 @@
-import type { TeamState } from '../types/game.js';
+import type { RosterPlayer, TeamState } from '../types/game.js';
 import type { AppConfig } from '../types/config.js';
 
 /**
@@ -78,7 +78,7 @@ export function teamPoints(teams: TeamState, key: TeamKey): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
 
-export function teamRoster(teams: TeamState, key: TeamKey): string[] {
+export function teamRoster(teams: TeamState, key: TeamKey): RosterPlayer[] {
   return teams[key] ?? [];
 }
 

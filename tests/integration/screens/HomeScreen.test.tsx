@@ -8,9 +8,13 @@ import { fetchSettings } from '@/services/api';
 import * as backendSocket from '@/services/useBackendSocket';
 import { __emitChannelForTests } from '@/services/useBackendSocket';
 import HomeScreen from '@/components/screens/HomeScreen';
+import { fullName, normalizeRoster } from '@/utils/playerNames';
+import { player } from '../../_helpers/players';
 
 // Mock API
+const mockSyncLivePlayers = vi.hoisted(() => vi.fn().mockResolvedValue({ players: [] }));
 vi.mock('@/services/api', () => ({
+  syncLivePlayers: (...args: unknown[]) => mockSyncLivePlayers(...args),
   fetchSettings: vi.fn().mockResolvedValue({
     pointSystemEnabled: true,
     teamRandomizationEnabled: true,
@@ -97,26 +101,28 @@ describe('HomeScreen', () => {
     expect(ids).toEqual(['team2', 'team1']);
   });
 
-  it('mirrors the GM "Teamname ändern" buttons (team 2 first by default)', async () => {
+  it('mirrors the GM team cards with their name editors (team 2 first by default)', async () => {
     localStorage.setItem('team1', JSON.stringify(['Anna']));
     localStorage.setItem('team2', JSON.stringify(['Ben']));
     const sendWsSpy = vi.spyOn(backendSocket, 'sendWs');
     renderHomeScreen();
     await waitFor(() => expect(document.querySelector('#teams .team')).not.toBeNull());
 
-    type Ctrl = { id: string; buttons?: { id: string }[] };
+    type Ctrl = { id: string; rename?: { id: string } };
     type Payload = { controls?: Ctrl[] } | null;
+    const lastControls = () => (sendWsSpy.mock.calls
+      .filter(([ch]) => ch === 'gamemaster-controls')
+      .map(([, d]) => (d as Payload)?.controls ?? [])
+      .at(-1)) ?? [];
     // The order depends on teamMirrorEnabled, which loads async from
     // /api/settings — poll until the mirrored broadcast lands.
     await waitFor(() => {
-      const editGroups = sendWsSpy.mock.calls
-        .filter(([ch]) => ch === 'gamemaster-controls')
-        .map(([, d]) => (d as Payload)?.controls?.find(c => c.id === 'edit-team'))
-        .filter((c): c is Ctrl => Boolean(c));
-      expect(editGroups.length).toBeGreaterThan(0);
-      // GM faces the crowd → mirror: team 2's rename button comes first with no swap.
-      expect(editGroups[editGroups.length - 1]!.buttons!.map(b => b.id)).toEqual(['edit-team2', 'edit-team1']);
+      const cards = lastControls().filter(c => c.id.startsWith('draw-'));
+      // GM faces the crowd → mirror: team 2's card comes first with no swap.
+      expect(cards.map(c => c.rename?.id)).toEqual(['team-name-team2', 'team-name-team1']);
     });
+    // The rename lives on the cards: no separate "Teamname ändern" buttons.
+    expect(lastControls().some(c => c.id === 'edit-team')).toBe(false);
     sendWsSpy.mockRestore();
   });
 
@@ -135,16 +141,13 @@ describe('HomeScreen', () => {
 
     expect(document.querySelector('.swap-teams-button')).toBeNull();
 
-    type Ctrl = { id: string; buttons?: { id: string }[] };
+    type Ctrl = { id: string; rename?: { id: string } };
     type Payload = { controls?: Ctrl[] } | null;
     const controlsPayloads = sendWsSpy.mock.calls
       .filter(([ch]) => ch === 'gamemaster-controls')
       .map(([, d]) => d as Payload);
-    const lastEditGroup = controlsPayloads
-      .map(p => p?.controls?.find(c => c.id === 'edit-team'))
-      .filter((c): c is Ctrl => Boolean(c))
-      .at(-1);
-    expect(lastEditGroup?.buttons?.map(b => b.id)).toEqual(['edit-team1', 'edit-team2']);
+    const lastCards = (controlsPayloads.at(-1)?.controls ?? []).filter(c => c.id.startsWith('draw-'));
+    expect(lastCards.map(c => c.rename?.id)).toEqual(['team-name-team1', 'team-name-team2']);
     expect(controlsPayloads.some(p => p?.controls?.some(c => c.id === 'swap-teams'))).toBe(false);
     sendWsSpy.mockRestore();
   });
@@ -225,7 +228,7 @@ describe('HomeScreen', () => {
       pointSystemEnabled: true,
       teamRandomizationEnabled: true,
       globalRules: ['Rule 1'],
-      players: ['Charlie', 'Alice', 'Bob'],
+      players: [player('Charlie', 'Clark'), player('Alice', 'Arndt'), player('Bob', 'Brown')],
     });
     renderHomeScreen();
     await waitFor(() => {
@@ -241,7 +244,7 @@ describe('HomeScreen', () => {
       pointSystemEnabled: true,
       teamRandomizationEnabled: true,
       globalRules: ['Rule 1'],
-      players: ['Alice', 'Bob', 'Charlie'],
+      players: [player('Alice', 'Arndt'), player('Bob', 'Brown'), player('Charlie', 'Clark')],
     });
     const sendWsSpy = vi.spyOn(backendSocket, 'sendWs');
     renderHomeScreen();
@@ -340,14 +343,72 @@ describe('HomeScreen', () => {
     });
   });
 
-  it('capitalizes every word of a multi-word name on assignment', async () => {
+  it('adds a new name as written, as the nickname', async () => {
+    const user = userEvent.setup();
+    renderHomeScreen();
+    await addAndReveal(user, 'john smith, Mary');
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('john smith')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('Mary')).toBeInTheDocument();
+    });
+    const drawn = ['team1', 'team2'].flatMap(k => JSON.parse(localStorage.getItem(k) ?? '[]')).map(p => p.nickname).sort();
+    expect(drawn).toEqual(['Mary', 'john smith']);
+  });
+
+  it('takes a typed full name as the registry player and shows the nickname', async () => {
+    mockedFetchSettings.mockResolvedValue({
+      pointSystemEnabled: true,
+      teamRandomizationEnabled: true,
+      globalRules: [],
+      registry: [player('John', 'Smith', 'john-smith', 'Johnny'), player('Mary', 'Jane')],
+    });
     const user = userEvent.setup();
     renderHomeScreen();
     await addAndReveal(user, 'john smith, mary jane');
-
     await waitFor(() => {
-      expect(screen.getByDisplayValue('John Smith')).toBeInTheDocument();
-      expect(screen.getByDisplayValue('Mary Jane')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('Johnny')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('Mary')).toBeInTheDocument();
     });
+    expect(mockSyncLivePlayers).toHaveBeenCalledWith({ add: [{ id: 'john-smith' }, { id: 'mary-jane' }] });
+  });
+
+  it('shows the full name while a roster input is focused and keeps the player on an unchanged blur', async () => {
+    mockedFetchSettings.mockResolvedValue({
+      pointSystemEnabled: true,
+      teamRandomizationEnabled: true,
+      globalRules: [],
+      registry: [player('John', 'Smith'), player('Mary', 'Jane')],
+    });
+    const user = userEvent.setup();
+    renderHomeScreen();
+    await addAndReveal(user, 'john smith, mary jane');
+    const input = await screen.findByDisplayValue('John');
+    await user.click(input);
+    expect(input).toHaveValue('John Smith');
+    await user.tab();
+    await waitFor(() => expect(screen.getByDisplayValue('John')).toBeInTheDocument());
+    const drawn = ['team1', 'team2']
+      .flatMap(k => normalizeRoster(JSON.parse(localStorage.getItem(k) ?? '[]')).map(fullName))
+      .sort();
+    expect(drawn).toEqual(['John Smith', 'Mary Jane']);
+  });
+
+  it('refuses to rename a roster player into another player and shows why', async () => {
+    mockedFetchSettings.mockResolvedValue({
+      pointSystemEnabled: true,
+      teamRandomizationEnabled: true,
+      globalRules: [],
+      registry: [player('John', 'Smith'), player('Mary', 'Jane')],
+    });
+    const user = userEvent.setup();
+    renderHomeScreen();
+    await addAndReveal(user, 'john smith, mary jane');
+    const input = await screen.findByDisplayValue('John');
+    await user.click(input);
+    await user.clear(input);
+    await user.type(input, 'mary jane');
+    await user.tab();
+    expect(await screen.findByRole('status')).toHaveTextContent('„Mary Jane“ ist schon dabei.');
+    expect(screen.getByDisplayValue('John')).toBeInTheDocument();
   });
 });

@@ -15,7 +15,7 @@ info:
     **Zone tags** mirror the OpenAPI tags: `frontend`, `admin`, `gamemaster`, `shared`.
 
     **Cached channels.** The server holds the last value of select channels
-    (`gamemaster-answer`, `gamemaster-controls`, `gamemaster-team-state-v2`,
+    (`gamemaster-answer`, `gamemaster-controls`, `gamemaster-team-state-v3`,
     `gamemaster-question-tally`, `music-state`, `gm-presence`, `show-hold`,
     `show-controls-hidden`) and sends the cached value to every newly connected
     client in the initial-state burst.
@@ -25,7 +25,7 @@ info:
       - `gamemaster-answer`
       - `gamemaster-controls`
       - `gamemaster-command`
-      - `gamemaster-team-state-v2`
+      - `gamemaster-team-state-v3`
       - `gamemaster-question-tally`
       - `music-state`
       - `music-command`
@@ -273,8 +273,8 @@ channels:
       at app level (`AppContent`), not per screen, because no mounted screen owns
       both a router and a command listener. See specs/gamemaster-run-of-show.md.
 
-  gamemaster-team-state-v2:
-    address: gamemaster-team-state-v2
+  gamemaster-team-state-v3:
+    address: gamemaster-team-state-v3
     messages:
       gamemasterTeamState:
         $ref: "#/components/messages/GamemasterTeamStateMessage"
@@ -284,7 +284,10 @@ channels:
       `rev` strictly beats the cached one, and sends the cached value back to a
       rejected writer so it converges (equal revs = concurrent mutation from the
       same base → first write wins). An explicit `null` payload resets the cache.
-      Zone: shared. See specs/cross-device-gamemaster.md.
+      Renamed from `gamemaster-team-state-v2` when rosters changed from name strings
+      to `RosterPlayer` objects, so a peer still running the old code stops syncing
+      instead of misreading them. Zone: shared. See specs/cross-device-gamemaster.md
+      and specs/players.md.
 
   gamemaster-question-tally:
     address: gamemaster-question-tally
@@ -442,10 +445,10 @@ operations:
 
   receiveGamemasterTeamState:
     action: receive
-    channel: { $ref: "#/channels/gamemaster-team-state-v2" }
+    channel: { $ref: "#/channels/gamemaster-team-state-v3" }
     summary: Every PWA receives team/joker state changes.
     messages:
-      - $ref: "#/channels/gamemaster-team-state-v2/messages/gamemasterTeamState"
+      - $ref: "#/channels/gamemaster-team-state-v3/messages/gamemasterTeamState"
 
   receiveGamemasterQuestionTally:
     action: receive
@@ -493,10 +496,10 @@ operations:
 
   sendGamemasterTeamState:
     action: send
-    channel: { $ref: "#/channels/gamemaster-team-state-v2" }
+    channel: { $ref: "#/channels/gamemaster-team-state-v3" }
     summary: Any PWA publishes team/joker state mutations.
     messages:
-      - $ref: "#/channels/gamemaster-team-state-v2/messages/gamemasterTeamState"
+      - $ref: "#/channels/gamemaster-team-state-v3/messages/gamemasterTeamState"
 
   sendGamemasterQuestionTally:
     action: send
@@ -914,6 +917,22 @@ components:
               type: string
               enum: [team1, team2, team3, team4]
               description: "Optional. Renders the group as a card marked with this team's colour (dot + accent edge). See specs/team-colors.md."
+            rename:
+              type: object
+              description: >-
+                Optional. Makes the group's label editable in place — the team name on a
+                start-screen team card after the reveal. Tapping the label opens an input:
+                opening it and every keystroke send `<id>:change` with `{ name }`, saving
+                (Enter, ✓ or a tap outside the editor) sends `<id>` with `{ name }` when the name
+                changed, cancelling (Escape, ✕) sends nothing. See specs/team-management.md
+                ("Optional team names").
+              required: [id, value]
+              properties:
+                id: { type: string, description: "Command id, `team-name-<teamKey>` on the start screen." }
+                value: { type: string, description: "The value the input opens with ('' = no custom name)." }
+                placeholder: { type: string }
+                ariaLabel: { type: string }
+                hint: { type: string, description: "Shown under the input while editing — the long-name warning." }
             buttons:
               type: array
               items:
@@ -943,6 +962,11 @@ components:
                         label: { type: string }
                         variant: { type: string, enum: [success, danger, primary] }
                         disabled: { type: boolean }
+                  menuTitle:
+                    type: string
+                    description: >-
+                      Heading of the `menu` popover; the button's `label` when absent. The
+                      start screen sets the player's full name (`Michael „Michi“ Huber`).
         - type: object
           required: [type, id, inputs, submitLabel]
           properties:
@@ -960,8 +984,31 @@ components:
                   placeholder: { type: string }
                   value: { type: string }
                   emitOnChange: { type: boolean }
+                  suggestions:
+                    type: array
+                    description: >-
+                      Autocomplete candidates — the registry players not yet in the draw, on the
+                      "Spieler hinzufügen" fields. The GM lists the ones whose label contains
+                      what is being typed; picking one fills its label into the field, and
+                      submitting sends it like typed text — the show resolves the label to that
+                      player. See specs/players.md ("Autocomplete").
+                    items:
+                      type: object
+                      required: [id, label]
+                      properties:
+                        id: { type: string, description: Registry player id. }
+                        label: { type: string, description: "Admin label, e.g. `Michael „Michi“ Huber`." }
+                        fullMatch:
+                          type: array
+                          items: { type: string }
+                          description: >-
+                            A disabled player's names. Offer the entry only when the typed text
+                            is one of them in full (case-insensitive), not on a partial match.
             submitLabel: { type: string }
             submitDisabled: { type: boolean }
+            clearOnSubmit:
+              type: boolean
+              description: Empty the fields after a submit (the "Spieler hinzufügen" fields).
         - type: object
           required: [type, id, text]
           properties:
@@ -1036,7 +1083,10 @@ components:
       type: object
       required: [controlId, timestamp]
       properties:
-        controlId: { type: string }
+        controlId:
+          type: string
+          description: >-
+            The control's id; `<input-group id>:change` for an `emitOnChange` keystroke.
         value:
           oneOf:
             - { type: string }
@@ -1070,6 +1120,22 @@ components:
           type: number
           description: "Epoch ms — used for replay deduplication on the receiver."
 
+    RosterPlayer:
+      type: object
+      description: >-
+        One player in a live team roster. Configured players carry their registry `id`
+        and `nickname`; players added during the show have neither and may have an empty
+        `lastName`. The show labels a player by `nickname` (else `firstName`).
+        Receivers must also accept a plain string (a roster from before players had two
+        names) and read it as first word = `firstName`, rest = `lastName`.
+        See specs/players.md.
+      required: [firstName, lastName]
+      properties:
+        firstName: { type: string, minLength: 1 }
+        lastName: { type: string }
+        nickname: { type: string }
+        id: { type: string }
+
     TeamState:
       type: object
       description: >-
@@ -1080,16 +1146,16 @@ components:
         See specs/team-count.md.
       required: [team1, team2, team1Points, team2Points, team1JokersUsed, team2JokersUsed]
       properties:
-        team1: { type: array, items: { type: string } }
-        team2: { type: array, items: { type: string } }
+        team1: { type: array, items: { $ref: "#/components/schemas/RosterPlayer" } }
+        team2: { type: array, items: { $ref: "#/components/schemas/RosterPlayer" } }
         team1Name: { type: string, description: "Optional custom name for team 1; falls back to \"Team 1\" when absent." }
         team2Name: { type: string, description: "Optional custom name for team 2; falls back to \"Team 2\" when absent." }
         team1Points: { type: number }
         team2Points: { type: number }
         team1JokersUsed: { type: array, items: { type: string } }
         team2JokersUsed: { type: array, items: { type: string } }
-        team3: { type: array, items: { type: string } }
-        team4: { type: array, items: { type: string } }
+        team3: { type: array, items: { $ref: "#/components/schemas/RosterPlayer" } }
+        team4: { type: array, items: { $ref: "#/components/schemas/RosterPlayer" } }
         team3Name: { type: string }
         team4Name: { type: string }
         team3Points: { type: number }

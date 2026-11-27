@@ -186,6 +186,49 @@ Click **"+ Neue Gameshow"**. A new card appears, already expanded for editing.
   title from the Config tab — see [Global Settings](#6-global-settings))
 - Click **"Set as active"** to make it the one that runs when players open the app
 
+### Players
+
+Pick the gameshow's players in the **Spieler** field of its card. The suggestions come from the
+global player list (the **Spieler** tab, see below). Typing a name that is not in it offers
+**„…“ neu anlegen**: enter first name, surname and nickname (Spitzname — leave it empty to use the
+first name), and the player is added to the list and to this gameshow at once. Click a player to see which games they already played.
+
+### The Spieler tab
+
+Every player exists once, with a nickname (Spitzname) and usually a first name and a surname. A first
+name or a nickname is required, and the same full name can't be added twice; an empty nickname is set
+to the first name. The tab lists every player as a whole name — `Michael „Michi“ Huber`, the nickname
+only when it differs from the first name — and the search finds players by any of the three names.
+
+Players added during the show (on the show's **Name hinzufügen** field or on the gamemaster) land here
+too, with only the nickname they were typed as, marked **Name fehlt**: open them and fill in first
+name and surname. Every add and remove during the show also updates the active gameshow's
+**Spieler** field.
+
+- **+ Spieler** opens a popup to add a player.
+- Click a name to open the player in a lightbox: the names (they save as you type, like every other
+  field, and the change reaches every gameshow; a name that already exists shows an error and isn't
+  saved until it is fixed) and below them the statistics: which games the player already played
+  or has coming up, by gameshow and by game type. ✕, Esc or a click outside close it.
+- Clicking a player name anywhere else in the admin (a gameshow's player chips, "Bereits gespielt von"
+  in the game editor, the planning lines) opens the same lightbox, without leaving that tab.
+- The number next to a name is how many gameshows the player is in (hover lists them).
+- ✕ deletes a player; a player who is in a gameshow is removed from it too, after a confirmation.
+- The **Aktiv** switch in the lightbox disables a player: they stay in the gameshows they are in (and
+  in the statistics), but no field suggests them any more — not in the Gameshows tab, not on the show
+  or the gamemaster — unless you type one of their names in full (first name, surname, nickname or the
+  full name). The list dims them and marks them **Deaktiviert**.
+- A player taken out of their last gameshow (the × on a gameshow's player chip, or a remove on the
+  show or the gamemaster) disappears from this tab as well — like a player you delete here, they go
+  to a local bin (`players-bin.json`, not committed). Type one of their names in full (first name,
+  surname, nickname or full name) in a gameshow's **Spieler** field, or on the show or gamemaster,
+  and they are suggested again ("· aus dem Papierkorb"); adding them brings them back as they were. A player you add here and haven't put in
+  a gameshow yet stays; deleting a whole gameshow keeps its players.
+
+On the show, players are called by their nickname. Only when two players in the draw share a
+nickname does the show add as much of the surname as it takes to tell them apart — usually just the
+first letter: "Michi H." / "Michi P.", "Jo Ka." / "Jo Ko.".
+
 ### Step 3 — Add games to the gameshow
 
 In the **Game Order** section of your gameshow card:
@@ -647,7 +690,8 @@ Go to the **Session tab** during a live game.
 > *Add screenshot: `docs/screenshots/admin-session.png` — the session tab with team name fields and point inputs*
 
 From here you can:
-- **Edit team names** — change the player list for each team
+- **Edit team names and members** — the members field lists full names, separated by commas. A
+  player can only be in one team once; a duplicate is refused and the field keeps your text
 - **Edit points directly** — correct a mistake by entering the right number
 - **Reset points** — set both teams back to 0
 - **Clear session data** — wipe all stored data (requires double confirmation)

@@ -14,6 +14,7 @@ import { gameSupportsTeamCount, gameUsesCorrectAnswerTally, teamCountSupportLabe
 import { ALL_POINT_MODES, DEFAULT_POINT_MODE } from './src/utils/pointMode.js';
 import { isTeamKey } from './src/utils/teams.js';
 import { isValidHex } from './src/utils/hexColor.js';
+import { validatePlayerRegistry } from './src/utils/playerRegistry.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -234,6 +235,13 @@ function validateConfig(): void {
         warnings.push('"teamColors" is set but "teamColorsEnabled" is not true — no team is marked');
       }
     }
+  }
+
+  // Player registry + every gameshow's player ids (specs/players.md)
+  {
+    const playerCheck = validatePlayerRegistry(config);
+    errors.push(...playerCheck.errors);
+    warnings.push(...playerCheck.warnings);
   }
 
   // Validate gameshows & activeGameshow

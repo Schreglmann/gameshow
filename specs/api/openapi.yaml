@@ -251,6 +251,51 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/RunOfShowResponse" }
 
+  /api/live-players:
+    post:
+      operationId: frontend_syncLivePlayers
+      tags: [frontend]
+      summary: Write the show's player adds and removes into the active gameshow
+      description: |
+        Called by the active show tab after every add or remove on the show or the
+        gamemaster (add field, autocomplete pick, team-card slot, ✕, GM "Entfernen").
+        An add by `id` appends that registry player to the active gameshow's `players`;
+        an add by name reuses the registry player with that identity (full name, or the
+        nickname of a player without one) or creates one — with only the nickname when no
+        first name / surname is given — and appends them. A removed id leaves the gameshow,
+        and the registry too when it is then in no gameshow (the player goes to the local bin,
+        `players-bin.json`). An add by id or by name that matches a binned player restores them. Ids already listed are not added twice; moves and
+        reshuffles are never sent. Fire and forget for the show: a refusal leaves the live
+        draw as it is. See [specs/players.md](../players.md) ("Sync to the gameshow").
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LivePlayersRequest" }
+      responses:
+        "200":
+          description: The added players as the registry holds them, in request order
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LivePlayersResponse" }
+        "400":
+          description: Malformed body
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "409":
+          description: >-
+            The config can't take it: no config.json, encrypted (git-crypt) or unparseable,
+            no active gameshow, or an add names an unknown id
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "500":
+          description: Write failed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
   /api/theme:
     get:
       operationId: shared_getTheme
@@ -595,6 +640,29 @@ paths:
   # Admin backend — config
   # ─────────────────────────────────────────────────────────────────────────
 
+  /api/backend/player-bin:
+    get:
+      operationId: admin_getPlayerBin
+      tags: [admin]
+      summary: Deleted players kept in the local bin
+      description: >-
+        Players who left the registry (`players-bin.json`, gitignored), for the gameshow
+        combobox, which offers them for a name typed in full. Every config write that removes
+        players from the registry bins them; one that brings them back takes them out. See
+        [specs/players.md](../players.md) ("Player bin").
+      responses:
+        "200":
+          description: The binned players
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [players]
+                properties:
+                  players:
+                    type: array
+                    items: { $ref: '#/components/schemas/Player' }
+
   /api/backend/config:
     get:
       operationId: admin_getConfig
@@ -610,6 +678,10 @@ paths:
       operationId: admin_saveConfig
       tags: [admin]
       summary: Atomically overwrite config.json
+      description: >-
+        Players the write removes from the registry are moved to the local player bin
+        (`players-bin.json`) first, and players it brings back are taken out of it. See
+        [specs/players.md](../players.md) ("Player bin").
       requestBody:
         required: true
         content:
@@ -3357,8 +3429,25 @@ components:
             param. See specs/background-music.md.
         players:
           type: array
-          items: { type: string }
-          description: Roster of the active gameshow, prefills the HomeScreen randomization textarea.
+          items: { $ref: '#/components/schemas/Player' }
+          description: >-
+            Players of the active gameshow, resolved from the registry (`GameshowConfig.players`
+            ids → `AppConfig.players`). Unknown ids are skipped. Drawn into the hidden team draw
+            when it is empty. See [specs/players.md](../players.md).
+        binned:
+          type: array
+          items: { $ref: '#/components/schemas/Player' }
+          description: >-
+            Deleted players from the local bin (`players-bin.json`) — suggested only for one of
+            their names typed in full; adding one restores them to the registry. See
+            [specs/players.md](../players.md) ("Player bin").
+        registry:
+          type: array
+          items: { $ref: '#/components/schemas/Player' }
+          description: >-
+            The whole player registry (`AppConfig.players`) — the candidates the show's and the
+            gamemaster's "Spieler hinzufügen" fields suggest while typing. See
+            [specs/players.md](../players.md).
         totalGames:
           type: integer
           minimum: 0
@@ -3449,6 +3538,13 @@ components:
             heading, gamemaster start/summary label and browser tab title. Overridable
             per gameshow via `GameshowConfig.showTitle`; blank/omitted at both levels
             means `Game Show`. See [specs/show-title.md](../show-title.md).
+        players:
+          type: array
+          items: { $ref: '#/components/schemas/Player' }
+          description: >-
+            The global player registry, edited in the admin Spieler tab. A full name
+            exists only once. Gameshows reference players by id.
+            See [specs/players.md](../players.md).
         pointSystemEnabled: { type: boolean }
         teamRandomizationEnabled: { type: boolean }
         teamColorsEnabled:
@@ -3546,7 +3642,12 @@ components:
             Blank/omitted inherits the global value (and then the `Game Show` default).
             See [specs/show-title.md](../show-title.md).
         gameOrder: { type: array, items: { type: string } }
-        players: { type: array, items: { type: string } }
+        players:
+          type: array
+          items: { type: string, pattern: '^[a-z0-9]+(-[a-z0-9]+)*$' }
+          description: >-
+            Ids of this gameshow's players in the registry `AppConfig.players`.
+            See [specs/players.md](../players.md).
         enabledJokers: { type: array, items: { type: string } }
         teamCount:
           type: integer
@@ -3558,6 +3659,63 @@ components:
             See specs/team-count.md.
         pointMode:
           $ref: '#/components/schemas/PointMode'
+
+    Player:
+      type: object
+      description: >-
+        A player in the global registry. The nickname is required; first name and surname may
+        be empty (a player added during the show has only the nickname until the admin
+        completes it). The id is a slug made when the player is created and never changes.
+        See [specs/players.md](../players.md).
+      required: [id, firstName, lastName, nickname]
+      properties:
+        id: { type: string, pattern: '^[a-z0-9]+(-[a-z0-9]+)*$' }
+        firstName: { type: string }
+        lastName: { type: string }
+        nickname:
+          type: string
+          minLength: 1
+          description: Spitzname — what the show and the gamemaster call the player.
+        disabled:
+          type: boolean
+          description: >-
+            Switched off globally: stays in the gameshows they are in, but no autocomplete offers
+            them unless one of their names is typed in full. Absent = active.
+
+    LivePlayersRequest:
+      type: object
+      description: Adds and removes to write into the active gameshow. See [specs/players.md](../players.md).
+      properties:
+        add:
+          type: array
+          maxItems: 200
+          items:
+            oneOf:
+              - type: object
+                description: A registry player.
+                required: [id]
+                properties:
+                  id: { type: string }
+              - type: object
+                description: A name typed on the show — found in the registry or created there.
+                required: [nickname]
+                properties:
+                  nickname: { type: string, minLength: 1 }
+                  firstName: { type: string }
+                  lastName: { type: string }
+        remove:
+          type: array
+          maxItems: 200
+          items: { type: string, description: A registry id. }
+
+    LivePlayersResponse:
+      type: object
+      required: [players]
+      properties:
+        players:
+          type: array
+          items: { $ref: '#/components/schemas/Player' }
+          description: The added players as stored, in request order.
 
     TeamColors:
       type: object

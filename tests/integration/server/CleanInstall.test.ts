@@ -11,13 +11,14 @@ import {
   ensureConfigFile,
 } from '../../../server/clean-install';
 import type { AppConfig } from '../../../src/types/config';
+import { validatePlayerRegistry } from '../../../src/utils/playerRegistry';
 
 /**
  * Verifies the clean-install fallback per specs/clean-install.md.
  *
  * Since templates were removed (see specs/example-games.md), the default config
- * is a single empty "Beispiele" gameshow — the admin "Beispiele erstellen"
- * button / `npm run fixtures` populates it.
+ * is a single "Beispiele" gameshow with example players but no games — the
+ * admin "Beispiele erstellen" button / `npm run fixtures` adds the games.
  */
 
 describe('clean-install: isGitCryptBlob', () => {
@@ -51,6 +52,21 @@ describe('clean-install: buildDefaultConfig', () => {
     expect(config.teamRandomizationEnabled).toBe(true);
     expect(config.globalRules?.length).toBeGreaterThan(0);
     expect(config.rulesPresets?.length).toBeGreaterThan(0);
+  });
+
+  it('comes with made-up example players, most of them in the Beispiele gameshow, and passes validation', () => {
+    const config = buildDefaultConfig();
+    expect(config.players?.length).toBe(9);
+    expect(config.gameshows.beispiele.players).toEqual([
+      'michael-huber', 'michaela-pichler', 'johannes-kaiser', 'johanna-koller', 'anna-berger', 'ben-lechner', 'maus',
+    ]);
+    // One to pick from the autocomplete, one disabled; one with only a nickname.
+    expect(config.players!.find(p => p.id === 'felix-brandl')?.disabled).toBe(true);
+    expect(config.players!.find(p => p.id === 'maus')).toEqual({ id: 'maus', firstName: '', lastName: '', nickname: 'Maus' });
+    expect(validatePlayerRegistry(config)).toEqual({ errors: [], warnings: [] });
+    // Fresh copies: changing one default must not leak into the next.
+    config.players![0]!.nickname = 'X';
+    expect(buildDefaultConfig().players![0]!.nickname).toBe('Michi');
   });
 });
 

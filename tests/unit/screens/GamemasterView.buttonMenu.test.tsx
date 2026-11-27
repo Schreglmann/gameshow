@@ -38,6 +38,12 @@ const CONTROLS: GamemasterControl[] = [{
       ],
     },
     { id: 'plain', label: 'Ohne Menü' },
+    {
+      id: 'player-team1-1',
+      label: 'Michi H.',
+      menuTitle: 'Michael „Michi“ Huber',
+      menu: [{ id: 'rm-team1-1', label: 'Entfernen', variant: 'danger' }],
+    },
   ],
 }];
 
@@ -71,6 +77,13 @@ describe('GamemasterView — button menu', () => {
     expect(menu.parentElement).toBe(document.body);
     expect(screen.getAllByRole('menuitem').map(b => b.textContent)).toEqual(['→ Team 2', 'Entfernen']);
     expect(overlay).toHaveBeenLastCalledWith(true);
+  });
+
+  it('heads the popover with the menuTitle (the full name) when there is one', () => {
+    renderView();
+    fireEvent.click(screen.getByRole('button', { name: 'Michi H.' }));
+    const menu = screen.getByRole('menu', { name: 'Michael „Michi“ Huber' });
+    expect(menu.querySelector('.gm-menu-title')).toHaveTextContent('Michael „Michi“ Huber');
   });
 
   it('sends the chosen entry and closes', () => {

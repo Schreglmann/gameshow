@@ -1,4 +1,4 @@
-import type { AppConfig, GameFileSummary, AssetCategory, AssetListResponse, ColorSlice } from '../types/config';
+import type { AppConfig, GameFileSummary, AssetCategory, AssetListResponse, ColorSlice, Player } from '../types/config';
 import { isStreamActive } from './networkPriority';
 
 const BASE = '/api/backend';
@@ -134,6 +134,12 @@ export async function fetchBandleUsedSongs(): Promise<string[]> {
 
 export async function fetchConfig(): Promise<AppConfig> {
   return apiRequest<AppConfig>(`${BASE}/config`);
+}
+
+/** Deleted players kept in the local bin (`players-bin.json`). See specs/players.md ("Player bin"). */
+export async function fetchPlayerBin(): Promise<Player[]> {
+  const data = await apiRequest<{ players?: Player[] }>(`${BASE}/player-bin`);
+  return Array.isArray(data.players) ? data.players : [];
 }
 
 export async function saveConfig(config: AppConfig): Promise<void> {

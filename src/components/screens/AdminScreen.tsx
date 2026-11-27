@@ -5,6 +5,8 @@ import SessionTab from '@/components/backend/SessionTab';
 import GamesTab from '@/components/backend/GamesTab';
 import ConfigTab from '@/components/backend/ConfigTab';
 import GameshowsTab from '@/components/backend/GameshowsTab';
+import PlayersTab from '@/components/backend/PlayersTab';
+import { PlayerLightboxHost } from '@/components/backend/PlayerLightbox';
 import NavIcon from '@/components/backend/AdminNavIcons';
 import AssetsTab from '@/components/backend/AssetsTab';
 import SystemTab from '@/components/backend/SystemTab';
@@ -17,17 +19,18 @@ import ProgressOverlay from '@/components/backend/ProgressOverlay';
 import '@/admin.css';
 import '@/backend.css';
 
-type Tab = 'session' | 'games' | 'config' | 'gameshows' | 'assets' | 'system' | 'answers' | 'spellcheck';
+type Tab = 'session' | 'games' | 'config' | 'gameshows' | 'players' | 'assets' | 'system' | 'answers' | 'spellcheck';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'session', label: 'Session' },
   { id: 'config', label: 'Config' },
   { id: 'gameshows', label: 'Gameshows' },
+  { id: 'players', label: 'Spieler' },
   { id: 'games', label: 'Spiele' },
   { id: 'assets', label: 'Assets' },
 ];
 
-const VALID_TABS = new Set<Tab>(['session', 'games', 'config', 'gameshows', 'assets', 'system', 'answers', 'spellcheck']);
+const VALID_TABS = new Set<Tab>(['session', 'games', 'config', 'gameshows', 'players', 'assets', 'system', 'answers', 'spellcheck']);
 const VALID_ASSET_CATEGORIES = new Set<string>(['images', 'audio', 'background-music', 'videos']);
 
 function parseHash(): { tab: Tab; file?: string; instance?: string; assetCategory?: AssetCategory } {
@@ -182,6 +185,7 @@ function AdminScreenInner() {
         )}
         {activeTab === 'config' && <div className="admin-tab-pane"><ConfigTab /></div>}
         {activeTab === 'gameshows' && <div className="admin-tab-pane"><GameshowsTab /></div>}
+        {activeTab === 'players' && <div className="admin-tab-pane"><PlayersTab /></div>}
         {activeTab === 'assets' && (
           <div className="admin-tab-pane">
             <AssetsTab initialCategory={assetsCategory} onCategoryChange={setAssetsCategory} onNavigateToGame={handleAssetNavigateToGame} />
@@ -193,6 +197,8 @@ function AdminScreenInner() {
         )}
       </main>
       <ProgressOverlay />
+      {/* Opened by any clickable player name, over whichever tab is open (specs/players.md). */}
+      <PlayerLightboxHost />
       {/* Outside every pane on purpose: the panes unmount on a tab switch, and the
           whole point of this is to keep reporting a save that outlived the pane that
           queued it. Renders into the shared bottom-right toast stack — see

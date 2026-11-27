@@ -46,6 +46,7 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | No autofocus of admin search inputs on touch devices | [admin-no-autofocus-touch.md](admin-no-autofocus-touch.md) | ✅ Implemented |
 | Game planning | [game-planning.md](game-planning.md) | ✅ Implemented |
 | Player stats (games-played history) | [player-stats.md](player-stats.md) | ✅ Implemented |
+| Players (registry, unique players, short display names) | [players.md](players.md) | ✅ Implemented |
 | Media encryption | [media-encryption.md](media-encryption.md) | ✅ Implemented |
 | Keyboard navigation | [keyboard-navigation.md](keyboard-navigation.md) | ✅ Implemented |
 | Header | [header.md](header.md) | ✅ Implemented |

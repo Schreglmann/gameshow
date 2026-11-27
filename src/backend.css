@@ -3443,37 +3443,7 @@
   box-shadow: none;
 }
 
-/* ── Player stats modal ── */
-
-.player-stats-box {
-  background: #15122a;
-  border: 1px solid rgba(var(--glass-rgb), 0.14);
-  border-radius: 12px;
-  padding: 22px 24px;
-  width: 520px;
-  max-width: 94vw;
-  max-height: 88vh;
-  overflow-y: auto;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
-  animation: folder-prompt-in 0.15s ease-out;
-}
-
-.player-stats-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 4px;
-}
-
-.player-stats-name {
-  margin: 0;
-  color: rgba(var(--text-rgb), 0.95);
-  font-size: clamp(16px, 2.2vw, 19px);
-  font-weight: 700;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+/* ── Player stats (on the player page, PlayerStats.tsx) ── */
 
 .player-stats-summary {
   margin: 0 0 16px;
@@ -3786,6 +3756,293 @@
   box-shadow: none;
 }
 
+/* Combobox + its "neu anlegen" form / notes stacked as one roster group item. */
+.players-combobox-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* A gameshow id that is not in the registry (config edited by hand). */
+.player-tag.unknown {
+  background: rgba(248, 113, 113, 0.14);
+  border-color: rgba(248, 113, 113, 0.5);
+  color: #f87171;
+}
+
+.players-combobox-create {
+  font-style: italic;
+  border-top: 1px solid rgba(var(--glass-rgb), 0.12);
+}
+
+/* First/last-name form: combobox "neu anlegen" and the Spieler tab's add row. */
+.player-create-form {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.player-create-form .be-input {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+
+.player-create-form .be-field-hint {
+  flex-basis: 100%;
+}
+
+.be-field-error {
+  color: #f87171;
+}
+
+/* ── Spieler tab (player registry) ──
+   A read-only list of whole names; editing happens in PlayerEditDialog. */
+
+.players-table-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.players-table-toolbar h3 {
+  margin: 0;
+}
+
+.players-table-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 1 360px;
+  min-width: 0;
+}
+
+.players-table-search {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.players-table-actions .admin-button {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.players-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  /* Columns of names on wide screens, so 60+ players don't need endless
+     scrolling; filled top to bottom, so the alphabet reads down each column. */
+  columns: 380px;
+  column-gap: 24px;
+}
+
+.players-list-row {
+  break-inside: avoid;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(var(--glass-rgb), 0.07);
+}
+
+.players-list-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 6px 8px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  box-shadow: none;
+  text-align: left;
+  text-transform: none;
+  letter-spacing: 0;
+  font: inherit;
+  font-size: 15px;
+  font-weight: normal;
+  color: rgba(var(--text-rgb), 0.87);
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.players-list-name:hover,
+.players-list-name:focus-visible {
+  background: rgba(var(--glass-rgb), 0.07);
+  transform: none;
+  box-shadow: none;
+}
+
+.players-list-nick {
+  color: var(--admin-accent-text);
+}
+
+/* A deleted player offered from the local bin (name typed in full). */
+.players-combobox-binned {
+  opacity: 0.6;
+  font-size: 0.9em;
+}
+
+/* A disabled player: still listed, dimmed. See specs/players.md ("Disabled players"). */
+.players-list-row.is-disabled .players-list-name {
+  opacity: 0.55;
+}
+
+/* A player added during the show has only a nickname until someone completes it. */
+.players-list-missing {
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px dashed rgba(var(--glass-rgb), 0.35);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  opacity: 0.75;
+  vertical-align: 1px;
+}
+
+/* Number of gameshows a player is in; hover lists them. */
+.players-list-count {
+  flex: 0 0 auto;
+  min-width: 2.2em;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--admin-accent);
+  color: #1a1400;
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.5;
+  text-align: center;
+  cursor: default;
+}
+
+.players-list-row .be-icon-btn {
+  flex: 0 0 auto;
+}
+
+.players-table-empty {
+  margin: 0;
+  opacity: 0.7;
+}
+
+/* The player lightbox: names + stats (PlayerLightbox), opened by any player name. */
+.player-lightbox {
+  background: #15122a;
+  border: 1px solid rgba(var(--glass-rgb), 0.14);
+  border-radius: 12px;
+  padding: 22px 24px;
+  width: 680px;
+  max-width: 94vw;
+  max-height: 88vh;
+  overflow-y: auto;
+  box-sizing: border-box;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+  animation: folder-prompt-in 0.15s ease-out;
+}
+
+.player-lightbox-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.player-lightbox-name {
+  margin: 0;
+  min-width: 0;
+  font-size: clamp(18px, 2.4vw, 22px);
+  font-weight: 700;
+  color: rgba(var(--text-rgb), 0.95);
+  overflow-wrap: anywhere;
+}
+
+.player-lightbox-names {
+  /* The show's base.css gives every <form> a 40px bottom margin. */
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.player-lightbox-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.player-lightbox-active {
+  margin: 0;
+}
+
+.player-lightbox-disabled-hint {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.player-lightbox .be-field-hint {
+  margin-top: 6px;
+}
+
+.player-lightbox-section {
+  margin: 22px 0 10px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(var(--glass-rgb), 0.1);
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(var(--text-rgb), max(0.42, var(--text-fade-floor, 0)));
+}
+
+@media (max-width: 576px) {
+  .player-lightbox {
+    padding: 16px;
+  }
+
+  .player-lightbox-names {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* The create/edit popup. */
+.player-edit-dialog {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 400px;
+}
+
+.player-edit-dialog .folder-prompt-title {
+  margin-bottom: 4px;
+}
+
+.player-edit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.player-edit-dialog .be-field-hint {
+  margin: 0;
+}
+
+.player-edit-dialog .folder-prompt-actions {
+  margin-top: 6px;
+}
+
 /* ── Planning overview ── */
 
 .planning-overview {
@@ -3890,6 +4147,26 @@
 .session-player.matched {
   color: #fde68a;
   font-weight: 600;
+}
+
+/* A player name that opens the player page (specs/players.md). */
+button.session-player.is-link {
+  padding: 0;
+  margin: 0;
+  background: none;
+  border: none;
+  box-shadow: none;
+  font: inherit;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+
+button.session-player.is-link:hover {
+  text-decoration: underline;
+  transform: none;
+  box-shadow: none;
 }
 
 /* ── Image lightbox ── */

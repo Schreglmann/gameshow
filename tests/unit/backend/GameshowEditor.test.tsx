@@ -3,6 +3,7 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ThemeProvider } from '@/context/ThemeContext';
 import GameshowEditor from '@/components/backend/GameshowEditor';
+import { onOpenPlayer } from '@/components/backend/openPlayer';
 import type { GameshowConfig, GameFileSummary } from '@/types/config';
 
 const mockFetchGames = vi.fn();
@@ -33,6 +34,8 @@ function renderEditor(props?: Partial<Parameters<typeof GameshowEditor>[0]>) {
         id="gs1"
         gameshow={gs}
         allGameshows={{ gs1: gs }}
+        registry={[]}
+        onCreatePlayer={vi.fn(() => null)}
         activeGameshow="gs1"
         isActive={false}
         expanded
@@ -350,6 +353,132 @@ describe('GameshowEditor', () => {
     renderEditor({ id: 'old', gameshow: gs, allGameshows: { old: gs, active }, activeGameshow: 'active' });
     expect(screen.queryByText('Neu')).not.toBeInTheDocument();
     expect(screen.queryByText('Ungespielt')).not.toBeInTheDocument();
+  });
+
+  // ── Players combobox (registry ids) — see specs/players.md ────────────────
+
+  describe('players combobox', () => {
+    const registry = [
+      { id: 'anna-mueller', firstName: 'Anna', lastName: 'Müller' },
+      { id: 'michi-huber', firstName: 'Michi', lastName: 'Huber' },
+      { id: 'michi-pichler', firstName: 'Michi', lastName: 'Pichler' },
+    ];
+    const withPlayers = (players: string[]): GameshowConfig => ({ ...gs, players });
+    const comboInput = () => screen.getByPlaceholderText('Spieler hinzufügen…');
+
+    it('shows each selected id as the full name from the registry', () => {
+      renderEditor({ gameshow: withPlayers(['michi-huber', 'anna-mueller']), registry });
+      expect(screen.getByRole('button', { name: 'Michi Huber' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Anna Müller' })).toBeInTheDocument();
+    });
+
+    it('marks an id that is not in the registry as unknown', () => {
+      renderEditor({ gameshow: withPlayers(['ghost']), registry });
+      const chip = screen.getByText('ghost (unbekannt)');
+      expect(chip.closest('.player-tag')).toHaveClass('unknown');
+    });
+
+    it('suggests registry players by full name and adds the picked id', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      renderEditor({ gameshow: withPlayers(['anna-mueller']), registry, onChange });
+      await user.type(comboInput(), 'pich');
+      await user.click(screen.getByRole('button', { name: 'Michi Pichler' }));
+      expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ players: ['anna-mueller', 'michi-pichler'] }));
+    });
+
+    it('suggests a disabled player only for a name typed in full, and still shows their chip', async () => {
+      const user = userEvent.setup();
+      const off = registry.map(p => (p.id === 'michi-pichler' ? { ...p, disabled: true } : p));
+      renderEditor({ gameshow: withPlayers([]), registry: off });
+      const items = () => Array.from(document.querySelectorAll('.players-combobox-item:not(.players-combobox-create)')).map(el => el.textContent);
+      await user.type(comboInput(), 'pich');
+      expect(items()).toEqual([]);
+      await user.type(comboInput(), 'ler');
+      expect(items()).toEqual(['Michi Pichler']);
+      await user.clear(comboInput());
+      await user.type(comboInput(), 'michi');
+      expect(items()).toEqual(['Michi Huber', 'Michi Pichler']);
+    });
+
+    it('keeps showing a disabled player who is in the gameshow', () => {
+      const off = registry.map(p => (p.id === 'michi-pichler' ? { ...p, disabled: true } : p));
+      renderEditor({ gameshow: withPlayers(['michi-pichler']), registry: off });
+      expect(screen.getByRole('button', { name: 'Michi Pichler' })).toBeInTheDocument();
+    });
+
+    it('does not suggest a player who is already in the gameshow', async () => {
+      const user = userEvent.setup();
+      renderEditor({ gameshow: withPlayers(['michi-huber']), registry });
+      await user.type(comboInput(), 'michi');
+      const items = Array.from(document.querySelectorAll('.players-combobox-item:not(.players-combobox-create)')).map(el => el.textContent);
+      expect(items).toEqual(['Michi Pichler']);
+    });
+
+    it('says so when Enter is pressed on a player already in the gameshow', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      renderEditor({ gameshow: withPlayers(['anna-mueller']), registry, onChange });
+      await user.type(comboInput(), 'anna müller{Enter}');
+      expect(screen.getByText('„Anna Müller“ ist bereits in dieser Gameshow.')).toBeInTheDocument();
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('offers to create an unknown name with a prefilled first/last-name form', async () => {
+      const user = userEvent.setup();
+      const onCreatePlayer = vi.fn(() => null);
+      renderEditor({ gameshow: withPlayers([]), registry, onCreatePlayer });
+      await user.type(comboInput(), 'jo van berg');
+      await user.click(screen.getByRole('button', { name: '+ „jo van berg“ neu anlegen' }));
+      expect(screen.getByLabelText('Vorname')).toHaveValue('Jo');
+      expect(screen.getByLabelText('Nachname')).toHaveValue('Van Berg');
+      // The nickname starts empty (it falls back to the first name).
+      expect(screen.getByLabelText('Spitzname')).toHaveValue('');
+      expect(screen.getByLabelText('Spitzname')).toHaveAttribute('placeholder', 'Spitzname (Jo)');
+      await user.clear(screen.getByLabelText('Nachname'));
+      await user.type(screen.getByLabelText('Nachname'), 'van Berg');
+      await user.type(screen.getByLabelText('Spitzname'), 'Jojo');
+      await user.click(screen.getByRole('button', { name: 'Anlegen' }));
+      expect(onCreatePlayer).toHaveBeenCalledWith('Jo', 'van Berg', 'Jojo');
+      expect(screen.queryByLabelText('Vorname')).not.toBeInTheDocument();
+    });
+
+    it('keeps the create form open with the error when creation is refused', async () => {
+      const user = userEvent.setup();
+      const onCreatePlayer = vi.fn(() => 'Vor- und Nachname sind Pflichtfelder.');
+      renderEditor({ gameshow: withPlayers([]), registry, onCreatePlayer });
+      await user.type(comboInput(), 'Lena{Enter}');
+      expect(screen.getByLabelText('Nachname')).toHaveValue('');
+      await user.click(screen.getByRole('button', { name: 'Anlegen' }));
+      expect(screen.getByRole('alert')).toHaveTextContent('Vor- und Nachname sind Pflichtfelder.');
+      expect(screen.getByLabelText('Vorname')).toBeInTheDocument();
+    });
+
+    it('does not offer to create a name the registry already has', async () => {
+      const user = userEvent.setup();
+      renderEditor({ gameshow: withPlayers([]), registry });
+      await user.type(comboInput(), 'Anna Müller');
+      expect(screen.queryByText(/neu anlegen/)).not.toBeInTheDocument();
+    });
+
+    it('removes the last player on Backspace in the empty input', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      renderEditor({ gameshow: withPlayers(['anna-mueller', 'michi-huber']), registry, onChange });
+      await user.click(comboInput());
+      await user.keyboard('{Backspace}');
+      expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ players: ['anna-mueller'] }));
+    });
+
+    it('opens the player lightbox when a chip is clicked', async () => {
+      const user = userEvent.setup();
+      const opened: string[] = [];
+      const stop = onOpenPlayer(id => opened.push(id));
+      renderEditor({ gameshow: withPlayers(['michi-huber']), registry, allGameshows: { gs1: withPlayers(['michi-huber']) } });
+      await user.click(screen.getByRole('button', { name: 'Michi Huber' }));
+      expect(opened).toEqual(['michi-huber']);
+      stop();
+    });
   });
 
   // ── Collapse / expand ─────────────────────────────────────────────────────

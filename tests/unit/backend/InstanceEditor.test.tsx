@@ -87,38 +87,52 @@ describe('InstanceEditor', () => {
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ title: 'My Override' }));
   });
 
+  // Usage lists registry ids; the editor shows them as full names.
   const usageFixture = [
-    { gameshowId: 'g1', gameshowName: 'Gameshow 1', players: ['Anna', 'Ben'], planned: false },
-    { gameshowId: 'g2', gameshowName: 'Vivid 2', players: ['Clara'], planned: true },
+    { gameshowId: 'g1', gameshowName: 'Gameshow 1', players: ['anna-mueller', 'ben-huber'], planned: false },
+    { gameshowId: 'g2', gameshowName: 'Vivid 2', players: ['clara-weber'], planned: true },
   ];
+  const playerNames = new Map([
+    ['anna-mueller', { id: 'anna-mueller', firstName: 'Anna', lastName: 'Müller' }],
+    ['ben-huber', { id: 'ben-huber', firstName: 'Ben', lastName: 'Huber' }],
+    ['clara-weber', { id: 'clara-weber', firstName: 'Clara', lastName: 'Weber' }],
+  ]);
 
   it('shows which players already played (and have queued) this instance', () => {
     render(
-      <InstanceEditor gameType="simple-quiz" instance={{ questions: [] }} onChange={noop} onGoToAssets={noop} instanceUsage={usageFixture} />
+      <InstanceEditor gameType="simple-quiz" instance={{ questions: [] }} onChange={noop} onGoToAssets={noop} instanceUsage={usageFixture} playerNames={playerNames} />
     );
     expect(screen.getByText('Bereits gespielt')).toBeInTheDocument();
     expect(screen.getByText(/Gameshow 1:/)).toBeInTheDocument();
-    expect(screen.getByText('Anna')).toBeInTheDocument();
-    expect(screen.getByText('Ben')).toBeInTheDocument();
+    expect(screen.getByText('Anna Müller')).toBeInTheDocument();
+    expect(screen.getByText('Ben Huber')).toBeInTheDocument();
     expect(screen.getByText('Eingeplant')).toBeInTheDocument();
-    expect(screen.getByText('Clara')).toBeInTheDocument();
+    expect(screen.getByText('Clara Weber')).toBeInTheDocument();
+  });
+
+  it('marks an id missing from the registry as unknown', () => {
+    render(
+      <InstanceEditor gameType="simple-quiz" instance={{ questions: [] }} onChange={noop} onGoToAssets={noop} instanceUsage={usageFixture} />
+    );
+    expect(screen.getByText('anna-mueller (unbekannt)')).toBeInTheDocument();
   });
 
   it('renders player names as plain text (not buttons) without onPlayerClick', () => {
     render(
-      <InstanceEditor gameType="simple-quiz" instance={{ questions: [] }} onChange={noop} onGoToAssets={noop} instanceUsage={usageFixture} />
+      <InstanceEditor gameType="simple-quiz" instance={{ questions: [] }} onChange={noop} onGoToAssets={noop} instanceUsage={usageFixture} playerNames={playerNames} />
     );
-    expect(screen.queryByRole('button', { name: 'Anna' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Anna Müller' })).not.toBeInTheDocument();
   });
 
   it('calls onPlayerClick when a player name is clicked (link to profile)', async () => {
     const onPlayerClick = vi.fn();
     const user = userEvent.setup();
     render(
-      <InstanceEditor gameType="simple-quiz" instance={{ questions: [] }} onChange={noop} onGoToAssets={noop} instanceUsage={usageFixture} onPlayerClick={onPlayerClick} />
+      <InstanceEditor gameType="simple-quiz" instance={{ questions: [] }} onChange={noop} onGoToAssets={noop} instanceUsage={usageFixture} onPlayerClick={onPlayerClick} playerNames={playerNames} />
     );
-    await user.click(screen.getByRole('button', { name: 'Anna' }));
-    expect(onPlayerClick).toHaveBeenCalledWith('Anna');
+    await user.click(screen.getByRole('button', { name: 'Anna Müller' }));
+    // The profile is opened by registry id.
+    expect(onPlayerClick).toHaveBeenCalledWith('anna-mueller');
   });
 
   it('renders no usage block when the instance was never used', () => {

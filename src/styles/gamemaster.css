@@ -3008,11 +3008,113 @@ body.gamemaster-embedded .gm-toolbar {
   box-shadow: var(--team-edge-left) var(--team-color);
 }
 
+/* The label of a team card is the team name: written as entered, like on the
+   show — not upper-cased like the other group labels. */
 .gm-button-group--team .gm-group-label {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+/* The team name on a card after the reveal: tap it to rename the team. Reset
+   the global button styles so it still reads as the card's label, with a pencil
+   saying it can be edited. Larger than the other group labels — it is the team
+   name — and at least 44px tall, so it is an easy tap target on the iPad. A
+   long name wraps (mid-word if it has to). */
+.gm-group-label.gm-group-label--editable {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px dashed transparent;
+  border-radius: 6px;
+  background: none;
+  box-shadow: none;
+  font-family: inherit;
+  font-size: clamp(1rem, 2.2vw, 1.25rem);
+  font-weight: 600;
+  line-height: 1.25;
+  color: rgba(var(--text-rgb), 0.85);
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.gm-group-label-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.gm-group-label-icon {
+  flex: none;
+  width: 0.9em;
+  height: 0.9em;
+  opacity: 0.7;
+}
+
+.gm-group-label--editable:focus-visible,
+.gm-group-label--editable:active {
+  border-color: rgba(var(--glass-rgb), 0.35);
+  color: rgba(var(--text-rgb), 0.95);
+  transform: none;
+}
+
+/* Hover only where there is a real pointer — on the iPad a tapped label would
+   otherwise keep its hover frame after the editor closes. */
+@media (hover: hover) {
+  .gm-group-label--editable:hover {
+    border-color: rgba(var(--glass-rgb), 0.35);
+    color: rgba(var(--text-rgb), 0.95);
+    transform: none;
+  }
+}
+
+.gm-group-rename {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  margin: 0;
+}
+
+.gm-group-rename-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* Same size as the name it replaces. Never below 16px: iOS Safari zooms the
+   page into any focused input with a smaller font. */
+.gm-group-rename-row > .gm-group-rename-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+  min-height: 44px;
+  font-size: clamp(1rem, 2.2vw, 1.25rem);
+  font-weight: 600;
+}
+
+.gm-group-rename-row > .gm-group-rename-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  touch-action: manipulation;
+}
+
+.gm-group-rename-hint {
+  font-size: clamp(0.75rem, 1.4vw, 0.85rem);
+  color: rgba(var(--text-rgb), 0.75);
+  text-align: center;
 }
 
 .gm-button-row.gm-button-row--grid {

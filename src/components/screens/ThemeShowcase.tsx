@@ -35,6 +35,7 @@ import '@/styles/gamemaster.css';
 import '@/styles/header-jokers.css';
 import '@/styles/install-button.css';
 import '@/styles/inactive-show-overlay.css';
+import '@/styles/suggest-input.css';
 
 /** Four jokers — the count a real show usually runs, and the one that makes the
  *  header joker grid two rows deep. Used by the multi-team header preview. */
@@ -687,12 +688,70 @@ function FrontendShowcase() {
               ))}
             </div>
           </div>
-          <div className="gm-menu-popover" role="menu" aria-label="Kathi" style={{ position: 'static', margin: '10px auto 0', width: 'fit-content' }}>
-            <div className="gm-menu-title">Kathi</div>
+          <div className="gm-menu-popover" role="menu" aria-label="Katharina „Kathi“ Berger" style={{ position: 'static', margin: '10px auto 0', width: 'fit-content' }}>
+            <div className="gm-menu-title">Katharina „Kathi“ Berger</div>
             <button type="button" role="menuitem" className="gm-btn gm-menu-item">→ Team 2</button>
             <button type="button" role="menuitem" className="gm-btn gm-menu-item">→ Team 3</button>
             <button type="button" role="menuitem" className="gm-btn gm-menu-item gm-btn--danger">Entfernen</button>
           </div>
+        </div>
+      </Section>
+
+      {/* After the reveal the team name on a GM team card is tapped to rename the
+          team: the resting header (pencil) and the open editor with the long-name
+          hint. Static copies of GroupLabelRename in GamemasterView.tsx. */}
+      <Section title="Gamemaster Teamname auf der Teamkarte">
+        <div className="gamemaster-controls-panel">
+          <div className="gm-button-group gm-button-group--team" data-team="team1">
+            <button type="button" className="gm-group-label gm-group-label--editable" aria-label="Name Team 1 ändern">
+              <TeamDot team="team1" />
+              <span className="gm-group-label-text">Die Donaudampfschifffahrtskapitäne (3)</span>
+              <svg className="gm-group-label-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M12 20h9" />
+                <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+              </svg>
+            </button>
+            <div className="gm-button-row gm-button-row--grid">
+              {['Anna', 'Jo', 'Kathi'].map(name => <button key={name} className="gm-btn">{name}</button>)}
+            </div>
+          </div>
+          <div className="gm-button-group gm-button-group--team" data-team="team2">
+            <form className="gm-group-rename" onSubmit={e => e.preventDefault()}>
+              <div className="gm-group-rename-row">
+                <TeamDot team="team2" />
+                <input className="gm-input gm-group-rename-input" aria-label="Name Team 2" defaultValue="Die unglaublich schnellen Füchse" />
+                <button type="submit" className="gm-btn gm-btn--primary gm-group-rename-btn" aria-label="Speichern">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+                </button>
+                <button type="button" className="gm-btn gm-group-rename-btn" aria-label="Abbrechen">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                </button>
+              </div>
+              <div className="gm-group-rename-hint" role="status">{teamNameLongHint(2)}</div>
+            </form>
+            <div className="gm-button-row gm-button-row--grid">
+              {['Ben', 'Carla', 'Dora'].map(name => <button key={name} className="gm-btn">{name}</button>)}
+            </div>
+          </div>
+        </div>
+      </Section>
+
+      {/* A GM "Spieler hinzufügen" field with the registry autocomplete open. */}
+      <Section title="Gamemaster Spieler hinzufügen (Autocomplete)">
+        <div className="gamemaster-card" style={{ textAlign: 'center', paddingBottom: 120 }}>
+          <form className="gm-input-group" onSubmit={e => e.preventDefault()}>
+            <div className="gm-input-field">
+              <label className="gm-input-label">Spieler hinzufügen</label>
+              <span className="suggest-wrap">
+                <input className="gm-input" placeholder="Name (mehrere mit Komma)" defaultValue="jo" readOnly />
+                <span className="suggest-list" role="listbox">
+                  <button type="button" role="option" aria-selected="false" className="suggest-item">Johanna Berger</button>
+                  <button type="button" role="option" aria-selected="true" className="suggest-item is-active">Johannes „Jo“ Kaiser</button>
+                </span>
+              </span>
+            </div>
+            <button type="submit" className="gm-btn gm-btn--primary">Hinzufügen</button>
+          </form>
         </div>
       </Section>
 
@@ -1287,20 +1346,46 @@ function FrontendShowcase() {
           ("Verdeckte Auslosung"). */}
       <Section title="Verdeckte Auslosung (vor „Teams zuweisen“)">
         <div className="draw-setup">
-          <p className="draw-pool-count">7 Spieler · die Teams werden gleich ausgelost</p>
-          <ul className="draw-pool" aria-label="Spieler">
-            {['Alex', 'Andi', 'Bianca', 'Carina', 'Fabian Sp.', 'Isabella', 'Michael M.'].map(name => (
+          {/* Nicknames; a surname prefix only where a nickname occurs twice
+              ("Michi H." / "Michi P."). See specs/players.md. */}
+          <p className="draw-pool-count">8 Spieler · die Teams werden gleich ausgelost</p>
+          {/* Few players → large chips (HomeScreen: DRAW_POOL_LARGE_MAX). */}
+          <ul className="draw-pool" aria-label="Spieler" data-size="large">
+            {['Alex', 'Andi', 'Bianca', 'Isabella', 'Johannes Ka.', 'Johannes Ko.', 'Michi H.', 'Michi P.'].map(name => (
               <li key={name} className="draw-pool-name">
                 <span className="draw-pool-label">{name}</span>
                 <button type="button" className="draw-pool-remove" aria-label={`${name} entfernen`}><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" fill="none" /></svg></button>
               </li>
             ))}
           </ul>
-          <form className="name-form draw-add-form" onSubmit={e => e.preventDefault()}>
-            <input placeholder="Name hinzufügen" aria-label="Name hinzufügen" readOnly />
+          {/* The add field's autocomplete, open: registry players not in the draw
+              yet, with full name and nickname. See specs/players.md. */}
+          <form className="name-form draw-add-form" onSubmit={e => e.preventDefault()} style={{ marginBottom: 96 }}>
+            <span className="suggest-wrap">
+              <input placeholder="Name" aria-label="Name hinzufügen" defaultValue="mi" readOnly />
+              <span className="suggest-list" role="listbox">
+                <button type="button" role="option" aria-selected="true" className="suggest-item is-active">Michael „Michi“ Huber</button>
+                <button type="button" role="option" aria-selected="false" className="suggest-item">Michaela „Michi“ Pichler</button>
+              </span>
+            </span>
             <button type="submit">Hinzufügen</button>
           </form>
+          <p className="draw-add-feedback" role="status">„Anna Müller“ ist schon dabei.</p>
           <button type="button" className="draw-reveal-button">Teams zuweisen</button>
+        </div>
+      </Section>
+
+      {/* More than DRAW_POOL_LARGE_MAX players: the grid keeps the compact chips. */}
+      <Section title="Verdeckte Auslosung mit vielen Spielern">
+        <div className="draw-setup">
+          <p className="draw-pool-count">19 Spieler · die Teams werden gleich ausgelost</p>
+          <ul className="draw-pool" aria-label="Spieler">
+            {['Andi', 'Anita', 'Conzi', 'Fabi', 'Flo', 'Ines', 'Jo', 'Kerstin', 'Luki', 'Maxi', 'Péter', 'Phillip', 'Raphi', 'Ricky', 'Seifi', 'Steffi', 'Theresa', 'Thomas', 'Vroni'].map(name => (
+              <li key={name} className="draw-pool-name">
+                <span className="draw-pool-label">{name}</span>
+              </li>
+            ))}
+          </ul>
         </div>
       </Section>
 
@@ -1346,8 +1431,8 @@ function FrontendShowcase() {
           {[
             { name: 'Die absolut unbesiegbaren Adler vom Nordhang', members: ['Maxi', 'Mitch', 'Thomas'] },
             { name: 'Donaudampfschifffahrtsgesellschaftskapitäne', members: ['Péter', 'Gerhard', 'Kathi'] },
-            { name: 'Isi allein zu Haus', members: ['Maus', 'Fabian Sp.', 'Carina'] },
-            { name: 'Team 4', members: ['Michael M.', 'Isabella', 'Bianca'] },
+            { name: 'Isi allein zu Haus', members: ['Maus', 'Anna Huber', 'Carina'] },
+            { name: 'Team 4', members: ['Anna Hubert.', 'Isabella', 'Bianca'] },
           ].map(({ name, members }, i) => (
             <div className="team" data-team={`team${i + 1}`} key={name}>
               <TeamCardName team={`team${i + 1}` as TeamKey} name={name} />
@@ -2584,13 +2669,121 @@ function AdminShowcase() {
         </div>
       </Section>
 
-      <Section title="Spieler-Statistik (Klick auf Spieler-Chip in Gameshows-Tab)">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div className="player-stats-box" style={{ position: 'relative', margin: 0, animation: 'none' }}>
-            <div className="player-stats-header">
-              <h3 className="player-stats-name">Ju</h3>
-              <button className="be-icon-btn" aria-label="Schließen">✕</button>
+      {/* Gameshow player combobox: registry players as chips, an unknown id in
+          red, and "neu anlegen" with its first/last-name form. See specs/players.md. */}
+      <Section title="Spieler-Auswahl (Gameshow)">
+        <div className="gs-roster-group" style={{ minWidth: 0 }}>
+          <label className="gs-players-label">Spieler</label>
+          <div className="players-combobox-wrap">
+            <div className="players-combobox">
+              {['Michael „Michi“ Huber', 'Michaela „Michi“ Pichler', 'Anna Müller'].map(name => (
+                <span key={name} className="player-tag">
+                  <button type="button" className="player-tag-name">{name}</button>
+                  <button type="button" className="player-tag-remove">×</button>
+                </span>
+              ))}
+              <span className="player-tag unknown">
+                <button type="button" className="player-tag-name">raphi-w (unbekannt)</button>
+                <button type="button" className="player-tag-remove">×</button>
+              </span>
+              <div className="players-input-wrap" style={{ position: 'relative' }}>
+                <input className="players-combobox-input" defaultValue="Jo" readOnly />
+                <div className="players-combobox-dropdown" style={{ position: 'static', marginTop: 4 }}>
+                  <button type="button" className="players-combobox-item highlighted">Johanna Berger</button>
+                  <button type="button" className="players-combobox-item">Johannes „Jo“ Kaiser</button>
+                  <button type="button" className="players-combobox-item">Jo Wagner<span className="players-combobox-binned"> · aus dem Papierkorb</span></button>
+                  <button type="button" className="players-combobox-item players-combobox-create">+ „Jo“ neu anlegen</button>
+                </div>
+              </div>
             </div>
+            <form className="player-create-form" onSubmit={e => e.preventDefault()}>
+              <input className="be-input" placeholder="Vorname" defaultValue="Jo" readOnly />
+              <input className="be-input" placeholder="Nachname" readOnly />
+              <input className="be-input" placeholder="Spitzname (Jo)" readOnly />
+              <button type="submit" className="admin-button">Anlegen</button>
+              <button type="button" className="admin-button secondary">Abbrechen</button>
+              <p className="be-field-hint be-field-error" role="alert">Vorname oder Spitzname angeben.</p>
+            </form>
+          </div>
+        </div>
+      </Section>
+
+      {/* The Spieler tab: whole names, read-only; editing happens in the popup below. */}
+      <Section title="Spieler-Tab (Registry)">
+        <div className="backend-card" style={{ margin: 0 }}>
+          <div className="players-table-toolbar">
+            <h3>6 Spieler</h3>
+            <div className="players-table-actions">
+              <input className="be-input players-table-search" type="search" placeholder="Suchen…" readOnly />
+              <button type="button" className="admin-button">+ Spieler</button>
+            </div>
+          </div>
+          <ul className="players-list" aria-label="Spieler">
+            {([['Alexander', 'Kaufmann', 'Alex', 1], ['Anna', 'Müller', null, 2], ['Michael', 'Huber', 'Michi', 5], ['Karin', 'Kainhofer-Rohrmoser', null, 0]] as const).map(([first, last, nick, count]) => (
+              <li className="players-list-row" key={`${first} ${last}`}>
+                <button type="button" className="players-list-name">
+                  {first}{nick && <span className="players-list-nick"> „{nick}“</span>} {last}
+                </button>
+                <span className="players-list-count">{count}</span>
+                <button type="button" className="be-icon-btn danger" aria-label="Löschen">✕</button>
+              </li>
+            ))}
+            {/* Disabled: dimmed, no longer suggested. */}
+            <li className="players-list-row is-disabled">
+              <button type="button" className="players-list-name">
+                Johanna Berger<span className="players-list-missing">Deaktiviert</span>
+              </button>
+              <span className="players-list-count">3</span>
+              <button type="button" className="be-icon-btn danger" aria-label="Löschen">✕</button>
+            </li>
+            {/* Added during the show: only the nickname until someone completes it. */}
+            <li className="players-list-row">
+              <button type="button" className="players-list-name">
+                Maus<span className="players-list-missing">Name fehlt</span>
+              </button>
+              <span className="players-list-count">1</span>
+              <button type="button" className="be-icon-btn danger" aria-label="Löschen">✕</button>
+            </li>
+          </ul>
+        </div>
+      </Section>
+
+      {/* The player lightbox: names (editable) + statistics, opened by any player
+          name in the admin, over the open tab. See specs/players.md. */}
+      <Section title="Spieler-Lightbox (Name + Statistik)">
+        <div className="player-lightbox" role="dialog" aria-label="Spieler" style={{ animation: 'none', maxHeight: 'none' }}>
+          <div className="player-lightbox-header">
+            <h2 className="player-lightbox-name">Julia „Ju“ Brandner</h2>
+            <button type="button" className="be-icon-btn" aria-label="Schließen">✕</button>
+          </div>
+          <form className="player-lightbox-names" onSubmit={e => e.preventDefault()}>
+            <label className="player-edit-field">
+              <span className="be-label">Vorname</span>
+              <input className="be-input" defaultValue="Julia" readOnly />
+            </label>
+            <label className="player-edit-field">
+              <span className="be-label">Nachname</span>
+              <input className="be-input" defaultValue="Brandner" readOnly />
+            </label>
+            <label className="player-edit-field">
+              <span className="be-label">Spitzname</span>
+              <input className="be-input" defaultValue="Ju" placeholder="Julia" readOnly />
+            </label>
+            <div className="player-lightbox-actions">
+              <label className="be-toggle player-lightbox-active">
+                <input type="checkbox" checked={false} readOnly />
+                <span className="be-toggle-track" />
+                <span className="be-toggle-label">Aktiv</span>
+              </label>
+              <button type="button" className="be-icon-btn danger">Löschen</button>
+            </div>
+            <p className="be-field-hint player-lightbox-disabled-hint">
+              Deaktiviert: bleibt in seinen Gameshows, wird aber nicht mehr vorgeschlagen – nur, wenn ein Name vollständig eingetippt wird.
+            </p>
+          </form>
+          <p className="be-field-hint be-field-error" role="alert">„Anna Müller“ gibt es schon.</p>
+          <h3 className="player-lightbox-section">Statistik</h3>
+          <div className="player-stats">
             <p className="player-stats-summary">4 gespielte Spiele in 3 verschiedenen Spielen · 2 Gameshows · 1 eingeplant</p>
             <div className="player-stats-breakdown">
               <button type="button" className="player-stats-type-row is-active">
@@ -2644,15 +2837,42 @@ function AdminShowcase() {
               </div>
             </div>
           </div>
-          <div className="player-stats-box" style={{ position: 'relative', margin: 0, animation: 'none' }}>
-            <div className="player-stats-header">
-              <h3 className="player-stats-name">Neuer Spieler</h3>
-              <button className="be-icon-btn" aria-label="Schließen">✕</button>
-            </div>
+        </div>
+        <div className="player-lightbox" style={{ animation: 'none', marginTop: 16 }}>
+          <div className="player-lightbox-header">
+            <h2 className="player-lightbox-name">Neuer Spieler</h2>
+            <button type="button" className="be-icon-btn" aria-label="Schließen">✕</button>
+          </div>
+          <h3 className="player-lightbox-section">Statistik</h3>
+          <div className="player-stats">
             <p className="player-stats-empty">Noch keine Gameshow mit Neuer Spieler.</p>
           </div>
         </div>
       </Section>
+
+      <Section title="Spieler hinzufügen (Popup)">
+        <form className="folder-prompt-box player-edit-dialog" style={{ animation: 'none' }} onSubmit={e => e.preventDefault()}>
+          <h3 className="folder-prompt-title">Spieler hinzufügen</h3>
+          <label className="player-edit-field">
+            <span className="be-label">Vorname</span>
+            <input className="be-input" defaultValue="Constanze" readOnly />
+          </label>
+          <label className="player-edit-field">
+            <span className="be-label">Nachname</span>
+            <input className="be-input" readOnly />
+          </label>
+          <label className="player-edit-field">
+            <span className="be-label">Spitzname</span>
+            <input className="be-input" defaultValue="Conzi" placeholder="Constanze" readOnly />
+          </label>
+          <p className="be-field-hint be-field-error" role="alert">Vorname oder Spitzname angeben.</p>
+          <div className="folder-prompt-actions">
+            <button type="button" className="be-icon-btn">Abbrechen</button>
+            <button type="submit" className="be-icon-btn folder-prompt-confirm">Hinzufügen</button>
+          </div>
+        </form>
+      </Section>
+
 
       <Section title="Delete Confirmation">
         <div className="modal-box delete-confirm-box" style={{ position: 'relative', margin: 0 }}>

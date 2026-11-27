@@ -7,7 +7,7 @@ import TeamDot from './TeamDot';
  * Gamemaster scoring-undo panel. Shows the most recent point mutations (newest
  * first) with a one-tap undo per entry, so a mis-award is corrected without
  * recomputing totals by hand. Reads the audit log that rides the cached
- * gamemaster-team-state-v2 channel; dispatching UNDO_SCORE_ENTRY mutates local
+ * gamemaster-team-state-v3 channel; dispatching UNDO_SCORE_ENTRY mutates local
  * team state, which re-broadcasts so the show converges. See
  * specs/gamemaster-cockpit.md.
  */

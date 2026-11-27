@@ -48,6 +48,10 @@ local-assets
 # Local theme preferences (per-device, not committed)
 theme-settings.json
 
+# Players deleted from the registry, kept locally so a name typed in full can
+# bring them back (see specs/players.md, "Player bin"). Holds personal names.
+players-bin.json
+
 # Operator-configurable NAS sync settings — machine-specific NAS path + on/off
 # toggle. No sidecar → the default path is used (see specs/nas-sync-config.md).
 nas-sync-prefs.json

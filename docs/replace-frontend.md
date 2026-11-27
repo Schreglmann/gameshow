@@ -21,7 +21,8 @@ All return `application/json` unless noted. Full schemas: [openapi.yaml](../spec
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| `GET` | `/api/settings` | Global settings for the active gameshow (`showTitle` for the landing-page heading, point system incl. `pointMode`, rules, jokers, clean-install flag, `teamColors` — per-team accent colours, empty when the operator has them off). |
+| `GET` | `/api/settings` | Global settings for the active gameshow (`showTitle` for the landing-page heading, point system incl. `pointMode`, rules, jokers, clean-install flag, `teamColors` — per-team accent colours, empty when the operator has them off; `players` of the gameshow and the whole `registry` for the add-field autocomplete). |
+| `POST` | `/api/live-players` | **Optional.** Write the players added or removed during the show into the active gameshow (`{ add: [{ id } \| { nickname }], remove: [id] }`), so the admin stays in sync. Send it from the active show tab only. See [specs/players.md](../specs/players.md). |
 | `GET` | `/api/theme` | Current theme names for frontend + admin. |
 | `PUT` | `/api/theme` | Partial theme update (show PWA writes `frontend` key). |
 | `GET` | `/api/game/:index` | Resolve `gameOrder[index]` → full `GameConfig` + navigation metadata. |
@@ -46,7 +47,7 @@ One socket at `/api/ws`. Wire format: `{ channel, data }` for payloads, `{ type 
 | `show-reemit-request` | no | Server asks the active show to re-emit its cached state (after reconnects). |
 | `gamemaster-command` | no | Commands emitted by the gamemaster (`next`, `award`, `use-joker`, …). |
 | `music-command` | no | **Optional.** `{ action: 'toggle'\|'skip'\|'volume'\|'seek', value?, timestamp }` background-music commands from the gamemaster. Only the active show acts on them, applying them to its background-music player. See [specs/gamemaster-music-control.md](../specs/gamemaster-music-control.md). |
-| `gamemaster-team-state-v2` | yes | Team members + points + joker usage + `scoreHistory` (scoring-undo audit log) changes pushed by any other PWA. Covers teams 1-4; `team3`/`team4` are absent in a 0-2 team show — read a missing team as `[]` / `0`. See specs/team-count.md. |
+| `gamemaster-team-state-v3` | yes | Team members + points + joker usage + `scoreHistory` (scoring-undo audit log) changes pushed by any other PWA. Covers teams 1-4; `team3`/`team4` are absent in a 0-2 team show — read a missing team as `[]` / `0`. See specs/team-count.md. |
 | `show-hold` | yes | `{ active, message? }` panic/pause hold from the gamemaster. While `active`, render a full-screen hold over everything (above the lightbox + music controls). Cached → a reload mid-hold re-receives it. |
 | `show-controls-hidden` | yes | **Optional.** `{ hidden }` from the gamemaster. While `hidden`, hide your own control buttons (the gamemaster drives the show); keep displays the audience reads (jokers, selected team, mirrored bets/guesses) visible. Keep any control that has no gamemaster equivalent, such as taking over as the active show. Apply it only while `gm-presence` reports a connected gamemaster: the value is cached and outlives the gamemaster, and a show without one needs its buttons. Cached → a reload re-receives it. |
 | `gamemaster-question-tally` | yes | Correct-answer tally changes pushed by any other PWA. |
@@ -59,7 +60,7 @@ One socket at `/api/ws`. Wire format: `{ channel, data }` for payloads, `{ type 
 |---------|---------|--------------|
 | `gamemaster-answer` | yes | Whenever the visible answer card changes (or `null` when no question is active). Inactive shows must NOT send. |
 | `gamemaster-controls` | yes | Whenever available controls / phase / gameIndex change. Inactive shows must NOT send. |
-| `gamemaster-team-state-v2` | yes | On every team state mutation (joker used, points changed, roster edited locally). Bump `rev` to `(highest rev seen) + 1` on each mutation, and adopt the inbound `rev` verbatim when applying a peer's snapshot — the server drops a write that doesn't beat its cached rev and returns the cached value instead. Never reset `rev` (a points reset or storage wipe that restarts it at 0 is rejected, resurrecting the old score). |
+| `gamemaster-team-state-v3` | yes | On every team state mutation (joker used, points changed, roster edited locally). Bump `rev` to `(highest rev seen) + 1` on each mutation, and adopt the inbound `rev` verbatim when applying a peer's snapshot — the server drops a write that doesn't beat its cached rev and returns the cached value instead. Never reset `rev` (a points reset or storage wipe that restarts it at 0 is rejected, resurrecting the old score). |
 | `gamemaster-question-tally` | yes | On every correct-answer tally mutation. |
 | `music-state` | yes | **Optional.** `{ isPlaying, currentSong, currentTime, duration, volume }` background-music snapshot for the gamemaster's remote-control player. Emit on control changes + ~1 Hz while playing. Only the active show should send. See [specs/gamemaster-music-control.md](../specs/gamemaster-music-control.md). |
 
@@ -96,7 +97,7 @@ The reference implementation writes these keys to `localStorage`:
 | `scoreHistory` | `ScoreLogEntry[]` | Scoring-undo audit log; each entry carries `gameIndex` and (for per-question awards) `questionNumber`. |
 | `doubleNextGame` | `'team1' \| 'team2'` | Armed Aufholjoker multiplier. |
 | `teamOrderSwapped` | `'true' \| 'false'` | Seating-order flip. |
-| `teamStateRev` | `string` | Lamport `rev` last published on `gamemaster-team-state-v2`. |
+| `teamStateRev` | `string` | Lamport `rev` last published on `gamemaster-team-state-v3`. |
 | `currentGame` | `CurrentGame` | `{ currentIndex, totalGames }` — which game is active. |
 | `gm:last-answer` | `GamemasterAnswerData` | Last emitted answer card (used for instant-paint on reload before the WS reconnects). |
 | `gm:last-controls` | `GamemasterControlsData` | Same as above for controls. |

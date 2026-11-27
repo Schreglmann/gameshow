@@ -11,8 +11,12 @@ import * as backendSocket from '@/services/useBackendSocket';
 import { __emitChannelForTests } from '@/services/useBackendSocket';
 import { setInactiveShowTab } from '@/services/showPresenceState';
 import HomeScreen from '@/components/screens/HomeScreen';
+import { fullName, normalizeRoster } from '@/utils/playerNames';
+import { player } from '../../_helpers/players';
 
+const mockSyncLivePlayers = vi.hoisted(() => vi.fn().mockResolvedValue({ players: [] }));
 vi.mock('@/services/api', () => ({
+  syncLivePlayers: (...args: unknown[]) => mockSyncLivePlayers(...args),
   fetchSettings: vi.fn(),
   fetchBackgroundMusic: vi.fn().mockResolvedValue([]),
 }));
@@ -24,14 +28,23 @@ vi.mock('react-router-dom', async () => {
   return { ...actual, useNavigate: () => mockedNavigate };
 });
 
-const PLAYERS = ['Anna', 'Ben', 'Carla', 'Dora'];
+// The configured players come from the registry (full names); the show labels
+// them by nickname (= first name here), since every one of them is unique.
+const REGISTRY = [
+  player('Anna', 'Arndt'), player('Ben', 'Bauer'), player('Carla', 'Conrad'),
+  player('Dora', 'Dietz'), player('Emil', 'Eder'), player('Fritz', 'Fuchs'),
+];
+/** Full names of the first four configured players, alphabetical. */
+const PLAYERS = REGISTRY.slice(0, 4).map(fullName);
+const FIRST_NAMES = ['Anna', 'Ben', 'Carla', 'Dora'];
+const firstOf = (name: string) => name.split(' ')[0]!;
 
 function settings(over: Record<string, unknown> = {}) {
   return {
     pointSystemEnabled: true,
     teamRandomizationEnabled: true,
     globalRules: [],
-    players: PLAYERS,
+    players: REGISTRY.slice(0, 4),
     ...over,
   };
 }
@@ -48,7 +61,8 @@ function renderHomeScreen() {
   );
 }
 
-const roster = (key: string): string[] => JSON.parse(localStorage.getItem(key) ?? '[]');
+/** A persisted roster as full names (legacy string entries are converted the same way the app does). */
+const roster = (key: string): string[] => normalizeRoster(JSON.parse(localStorage.getItem(key) ?? '[]')).map(fullName);
 const allDrawn = (count = 2) =>
   Array.from({ length: count }, (_, i) => roster(`team${i + 1}`)).flat().sort();
 const poolNames = () => Array.from(document.querySelectorAll('.draw-pool-label')).map(n => n.textContent);
@@ -60,7 +74,7 @@ const gm = (controlId: string, value?: Record<string, string>) => {
 };
 
 type Btn = { id: string; label: string; variant?: string; menu?: Btn[] };
-type Ctrl = { id: string; type: string; label?: string; buttons?: Btn[]; text?: string; disabled?: boolean; layout?: string; team?: string };
+type Ctrl = { id: string; type: string; label?: string; buttons?: Btn[]; text?: string; disabled?: boolean; layout?: string; team?: string; rename?: Record<string, string> };
 let sendWsSpy: ReturnType<typeof vi.spyOn>;
 const lastControls = (): Ctrl[] => {
   const calls = sendWsSpy.mock.calls.filter(([ch]) => ch === 'gamemaster-controls');
@@ -70,6 +84,8 @@ const lastControls = (): Ctrl[] => {
 beforeEach(() => {
   localStorage.clear();
   mockedNavigate.mockClear();
+  mockSyncLivePlayers.mockReset();
+  mockSyncLivePlayers.mockResolvedValue({ players: [] });
   mockedFetchSettings.mockResolvedValue(settings());
   sendWsSpy = vi.spyOn(backendSocket, 'sendWs');
 });
@@ -86,7 +102,7 @@ describe('hidden draw on the show', () => {
     await waitFor(() => expect(allDrawn()).toEqual(PLAYERS));
     expect(roster('team1')).toHaveLength(2);
     expect(document.querySelector('#teams')).toBeNull();
-    expect(poolNames()).toEqual(PLAYERS); // alphabetical, not in team order
+    expect(poolNames()).toEqual(FIRST_NAMES); // alphabetical, not in team order
     expect(localStorage.getItem('teamsRevealed')).toBe('false');
   });
 
@@ -99,7 +115,7 @@ describe('hidden draw on the show', () => {
     await waitFor(() => expect(document.querySelector('#teams')).not.toBeNull());
     expect(roster('team1')).toEqual(team1);
     for (const name of team1) {
-      expect(document.querySelector('#team1')!.querySelector(`input[value="${name}"]`)).not.toBeNull();
+      expect(document.querySelector('#team1')!.querySelector(`input[value="${firstOf(name)}"]`)).not.toBeNull();
     }
   });
 
@@ -118,19 +134,181 @@ describe('hidden draw on the show', () => {
   });
 
   it('adds a name to the smaller team without moving anyone', async () => {
-    mockedFetchSettings.mockResolvedValue(settings({ players: ['Anna', 'Ben', 'Carla'] }));
+    mockedFetchSettings.mockResolvedValue(settings({ players: REGISTRY.slice(0, 3) }));
     const user = userEvent.setup();
     renderHomeScreen();
-    await waitFor(() => expect(allDrawn()).toEqual(['Anna', 'Ben', 'Carla']));
+    await waitFor(() => expect(allDrawn()).toEqual(PLAYERS.slice(0, 3)));
     const before = { team1: roster('team1'), team2: roster('team2') };
     const smaller = before.team1.length < before.team2.length ? 'team1' : 'team2';
     const other = smaller === 'team1' ? 'team2' : 'team1';
 
     await user.type(screen.getByLabelText('Name hinzufügen'), 'emil');
     await user.click(screen.getByRole('button', { name: 'Hinzufügen' }));
-    await waitFor(() => expect(roster(smaller)).toEqual([...before[smaller], 'Emil']));
+    // A new name is added as written, as the nickname.
+    await waitFor(() => expect(roster(smaller)).toEqual([...before[smaller], 'emil']));
     expect(roster(other)).toEqual(before[other]);
     expect((screen.getByLabelText('Name hinzufügen') as HTMLInputElement).value).toBe('');
+    // …and goes into the active gameshow as a nickname-only registry player.
+    expect(mockSyncLivePlayers).toHaveBeenCalledWith({ add: [{ firstName: '', lastName: '', nickname: 'emil' }] });
+  });
+
+  it('suggests registry players while typing; a pick fills the name in, the next Enter adds them', async () => {
+    mockedFetchSettings.mockResolvedValue(settings({ registry: REGISTRY }));
+    const user = userEvent.setup();
+    renderHomeScreen();
+    await waitFor(() => expect(allDrawn()).toEqual(PLAYERS));
+    const input = screen.getByLabelText('Name hinzufügen');
+    await user.type(input, 'e');
+    // Only players not in the draw yet: Ben Bauer and Dora Dietz match "e" too, but are drawn.
+    expect(screen.getAllByRole('option').map(o => o.textContent)).toEqual(['Emil Eder']);
+    await user.keyboard('{ArrowDown}{Enter}');
+    // The first Enter only fills the name in.
+    expect(input).toHaveValue('Emil Eder');
+    expect(input).toHaveFocus();
+    expect(screen.queryByRole('option')).not.toBeInTheDocument();
+    expect(allDrawn()).toEqual(PLAYERS);
+    expect(mockSyncLivePlayers).not.toHaveBeenCalled();
+    // The second one adds the registry player.
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(allDrawn()).toEqual([...PLAYERS, 'Emil Eder'].sort()));
+    expect(poolNames()).toContain('Emil');
+    expect(input).toHaveValue('');
+    expect(mockSyncLivePlayers).toHaveBeenCalledWith({ add: [{ id: 'emil-eder' }] });
+  });
+
+  it('a tap fills the name in after the names typed before it; "Hinzufügen" adds them all', async () => {
+    mockedFetchSettings.mockResolvedValue(settings({ registry: REGISTRY }));
+    const user = userEvent.setup();
+    renderHomeScreen();
+    await waitFor(() => expect(allDrawn()).toEqual(PLAYERS));
+    const input = screen.getByLabelText('Name hinzufügen');
+    await user.type(input, 'Zoe, fr');
+    await user.click(screen.getByRole('option', { name: 'Fritz Fuchs' }));
+    expect(input).toHaveValue('Zoe, Fritz Fuchs');
+    expect(allDrawn()).toEqual(PLAYERS);
+    await user.click(screen.getByRole('button', { name: 'Hinzufügen' }));
+    await waitFor(() => expect(allDrawn()).toEqual([...PLAYERS, 'Fritz Fuchs', 'Zoe'].sort()));
+    expect(mockSyncLivePlayers).toHaveBeenCalledWith({
+      add: [{ firstName: '', lastName: '', nickname: 'Zoe' }, { id: 'fritz-fuchs' }],
+    });
+  });
+
+  it('a picked label with a nickname resolves to that player', async () => {
+    const maus = player('Marlene', 'Auer', 'marlene-auer', 'Maus');
+    mockedFetchSettings.mockResolvedValue(settings({ registry: [...REGISTRY, maus] }));
+    const user = userEvent.setup();
+    renderHomeScreen();
+    await waitFor(() => expect(allDrawn()).toEqual(PLAYERS));
+    const input = screen.getByLabelText('Name hinzufügen');
+    await user.type(input, 'mau');
+    await user.click(screen.getByRole('option', { name: 'Marlene „Maus“ Auer' }));
+    expect(input).toHaveValue('Marlene „Maus“ Auer');
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(poolNames()).toContain('Maus'));
+    expect(mockSyncLivePlayers).toHaveBeenCalledWith({ add: [{ id: 'marlene-auer' }] });
+  });
+
+  it('does not suggest a disabled player until one of their names is typed in full', async () => {
+    const off = REGISTRY.map(p => (p.id === 'emil-eder' ? { ...p, disabled: true } : p));
+    mockedFetchSettings.mockResolvedValue(settings({ registry: off }));
+    const user = userEvent.setup();
+    renderHomeScreen();
+    await waitFor(() => expect(allDrawn()).toEqual(PLAYERS));
+    const input = screen.getByLabelText('Name hinzufügen');
+    await user.type(input, 'emi');
+    expect(screen.queryByRole('option')).not.toBeInTheDocument();
+    await user.type(input, 'l');
+    expect(screen.getAllByRole('option').map(o => o.textContent)).toEqual(['Emil Eder']);
+  });
+
+  it('ArrowDown in the empty add field lists every registry player not drawn yet', async () => {
+    mockedFetchSettings.mockResolvedValue(settings({ registry: REGISTRY }));
+    const user = userEvent.setup();
+    renderHomeScreen();
+    await waitFor(() => expect(allDrawn()).toEqual(PLAYERS));
+    await user.click(screen.getByLabelText('Name hinzufügen'));
+    await user.keyboard('{ArrowDown}');
+    expect(screen.getAllByRole('option').map(o => o.textContent)).toEqual(['Emil Eder', 'Fritz Fuchs']);
+    expect(mockedNavigate).not.toHaveBeenCalled();
+  });
+
+  it('a second click into the add field lists every registry player not drawn yet', async () => {
+    mockedFetchSettings.mockResolvedValue(settings({ registry: REGISTRY }));
+    const user = userEvent.setup();
+    renderHomeScreen();
+    await waitFor(() => expect(allDrawn()).toEqual(PLAYERS));
+    const input = screen.getByLabelText('Name hinzufügen');
+    await user.click(input);
+    expect(screen.queryByRole('option')).not.toBeInTheDocument();
+    await user.click(input);
+    expect(screen.getAllByRole('option').map(o => o.textContent)).toEqual(['Emil Eder', 'Fritz Fuchs']);
+    expect(mockedNavigate).not.toHaveBeenCalled();
+  });
+
+  it('suggests a deleted (binned) player for a full name and adds them by id, which restores them', async () => {
+    const gerd = player('Gerd', 'Gone', 'gerd-gone', 'Gerdi');
+    mockedFetchSettings.mockResolvedValue(settings({ registry: REGISTRY, binned: [gerd] }));
+    const user = userEvent.setup();
+    renderHomeScreen();
+    await waitFor(() => expect(allDrawn()).toEqual(PLAYERS));
+    const input = screen.getByLabelText('Name hinzufügen');
+    await user.type(input, 'ger');
+    expect(screen.queryByRole('option')).not.toBeInTheDocument();
+    await user.type(input, 'di');
+    await user.click(screen.getByRole('option', { name: 'Gerd „Gerdi“ Gone' }));
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(poolNames()).toContain('Gerdi'));
+    expect(mockSyncLivePlayers).toHaveBeenCalledWith({ add: [{ id: 'gerd-gone' }] });
+  });
+
+  it('Enter without a highlighted suggestion adds the typed text, Escape closes the list', async () => {
+    mockedFetchSettings.mockResolvedValue(settings({ registry: REGISTRY }));
+    const user = userEvent.setup();
+    renderHomeScreen();
+    await waitFor(() => expect(allDrawn()).toEqual(PLAYERS));
+    const input = screen.getByLabelText('Name hinzufügen');
+    await user.type(input, 'Em');
+    expect(screen.getByRole('option', { name: 'Emil Eder' })).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('option')).not.toBeInTheDocument();
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(allDrawn()).toContain('Em'));
+    expect(allDrawn()).not.toContain('Emil Eder');
+  });
+
+  it('takes a removed player out of the gameshow', async () => {
+    const user = userEvent.setup();
+    renderHomeScreen();
+    await waitFor(() => expect(allDrawn()).toEqual(PLAYERS));
+    await user.click(screen.getByRole('button', { name: 'Dora entfernen' }));
+    expect(mockSyncLivePlayers).toHaveBeenCalledWith({ remove: ['dora-dietz'] });
+  });
+
+  it('gives a live-added name its registry id once the gameshow has it', async () => {
+    const user = userEvent.setup();
+    renderHomeScreen();
+    await waitFor(() => expect(allDrawn()).toEqual(PLAYERS));
+    await user.type(screen.getByLabelText('Name hinzufügen'), 'Kiki');
+    await user.click(screen.getByRole('button', { name: 'Hinzufügen' }));
+    await waitFor(() => expect(allDrawn()).toContain('Kiki'));
+    // The server wrote her into the registry and the gameshow; the settings reload brings her back.
+    const kiki = { id: 'kiki', firstName: '', lastName: '', nickname: 'Kiki' };
+    mockedFetchSettings.mockResolvedValue(settings({ players: [...REGISTRY.slice(0, 4), kiki] }));
+    act(() => { __emitChannelForTests('content-changed', { config: true }); });
+    await waitFor(() => {
+      const all = ['team1', 'team2'].flatMap(k => JSON.parse(localStorage.getItem(k) ?? '[]') as { nickname?: string; id?: string }[]);
+      expect(all.filter(p => p.nickname === 'Kiki')).toEqual([kiki]);
+    });
+    expect(allDrawn()).toEqual([...PLAYERS, 'Kiki'].sort());
+  });
+
+  it('does not write the gameshow from an inactive show tab', async () => {
+    const user = userEvent.setup();
+    renderHomeScreen();
+    await waitFor(() => expect(allDrawn()).toEqual(PLAYERS));
+    setInactiveShowTab(true);
+    await user.click(screen.getByRole('button', { name: 'Dora entfernen' }));
+    expect(mockSyncLivePlayers).not.toHaveBeenCalled();
   });
 
   it('removes a name with its ✕ and keeps everyone else in place', async () => {
@@ -139,9 +317,9 @@ describe('hidden draw on the show', () => {
     await waitFor(() => expect(allDrawn()).toEqual(PLAYERS));
     const before = { team1: roster('team1'), team2: roster('team2') };
     await user.click(screen.getByRole('button', { name: 'Dora entfernen' }));
-    await waitFor(() => expect(allDrawn()).toEqual(['Anna', 'Ben', 'Carla']));
-    expect(roster('team1')).toEqual(before.team1.filter(n => n !== 'Dora'));
-    expect(roster('team2')).toEqual(before.team2.filter(n => n !== 'Dora'));
+    await waitFor(() => expect(allDrawn()).toEqual(PLAYERS.slice(0, 3)));
+    expect(roster('team1')).toEqual(before.team1.filter(n => n !== 'Dora Dietz'));
+    expect(roster('team2')).toEqual(before.team2.filter(n => n !== 'Dora Dietz'));
   });
 
   it('keeps the draw across a reload and does not bring back a removed player', async () => {
@@ -149,7 +327,7 @@ describe('hidden draw on the show', () => {
     const first = renderHomeScreen();
     await waitFor(() => expect(allDrawn()).toEqual(PLAYERS));
     await user.click(screen.getByRole('button', { name: 'Dora entfernen' }));
-    await waitFor(() => expect(allDrawn()).toEqual(['Anna', 'Ben', 'Carla']));
+    await waitFor(() => expect(allDrawn()).toEqual(PLAYERS.slice(0, 3)));
     const kept = { team1: roster('team1'), team2: roster('team2') };
     first.unmount();
 
@@ -168,6 +346,70 @@ describe('hidden draw on the show', () => {
     await waitFor(() => expect(document.querySelector('#teams')).not.toBeNull());
     gm('nav-forward');
     expect(mockedNavigate).toHaveBeenCalledWith('/rules');
+  });
+
+  it('refuses a player who is already in the draw', async () => {
+    const user = userEvent.setup();
+    renderHomeScreen();
+    await waitFor(() => expect(allDrawn()).toEqual(PLAYERS));
+    await user.type(screen.getByLabelText('Name hinzufügen'), 'anna arndt');
+    await user.click(screen.getByRole('button', { name: 'Hinzufügen' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('„Anna Arndt“ ist schon dabei.');
+    expect(allDrawn()).toEqual(PLAYERS);
+  });
+
+  it('reads a typed nickname as that configured player, so it is already in the draw', async () => {
+    const user = userEvent.setup();
+    renderHomeScreen();
+    await waitFor(() => expect(allDrawn()).toEqual(PLAYERS));
+    await user.type(screen.getByLabelText('Name hinzufügen'), 'anna');
+    await user.click(screen.getByRole('button', { name: 'Hinzufügen' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('„Anna Arndt“ ist schon dabei.');
+    expect(allDrawn()).toEqual(PLAYERS);
+  });
+
+  it('refuses a nickname two registry players share and asks to pick from the list', async () => {
+    mockedFetchSettings.mockResolvedValue(settings({
+      players: [player('Michael', 'Huber', 'mh', 'Michi'), player('Michaela', 'Pichler', 'mp', 'Michi')],
+    }));
+    const user = userEvent.setup();
+    renderHomeScreen();
+    await waitFor(() => expect(poolNames()).toEqual(['Michi H.', 'Michi P.']));
+    await user.type(screen.getByLabelText('Name hinzufügen'), 'michi');
+    await user.click(screen.getByRole('button', { name: 'Hinzufügen' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('„michi“ gibt es mehrmals – bitte aus der Liste auswählen.');
+    expect(poolNames()).toEqual(['Michi H.', 'Michi P.']);
+    expect(mockSyncLivePlayers).not.toHaveBeenCalled();
+  });
+
+  it('labels players by nickname', async () => {
+    mockedFetchSettings.mockResolvedValue(settings({
+      players: [player('Marlene', 'Auer', 'ma', 'Maus'), player('Ben', 'Bauer')],
+    }));
+    renderHomeScreen();
+    await waitFor(() => expect(poolNames()).toEqual(['Ben', 'Maus']));
+  });
+
+  it('labels two players with the same first name by their surname', async () => {
+    mockedFetchSettings.mockResolvedValue(settings({
+      players: [player('Michi', 'Pichler'), player('Anna', 'Arndt'), player('Michi', 'Huber')],
+    }));
+    renderHomeScreen();
+    await waitFor(() => expect(poolNames()).toEqual(['Anna', 'Michi H.', 'Michi P.']));
+    // The full name is still there on hover.
+    const label = [...document.querySelectorAll('.draw-pool-label')].find(n => n.textContent === 'Michi H.');
+    expect(label?.getAttribute('title')).toBe('Michi Huber');
+  });
+
+  it('follows a change of the configured players by id', async () => {
+    renderHomeScreen();
+    await waitFor(() => expect(allDrawn()).toEqual(PLAYERS));
+    // Anna renamed, Dora removed, Emil added — via a settings reload (live config reload).
+    mockedFetchSettings.mockResolvedValue(settings({
+      players: [player('Anna', 'Meier', 'anna-arndt'), REGISTRY[1], REGISTRY[2], REGISTRY[4]],
+    }));
+    act(() => { __emitChannelForTests('content-changed', { config: true }); });
+    await waitFor(() => expect(allDrawn()).toEqual(['Anna Meier', 'Ben Bauer', 'Carla Conrad', 'Emil Eder']));
   });
 
   it('does not draw in an inactive show tab', async () => {
@@ -238,7 +480,7 @@ describe('GM controls', () => {
     await waitFor(() => expect(lastControls().find(c => c.id === 'draw-preview')).toBeTruthy());
     await waitFor(() => {
       const players = lastControls().filter(c => c.id.startsWith('draw-team')).flatMap(c => c.buttons!);
-      expect(players.map(b => b.label).sort()).toEqual(PLAYERS);
+      expect(players.map(b => b.label).sort()).toEqual(FIRST_NAMES);
     });
     const controls = lastControls();
     const team1 = controls.find(c => c.id === 'draw-team1')!;
@@ -248,7 +490,7 @@ describe('GM controls', () => {
     const labels = team1.buttons!.map(b => b.label);
     expect(labels).toEqual([...labels].sort((a, b) => a.localeCompare(b, 'de')));
     const first = team1.buttons!.find(b => b.id === 'player-team1-0')!;
-    expect(first.label).toBe(roster('team1')[0]);
+    expect(first.label).toBe(firstOf(roster('team1')[0]!));
     expect(first.menu!.map(m => m.id)).toEqual(['mvto-team1-0-team2', 'rm-team1-0']);
     expect(first.menu!.map(m => m.label)).toEqual(['→ Team 2', 'Entfernen']);
     expect(controls.find(c => c.id === 'reveal-teams')?.disabled).toBe(false);
@@ -270,7 +512,7 @@ describe('GM controls', () => {
   });
 
   it('offers every other team at three teams and moves to the chosen one', async () => {
-    mockedFetchSettings.mockResolvedValue(settings({ teamCount: 3, players: ['Anna', 'Ben', 'Carla', 'Dora', 'Emil', 'Fritz'] }));
+    mockedFetchSettings.mockResolvedValue(settings({ teamCount: 3, players: REGISTRY }));
     renderHomeScreen();
     await waitFor(() => expect(allDrawn(3)).toHaveLength(6));
     await waitFor(() => {
@@ -292,14 +534,61 @@ describe('GM controls', () => {
   });
 
   it('adds players after the reveal too, keeping the teams on screen', async () => {
+    // Rosters from before the update (plain strings) keep working.
     localStorage.setItem('team1', JSON.stringify(['Anna', 'Ben']));
     localStorage.setItem('team2', JSON.stringify(['Carla']));
     localStorage.setItem('teamsRevealed', 'true');
     renderHomeScreen();
     await waitFor(() => expect(document.querySelector('#teams')).not.toBeNull());
+    // "dora" is the nickname of the configured Dora Dietz, so she is the one added.
     gm('add-player', { name: 'dora' });
-    await waitFor(() => expect(roster('team2')).toEqual(['Carla', 'Dora']));
+    await waitFor(() => expect(roster('team2')).toEqual(['Carla', 'Dora Dietz']));
     expect(localStorage.getItem('teamsRevealed')).toBe('true');
+  });
+
+  it('gives the GM add field the registry players not in the draw; a submitted label adds that player', async () => {
+    mockedFetchSettings.mockResolvedValue(settings({ registry: REGISTRY }));
+    renderHomeScreen();
+    await waitFor(() => expect(allDrawn()).toEqual(PLAYERS));
+    type Input = { id: string; suggestions?: { id: string; label: string }[] };
+    const addField = () => (lastControls().find(c => c.id === 'add-player') as unknown as { inputs: Input[] } | undefined)?.inputs[0];
+    await waitFor(() => expect(addField()?.suggestions).toEqual([
+      { id: 'emil-eder', label: 'Emil Eder' },
+      { id: 'fritz-fuchs', label: 'Fritz Fuchs' },
+    ]));
+    // The GM empties the field after each add.
+    expect(lastControls().find(c => c.id === 'add-player')).toMatchObject({ clearOnSubmit: true });
+    // The GM filled a pick in after a typed name, then submitted.
+    gm('add-player', { name: 'Zoe, Emil Eder' });
+    await waitFor(() => expect(allDrawn()).toEqual([...PLAYERS, 'Emil Eder', 'Zoe'].sort()));
+    expect(mockSyncLivePlayers).toHaveBeenCalledWith({
+      add: [{ firstName: '', lastName: '', nickname: 'Zoe' }, { id: 'emil-eder' }],
+    });
+    // Emil is drawn now: no longer suggested.
+    await waitFor(() => expect(addField()?.suggestions).toEqual([{ id: 'fritz-fuchs', label: 'Fritz Fuchs' }]));
+  });
+
+  it('titles each player\'s GM menu with the full name, the button keeps the short label', async () => {
+    mockedFetchSettings.mockResolvedValue(settings({
+      players: [player('Michael', 'Huber', 'mh', 'Michi'), player('Michaela', 'Pichler', 'mp', 'Michi')],
+    }));
+    renderHomeScreen();
+    type MenuBtn = Btn & { menuTitle?: string };
+    const buttons = () => lastControls().filter(c => c.id.startsWith('draw-')).flatMap(c => (c.buttons ?? []) as MenuBtn[]);
+    await waitFor(() => expect(buttons()).toHaveLength(2));
+    expect(buttons().map(b => [b.label, b.menuTitle]).sort()).toEqual([
+      ['Michi H.', 'Michael „Michi“ Huber'],
+      ['Michi P.', 'Michaela „Michi“ Pichler'],
+    ]);
+  });
+
+  it('takes a player the GM removes out of the gameshow', async () => {
+    renderHomeScreen();
+    await waitFor(() => expect(allDrawn()).toEqual(PLAYERS));
+    const team1 = normalizeRoster(JSON.parse(localStorage.getItem('team1') ?? '[]'));
+    gm(`rm-team1-0`);
+    await waitFor(() => expect(roster('team1')).toHaveLength(team1.length - 1));
+    expect(mockSyncLivePlayers).toHaveBeenCalledWith({ remove: [team1[0]!.id] });
   });
 
   it('"Zuweisung verbergen" sends the show back to its first screen and keeps the draw', async () => {
@@ -313,16 +602,16 @@ describe('GM controls', () => {
     await waitFor(() => expect(document.querySelector('#teams')).not.toBeNull());
     await waitFor(() => expect(lastControls().find(c => c.id === 'hide-teams')).toBeTruthy());
     // Same layout as before the reveal: actions on top (hide in the reveal's
-    // slot), team cards, then rename + "Weiter" at the bottom.
+    // slot), team cards, then "Weiter" at the bottom. The rename is on the cards.
     const ids = lastControls().map(c => c.id);
     expect(ids.slice(0, 3)).toEqual(['hide-teams', 'reshuffle-teams', 'add-player']);
-    expect(ids.indexOf('draw-team2')).toBeLessThan(ids.indexOf('edit-team'));
+    expect(ids).not.toContain('edit-team');
     expect(ids.at(-1)).toBe('nav');
     const drawn = { team1: roster('team1'), team2: roster('team2') };
 
     gm('hide-teams');
     await waitFor(() => expect(document.querySelector('#teams')).toBeNull());
-    expect(poolNames()).toEqual(PLAYERS);
+    expect(poolNames()).toEqual(FIRST_NAMES);
     expect(localStorage.getItem('teamsRevealed')).toBe('false');
     expect({ team1: roster('team1'), team2: roster('team2') }).toEqual(drawn);
     // Advancing is blocked again, and the GM is back on the preview controls.
@@ -334,6 +623,31 @@ describe('GM controls', () => {
     gm('reveal-teams');
     await waitFor(() => expect(document.querySelector('#teams')).not.toBeNull());
     expect({ team1: roster('team1'), team2: roster('team2') }).toEqual(drawn);
+  });
+
+  it('renames a team from its GM card after the reveal, not before', async () => {
+    renderHomeScreen();
+    await waitFor(() => expect(allDrawn()).toEqual(PLAYERS));
+    await waitFor(() => expect(lastControls().find(c => c.id === 'draw-preview')).toBeTruthy());
+    // Hidden draw: the card names are plain labels.
+    expect(lastControls().find(c => c.id === 'draw-team1')?.rename).toBeUndefined();
+
+    gm('reveal-teams');
+    await waitFor(() => expect(lastControls().find(c => c.id === 'draw-team1')?.rename).toEqual({
+      id: 'team-name-team1',
+      value: '',
+      placeholder: 'Team 1',
+      ariaLabel: 'Name Team 1',
+    }));
+    gm('team-name-team1:change', { name: 'Füchse' });
+    gm('team-name-team1', { name: 'Füchse' });
+    await waitFor(() => expect(document.querySelector('#team1')?.textContent).toContain('Füchse'));
+    expect(localStorage.getItem('team1Name')).toBe('Füchse');
+    await waitFor(() => {
+      const team1 = lastControls().find(c => c.id === 'draw-team1')!;
+      expect(team1.label).toMatch(/^Füchse \(\d+\)$/);
+      expect(team1.rename?.value).toBe('Füchse');
+    });
   });
 
   it('"Neu mischen" redraws the same players without revealing', async () => {

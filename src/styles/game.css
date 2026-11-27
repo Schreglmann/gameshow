@@ -1484,12 +1484,23 @@
     align-items: center;
     justify-content: center;
     min-width: 0;
-    padding: clamp(6px, 0.8vw, 10px) clamp(26px, 2.4vw, 32px);
+    padding: clamp(9px, 1.1vw, 14px) clamp(26px, 2.4vw, 32px);
     font-size: clamp(0.95em, 1.5vw, 1.1em);
     text-align: center;
     border-bottom: none;
     border-radius: var(--radius-md, 10px);
     background: rgba(var(--glass-rgb), 0.08);
+}
+
+/* A short roster (HomeScreen: DRAW_POOL_LARGE_MAX) gets larger chips. */
+.draw-pool[data-size='large'] {
+    grid-template-columns: repeat(auto-fill, minmax(clamp(130px, 17vw, 260px), 1fr));
+    gap: clamp(8px, 1vw, 14px);
+}
+
+.draw-pool[data-size='large'] .draw-pool-name {
+    padding: clamp(12px, 1.5vw, 20px) clamp(28px, 2.6vw, 36px);
+    font-size: clamp(1.05em, 2vw, 1.45em);
 }
 
 .draw-pool-label {
@@ -1543,19 +1554,53 @@
 .draw-add-form {
     flex-direction: row;
     flex-wrap: wrap;
-    max-width: min(760px, 100%);
-    padding: clamp(12px, 2vw, 20px);
+    max-width: min(680px, 100%);
+    padding: clamp(12px, 1.6vw, 18px);
+    gap: clamp(10px, 1.2vw, 14px);
 }
 
+/* The field sits in SuggestInput's wrapper (autocomplete list); the form is
+   lifted above the "Teams zuweisen" button so the open list covers it. */
+.draw-add-form {
+    position: relative;
+    z-index: 5;
+}
+
+.draw-add-form .suggest-wrap {
+    flex: 1 1 280px;
+}
+
+/* Sized to the player chips above, not the global input/button scale
+   (1.2em text, up to 20px padding), which dwarfed the roster. */
 .draw-add-form input {
     flex: 1 1 280px;
     min-width: 0;
     margin: 0;
+    padding: clamp(10px, 1.2vw, 14px) clamp(14px, 1.6vw, 20px);
+    font-size: clamp(0.95em, 1.5vw, 1.1em);
 }
 
-.draw-add-form button {
+.draw-add-form > button {
     flex: 0 0 auto;
     margin: 0;
+    padding: clamp(10px, 1.2vw, 14px) clamp(18px, 2.2vw, 32px);
+    font-size: clamp(0.85em, 1.2vw, 0.95em);
+}
+
+/* "„Anna“ ist schon dabei." after an add or a roster edit. See specs/players.md. */
+.draw-add-feedback {
+    max-width: min(760px, 100%);
+    margin: 0 auto;
+    padding: clamp(6px, 1vw, 10px) clamp(12px, 2vw, 20px);
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.35);
+    font-size: clamp(0.95em, 1.8vw, 1.15em);
+    text-align: center;
+    overflow-wrap: anywhere;
+}
+
+.team-edit-feedback {
+    margin-top: clamp(10px, 2vh, 20px);
 }
 
 textarea {

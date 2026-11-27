@@ -19,6 +19,7 @@ import { mkdir, writeFile, rename, readFile } from 'fs/promises';
 import type { AppConfig, GameConfig } from '../src/types/config.js';
 import { renderMediaItem, type MediaItem } from './example-media.js';
 import { buildDefaultConfig, isGitCryptBlob } from './clean-install.js';
+import { exampleGameshowPlayerIds, examplePlayers } from './example-players.js';
 
 export interface ExampleGame {
   /** File name without extension, e.g. `beispiel-simple-quiz` → games/beispiel-simple-quiz.json */
@@ -400,6 +401,24 @@ export interface MaterializeResult {
   gameshow: string;
 }
 
+/**
+ * Put the "beispiele" gameshow into `config` (mutates it) with this game
+ * order and activate it. Players: the made-up example players go into an
+ * EMPTY registry only (a fresh clone) — a real registry never gets them — and
+ * the players the gameshow already lists are kept.
+ * See server/example-players.ts and specs/example-games.md.
+ */
+export function applyExampleGameshow(config: AppConfig, gameOrder: string[]): void {
+  config.gameshows = config.gameshows ?? {};
+  let players = config.gameshows.beispiele?.players;
+  if (!config.players || config.players.length === 0) {
+    config.players = examplePlayers();
+    players = exampleGameshowPlayerIds();
+  }
+  config.gameshows.beispiele = { name: 'Beispiele', gameOrder, ...(players && players.length > 0 ? { players } : {}) };
+  config.activeGameshow = 'beispiele';
+}
+
 /** Read the config for writing, falling back to a fresh default when missing/encrypted/unparseable. */
 async function loadConfigForWrite(configPath: string): Promise<AppConfig> {
   try {
@@ -453,13 +472,11 @@ export async function materializeExamples(opts: {
   // game types (the closing rounds of a real show) are ordered LAST so the demo
   // gameshow reads like a real one; the relative order within each group is kept.
   const config = await loadConfigForWrite(configPath);
-  config.gameshows = config.gameshows ?? {};
   const gameOrder = [
     ...EXAMPLE_GAMES.filter(g => !FINAL_GAME_TYPES.has(g.gameFile.type)),
     ...EXAMPLE_GAMES.filter(g => FINAL_GAME_TYPES.has(g.gameFile.type)),
   ].map(g => g.fileName);
-  config.gameshows.beispiele = { name: 'Beispiele', gameOrder };
-  config.activeGameshow = 'beispiele';
+  applyExampleGameshow(config, gameOrder);
   await writeJsonAtomic(configPath, config);
 
   return { createdGames, gameshow: 'beispiele' };

@@ -9,6 +9,7 @@ import {
 } from 'react';
 import type {
   GlobalSettings,
+  RosterPlayer,
   TeamState,
   CurrentGame,
   ScoreLogEntry,
@@ -34,7 +35,8 @@ import {
   type TeamKey,
 } from '@/utils/teams';
 import { DEFAULT_POINT_MODE, normalizePointMode } from '@/utils/pointMode';
-import { drawTeams, reconcileDraw } from '@/utils/teamDraw';
+import { applyPlayerRenames, drawTeams, reconcileDraw } from '@/utils/teamDraw';
+import { normalizeRoster, normalizeSettingsPlayers, rosterTuples } from '@/utils/playerNames';
 
 type JokerTeam = TeamKey;
 
@@ -87,12 +89,16 @@ function readTeamsRevealed(teams: TeamState): boolean {
   return anyRoster(teams);
 }
 
-function readRoster(key: string): string[] {
+/**
+ * A roster from localStorage. Rosters written before players had two names
+ * hold plain strings; those are converted (first word → first name), never
+ * dropped. See specs/players.md.
+ */
+function readRoster(key: string): RosterPlayer[] {
   try {
     const raw = localStorage.getItem(key);
     if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter(x => typeof x === 'string') : [];
+    return normalizeRoster(JSON.parse(raw));
   } catch {
     return [];
   }
@@ -253,7 +259,7 @@ function withTallyRev(map: CorrectAnswersMap, rev: number): Record<string, unkno
 // ── Score history (audit log for scoring-undo) ──
 // Every team-points mutation funnels through applyPointDelta, which appends an
 // entry here so the gamemaster can undo a mis-award. The list is capped (oldest
-// dropped) to bound localStorage growth and rides the cached gamemaster-team-state-v2
+// dropped) to bound localStorage growth and rides the cached gamemaster-team-state-v3
 // channel as part of TeamState. See specs/gamemaster-cockpit.md.
 
 const SCORE_HISTORY_KEY = 'scoreHistory';
@@ -331,7 +337,7 @@ function writeScoreHistory(history: ScoreLogEntry[]): void {
 // ── Comeback-joker armed multiplier ──
 // `doubleNextGame` is the team whose next awarded game doubles its points (the
 // Aufholjoker). Transient pending state — persisted so it survives a reload and
-// rides the cached gamemaster-team-state-v2 channel. See specs/comeback-joker.md.
+// rides the cached gamemaster-team-state-v3 channel. See specs/comeback-joker.md.
 
 const DOUBLE_NEXT_GAME_KEY = 'doubleNextGame';
 
@@ -403,7 +409,7 @@ export function nextTeamStateRev(
 }
 
 /**
- * Canonical serialization of the fields that ride the `gamemaster-team-state-v2`
+ * Canonical serialization of the fields that ride the `gamemaster-team-state-v3`
  * channel, used for the value-based echo guard in GameProvider.
  *
  * An ARRAY, not the raw object: `JSON.stringify(teams)` compares key ORDER too,
@@ -420,7 +426,7 @@ export function nextTeamStateRev(
  */
 function serializeTeams(t: TeamState): string {
   return JSON.stringify([
-    ...ALL_TEAM_KEYS.map(k => t[k] ?? []),
+    ...ALL_TEAM_KEYS.map(k => rosterTuples(t[k] ?? [])),
     ...ALL_TEAM_KEYS.map(k => t[`${k}Name`] ?? null),
     ...ALL_TEAM_KEYS.map(k => t[`${k}Points`] ?? 0),
     ...ALL_TEAM_KEYS.map(k => t[`${k}JokersUsed`] ?? []),
@@ -600,7 +606,7 @@ function getInitialState(): AppState {
 // ── Actions ──
 
 /** Rosters for some or all teams; an omitted team keeps its current roster. */
-export type TeamRosterPatch = Partial<Record<TeamKey, string[]>>;
+export type TeamRosterPatch = Partial<Record<TeamKey, RosterPlayer[]>>;
 /** Names for some or all teams; an omitted team keeps its current name. */
 export type TeamNamePatch = Partial<Record<`${TeamKey}Name`, string | undefined>>;
 
@@ -968,10 +974,10 @@ interface GameContextValue {
   dispatch: React.Dispatch<Action>;
   loadSettings: () => Promise<void>;
   awardPoints: (team: TeamKey, points: number) => void;
-  /** Full reshuffle of `names` into the active teams. Leaves `teamsRevealed` alone. */
-  assignTeams: (names: string[]) => void;
-  /** Bring the draw in line with `names` without reshuffling (add/remove only). */
-  reconcileTeamDraw: (names: string[]) => void;
+  /** Full reshuffle of `players` into the active teams. Leaves `teamsRevealed` alone. */
+  assignTeams: (players: RosterPlayer[]) => void;
+  /** Bring the draw in line with `players` without reshuffling (add/remove only). */
+  reconcileTeamDraw: (players: RosterPlayer[]) => void;
   /** Let the show display the draw ("Teams zuweisen" in random mode). */
   revealTeams: () => void;
 }
@@ -1044,7 +1050,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
           jokersInLastGame: data.jokersInLastGame === true,
           jokerUsageScope: data.jokerUsageScope === 'per-game' ? 'per-game' : 'per-gameshow',
           backgroundMusicSource: data.backgroundMusicSource === 'default' ? 'default' : 'theme',
-          players: data.players || [],
+          players: normalizeSettingsPlayers(data.players),
+          registry: normalizeSettingsPlayers(data.registry),
+          binned: normalizeSettingsPlayers(data.binned),
           totalGames: typeof data.totalGames === 'number' && data.totalGames > 0 ? data.totalGames : 0,
         },
       });
@@ -1070,17 +1078,16 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const teamsRef = useRef(state.teams);
   teamsRef.current = state.teams;
 
-  const assignTeams = useCallback((names: string[]) => {
+  const assignTeams = useCallback((players: RosterPlayer[]) => {
     // Shuffle + round-robin over however many teams the gameshow runs with
-    // (0-4); names are normalized (every word capitalized). A count of 0 has no
-    // teams to deal into. See src/utils/teamDraw.ts.
+    // (0-4). A count of 0 has no teams to deal into. See src/utils/teamDraw.ts.
     const keys = teamKeys(teamCountRef.current);
     if (keys.length === 0) return;
-    dispatch({ type: 'SET_TEAMS', payload: drawTeams(names, keys) });
+    dispatch({ type: 'SET_TEAMS', payload: drawTeams(players, keys) });
   }, []);
 
-  const reconcileTeamDraw = useCallback((names: string[]) => {
-    const patch = reconcileDraw(teamsRef.current, names, teamKeys(teamCountRef.current));
+  const reconcileTeamDraw = useCallback((players: RosterPlayer[]) => {
+    const patch = reconcileDraw(teamsRef.current, players, teamKeys(teamCountRef.current));
     if (patch) {
       // Keep the ref current so a second call before the re-render (debounce
       // flush + submit) reconciles against the patched rosters.
@@ -1093,6 +1100,20 @@ export function GameProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'SET_TEAMS_REVEALED', payload: { revealed: true } });
   }, []);
 
+  // A registry rename while the show runs (admin Spieler tab → content-changed →
+  // settings reload) reaches the drawn players, before and after the reveal —
+  // and a player added live by name gets their new registry id here once the
+  // show's write reached the gameshow. Only the active show tab writes it, so
+  // the GM and admin don't race it. See specs/players.md.
+  useEffect(() => {
+    if (!isShowTab() || isInactiveShowTab()) return;
+    const patch = applyPlayerRenames(teamsRef.current, state.settings.players, teamKeys(teamCountRef.current));
+    if (patch) {
+      teamsRef.current = { ...teamsRef.current, ...patch };
+      dispatch({ type: 'SET_TEAMS', payload: patch });
+    }
+  }, [state.settings.players]);
+
   // Broadcast team state on local mutations. Skip when the serialized value is
   // unchanged from what we last sent OR just received (value-based echo guard,
   // see lastSentTeamsJsonRef above), or when this is an inactive show tab.
@@ -1103,7 +1124,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     // Record only what actually went out: sendWs is a no-op while the socket is
     // reconnecting, and marking a dropped payload as "sent" left the peers on
     // the old value until something else changed. Re-sent on the next open.
-    if (!sendWs('gamemaster-team-state-v2', state.teams)) {
+    if (!sendWs('gamemaster-team-state-v3', state.teams)) {
       pendingTeamsRef.current = state.teams;
       return;
     }
@@ -1117,7 +1138,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   useEffect(() => onWsOpen(() => {
     const pending = pendingTeamsRef.current;
     if (!pending || isInactiveShowTab()) return;
-    if (sendWs('gamemaster-team-state-v2', pending)) {
+    if (sendWs('gamemaster-team-state-v3', pending)) {
       pendingTeamsRef.current = null;
       lastSentTeamsJsonRef.current = serializeTeams(pending);
     }
@@ -1157,7 +1178,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   }), []);
 
   // Apply remote team-state updates.
-  useWsChannel<TeamState | null>('gamemaster-team-state-v2', (payload) => {
+  useWsChannel<TeamState | null>('gamemaster-team-state-v3', (payload) => {
     if (!payload) return;
     const next: TeamState = {
       scoreHistory: normalizeScoreHistory(payload.scoreHistory),
@@ -1183,7 +1204,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const name = payload[`${key}Name`];
       const points = payload[`${key}Points`];
       const jokers = payload[`${key}JokersUsed`];
-      next[key] = Array.isArray(roster) ? roster : [];
+      // Converted, not filtered: a legacy peer or cache sends name strings.
+      next[key] = normalizeRoster(roster);
       next[`${key}Name`] = typeof name === 'string' && name.trim() ? name : undefined;
       next[`${key}Points`] = typeof points === 'number' ? points : 0;
       next[`${key}JokersUsed`] = Array.isArray(jokers) ? jokers : [];
@@ -1193,7 +1215,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     // session — must not roll our score back. Re-assert ours so the sender
     // converges on the newer value instead of the two of us diverging.
     if ((next.rev ?? 0) < (state.teams.rev ?? 0)) {
-      sendWs('gamemaster-team-state-v2', state.teams);
+      sendWs('gamemaster-team-state-v3', state.teams);
       return;
     }
     if (teamsColdGateRef.current) {
@@ -1291,7 +1313,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     if (!isShowTab()) return;
     return onWsOpen(() => {
       if (isInactiveShowTab()) return;
-      sendWs('gamemaster-team-state-v2', latestTeamsRef.current);
+      sendWs('gamemaster-team-state-v3', latestTeamsRef.current);
       sendWs('gamemaster-question-tally', withTallyRev(latestCorrectRef.current, tallyRevRef.current));
     });
   }, []);
@@ -1302,7 +1324,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!isShowTab()) return;
     return onBecameActive(() => {
-      sendWs('gamemaster-team-state-v2', latestTeamsRef.current);
+      sendWs('gamemaster-team-state-v3', latestTeamsRef.current);
       sendWs('gamemaster-question-tally', withTallyRev(latestCorrectRef.current, tallyRevRef.current));
     });
   }, []);
@@ -1312,7 +1334,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     if (!isShowTab()) return;
     return onReemitRequest(() => {
       if (isInactiveShowTab()) return;
-      sendWs('gamemaster-team-state-v2', latestTeamsRef.current);
+      sendWs('gamemaster-team-state-v3', latestTeamsRef.current);
       sendWs('gamemaster-question-tally', withTallyRev(latestCorrectRef.current, tallyRevRef.current));
     });
   }, []);

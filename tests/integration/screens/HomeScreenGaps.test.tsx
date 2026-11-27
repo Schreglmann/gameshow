@@ -14,7 +14,9 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
+const mockSyncLivePlayers = vi.hoisted(() => vi.fn().mockResolvedValue({ players: [] }));
 vi.mock('@/services/api', () => ({
+  syncLivePlayers: (...args: unknown[]) => mockSyncLivePlayers(...args),
   fetchSettings: vi.fn().mockResolvedValue({
     pointSystemEnabled: true,
     teamRandomizationEnabled: true,
@@ -135,6 +137,32 @@ describe('HomeScreen - Gaps', () => {
     await user.type(screen.getByLabelText('Spieler zu Team 1 hinzufügen'), 'Zoe');
     await user.keyboard('{Enter}');
     await waitFor(() => expect(screen.getByDisplayValue('Zoe')).toBeInTheDocument());
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('manual mode: a suggestion picked in the ghost slot is filled in, the next Enter adds them', async () => {
+    const user = userEvent.setup();
+    localStorage.setItem('team1', JSON.stringify(['Alice']));
+    vi.mocked(fetchSettings).mockResolvedValue({
+      pointSystemEnabled: true,
+      teamRandomizationEnabled: false,
+      globalRules: [],
+      registry: [{ id: 'marlene-auer', firstName: 'Marlene', lastName: 'Auer', nickname: 'Maus' }],
+    });
+
+    renderHome();
+    const slot = await screen.findByLabelText('Spieler zu Team 1 hinzufügen');
+    await user.type(slot, 'mar');
+    await user.keyboard('{ArrowDown}{Enter}');
+    // Filled in, not added yet: the slot keeps the focus.
+    expect(slot).toHaveValue('Marlene „Maus“ Auer');
+    expect(slot).toHaveFocus();
+    expect(JSON.parse(localStorage.getItem('team1') ?? '[]')).toEqual(['Alice']);
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(screen.getByDisplayValue('Maus')).toBeInTheDocument());
+    expect(JSON.parse(localStorage.getItem('team1') ?? '[]')).toContainEqual(
+      { firstName: 'Marlene', lastName: 'Auer', nickname: 'Maus', id: 'marlene-auer' },
+    );
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 

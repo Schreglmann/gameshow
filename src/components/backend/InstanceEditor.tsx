@@ -18,6 +18,10 @@ import RandomFrameForm from './questions/RandomFrameForm';
 import CityCompassForm from './questions/CityCompassForm';
 import RulesEditor from './RulesEditor';
 import type { InstanceUsage } from '@/utils/playerStats';
+import type { Player } from '@/types/config';
+import { playerLabel } from '@/utils/playerRegistry';
+
+const EMPTY_PLAYERS: ReadonlyMap<string, Player> = new Map();
 
 interface Props {
   gameType: GameType;
@@ -32,11 +36,13 @@ interface Props {
   initialQuestion?: number;
   /** Gameshows that played (or have queued) this instance — derived, read-only. */
   instanceUsage?: InstanceUsage[];
-  /** Open a player's profile (stats modal). When set, player names are clickable. */
-  onPlayerClick?: (player: string) => void;
+  /** Open a player's profile (stats modal) by registry id. When set, player names are clickable. */
+  onPlayerClick?: (playerId: string) => void;
+  /** The player registry by id — `instanceUsage` lists ids, shown as full names. */
+  playerNames?: ReadonlyMap<string, Player>;
 }
 
-export default function InstanceEditor({ gameType, instance, onChange, otherInstances, onMoveQuestion, isArchive, initialQuestion, instanceUsage = [], onPlayerClick }: Props) {
+export default function InstanceEditor({ gameType, instance, onChange, otherInstances, onMoveQuestion, isArchive, initialQuestion, instanceUsage = [], onPlayerClick, playerNames = EMPTY_PLAYERS }: Props) {
   const [showMeta, setShowMeta] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -84,14 +90,17 @@ export default function InstanceEditor({ gameType, instance, onChange, otherInst
 
   const renderPlayers = (players: string[]) => {
     if (players.length === 0) return '—';
-    return players.map((p, i) => (
-      <Fragment key={p}>
-        {onPlayerClick
-          ? <button type="button" className="instance-usage-player" onClick={() => onPlayerClick(p)} title={`Profil von ${p}`}>{p}</button>
-          : <span>{p}</span>}
-        {i < players.length - 1 ? ', ' : ''}
-      </Fragment>
-    ));
+    return players.map((p, i) => {
+      const name = playerLabel(p, playerNames);
+      return (
+        <Fragment key={p}>
+          {onPlayerClick
+            ? <button type="button" className="instance-usage-player" onClick={() => onPlayerClick(p)} title={`Profil von ${name}`}>{name}</button>
+            : <span>{name}</span>}
+          {i < players.length - 1 ? ', ' : ''}
+        </Fragment>
+      );
+    });
   };
 
   const renderUsageRow = (u: InstanceUsage) => (

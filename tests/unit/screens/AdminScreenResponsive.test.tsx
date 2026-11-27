@@ -17,6 +17,7 @@ vi.mock('@/services/api', () => ({
 }));
 
 vi.mock('@/services/backendApi', () => ({
+  fetchPlayerBin: vi.fn().mockResolvedValue([]),
   fetchGames: vi.fn().mockResolvedValue([]),
   fetchGame: vi.fn().mockResolvedValue({}),
   fetchConfig: vi.fn().mockResolvedValue({
@@ -137,7 +138,7 @@ describe('AdminScreen — responsive / hamburger drawer', () => {
     expect(document.querySelector('.admin-sidebar')).toHaveClass('open');
 
     // Click a tab
-    await user.click(screen.getByRole('button', { name: /Spiele/ }));
+    await user.click(screen.getByRole('button', { name: /^Spiele$/ }));
     expect(document.querySelector('.admin-sidebar')).not.toHaveClass('open');
   });
 

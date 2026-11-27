@@ -70,7 +70,7 @@ describe('server connection indicators', () => {
 
     it('does not flash for state channels that are re-sent on reconnect', () => {
       render(<GmConnectionBanner />);
-      act(() => { sendWs('gamemaster-team-state-v2', {}); });
+      act(() => { sendWs('gamemaster-team-state-v3', {}); });
       expect(screen.queryByText('Befehl nicht gesendet')).toBeNull();
     });
 

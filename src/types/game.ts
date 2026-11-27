@@ -1,4 +1,4 @@
-import type { BackgroundMusicSource, PointMode, TeamColors } from './config.js';
+import type { BackgroundMusicSource, Player, PointMode, TeamColors } from './config.js';
 import type { TeamKey } from '../utils/teams.js';
 
 /**
@@ -36,7 +36,7 @@ export const NO_QUESTION_KEY = 'none';
  * positional awards AND inline-scored games (bet-quiz / quizjagd / final-quiz /
  * wer-kennt-mehr) — funnels through `applyPointDelta` in GameContext, which
  * appends an entry here. Backs the gamemaster scoring-undo panel. The list rides
- * the cached `gamemaster-team-state-v2` channel and is capped (oldest dropped).
+ * the cached `gamemaster-team-state-v3` channel and is capped (oldest dropped).
  * See specs/gamemaster-cockpit.md.
  */
 export interface ScoreLogEntry {
@@ -70,7 +70,7 @@ export interface ScoreLogEntry {
  *
  * The fields are FLAT per team (`teamN`, `teamNName`, `teamNPoints`,
  * `teamNJokersUsed`) rather than an array, so the localStorage keys and the
- * `gamemaster-team-state-v2` payload stay purely additive as the supported team
+ * `gamemaster-team-state-v3` payload stay purely additive as the supported team
  * count grew from 2 to 4 — nothing had to be migrated.
  *
  * `team1`/`team2` are required (they always exist, and every pre-existing state
@@ -80,11 +80,26 @@ export interface ScoreLogEntry {
  * src/utils/teams.ts, which default a missing team to `[]` / `0`.
  * See specs/team-count.md.
  */
+/**
+ * One player in a live team roster. Registry players carry their `id` and
+ * `nickname`; a name typed during the show is `{ firstName: '', lastName: '',
+ * nickname }` until the registry gives it an id. Never printed directly on the
+ * show — the label comes from `displayNames` in src/utils/playerNames.ts.
+ * See specs/players.md.
+ */
+export interface RosterPlayer {
+  firstName: string;
+  lastName: string;
+  /** Spitzname, shown on the show. Absent → the first name is shown. */
+  nickname?: string;
+  id?: string;
+}
+
 export interface TeamState {
-  team1: string[];
-  team2: string[];
-  team3?: string[];
-  team4?: string[];
+  team1: RosterPlayer[];
+  team2: RosterPlayer[];
+  team3?: RosterPlayer[];
+  team4?: RosterPlayer[];
   /** Optional custom name for team 1. Falls back to "Team 1" when unset/blank. */
   team1Name?: string;
   /** Optional custom name for team 2. Falls back to "Team 2" when unset/blank. */
@@ -110,7 +125,7 @@ export interface TeamState {
    * Armed Aufholjoker (comeback-joker) multiplier target: the next awarded
    * game doubles this team's positional points, then clears. Transient pending
    * state (correct to store, unlike the trailing-team gate which is derived).
-   * Rides the cached gamemaster-team-state-v2 channel. See specs/comeback-joker.md.
+   * Rides the cached gamemaster-team-state-v3 channel. See specs/comeback-joker.md.
    */
   doubleNextGame?: TeamKey | null;
   /**
@@ -119,7 +134,7 @@ export interface TeamState {
    * right), for whichever way the teams are seated. Team
    * identities/points/jokers are unaffected — only display order flips. The
    * gamemaster screen always shows the mirror of the frontend order (it faces the
-   * crowd). Rides the cached gamemaster-team-state-v2 channel + localStorage. See
+   * crowd). Rides the cached gamemaster-team-state-v3 channel + localStorage. See
    * specs/team-order-mirror.md and src/utils/teamOrder.ts.
    */
   orderSwapped?: boolean;
@@ -127,7 +142,7 @@ export interface TeamState {
    * Random mode only: whether the show may display the rosters. The draw happens
    * in the background on page load and stays hidden (only the gamemaster sees
    * it) until "Teams zuweisen" sets this. Missing on legacy state, where it is
-   * derived as "any roster non-empty". Rides the cached gamemaster-team-state-v2
+   * derived as "any roster non-empty". Rides the cached gamemaster-team-state-v3
    * channel + localStorage. See specs/team-management.md ("Verdeckte Auslosung").
    */
   teamsRevealed?: boolean;
@@ -135,7 +150,7 @@ export interface TeamState {
    * Monotonic revision counter (Lamport clock) guarding against a client
    * publishing a snapshot older than one already in circulation. Every local
    * mutation sets `rev = (highest rev this client has seen) + 1`; the server
-   * relays a `gamemaster-team-state-v2` write only when its `rev` is strictly
+   * relays a `gamemaster-team-state-v3` write only when its `rev` is strictly
    * higher than the cached one, and echoes the cache back to a rejected writer
    * so it converges instead of diverging. Never reset to 0 (not even by
    * RESET_POINTS / CLEAR_ALL) — a reset that lost the race would resurrect the
@@ -239,12 +254,19 @@ export interface GlobalSettings {
    */
   backgroundMusicSource: BackgroundMusicSource;
   /**
-   * Roster of the active gameshow (`GameshowConfig.players`), configured in the
-   * admin Gameshows tab. Prefills the HomeScreen randomization textarea so the
-   * host only has to click "Teams zuweisen". Empty when the gameshow has no
-   * configured roster. See specs/team-management.md.
+   * Players of the active gameshow, resolved from the registry
+   * (`GameshowConfig.players` → `AppConfig.players`). Drawn into the hidden
+   * draw when it is empty. Empty when the gameshow has no configured players.
+   * See specs/players.md.
    */
-  players: string[];
+  players: Player[];
+  /**
+   * The whole player registry, for the add fields' autocomplete. Optional so
+   * existing fixtures don't need it. See specs/players.md.
+   */
+  registry?: Player[];
+  /** Deleted players (the local bin), for a name typed in full. See specs/players.md. */
+  binned?: Player[];
   /**
    * How many games the active gameshow runs (`gameOrder.length`) — the "N" the
    * header counter reads "Spiel x von N". Lets the long-name check size the
@@ -378,6 +400,25 @@ export interface GamemasterButtonDef {
    * specs/team-management.md ("GM button menu").
    */
   menu?: GamemasterButtonDef[];
+  /** Heading of that popover; the button's label when absent (a player's full name). */
+  menuTitle?: string;
+}
+
+/**
+ * An editable `button-group` label. Tapping the label opens an input in its
+ * place: opening it and every keystroke send `<id>:change` with `{ name }`,
+ * saving sends `<id>` with `{ name }`, cancelling sends nothing.
+ * See specs/team-management.md ("Optional team names").
+ */
+export interface GamemasterGroupRename {
+  id: string;
+  /** The value the input opens with ('' = no custom name). */
+  value: string;
+  placeholder?: string;
+  /** Accessible name of the label button and the input. */
+  ariaLabel?: string;
+  /** Shown under the input while editing (the long-name warning). */
+  hint?: string;
 }
 
 export interface GamemasterInputDef {
@@ -387,6 +428,24 @@ export interface GamemasterInputDef {
   placeholder?: string;
   value?: string;
   emitOnChange?: boolean;
+  /**
+   * Autocomplete candidates (registry players for the "Spieler hinzufügen"
+   * fields). Picking one fills its label into the field; submitting sends it
+   * like typed text, and the show resolves the label to the player.
+   * See specs/players.md.
+   */
+  suggestions?: GamemasterSuggestion[];
+}
+
+export interface GamemasterSuggestion {
+  id: string;
+  /** What the list shows and what the typed text is matched against. */
+  label: string;
+  /**
+   * A disabled player's names: the entry is offered only when the typed text
+   * is one of them in full (case-insensitive). See specs/players.md.
+   */
+  fullMatch?: string[];
 }
 
 export type GamemasterControl =
@@ -400,8 +459,18 @@ export type GamemasterControl =
       layout?: 'grid';
       /** Renders the group as a card marked with this team's colour (dot + accent edge). */
       team?: TeamKey;
+      /** Makes the label editable in place (the team name above the players). */
+      rename?: GamemasterGroupRename;
     }
-  | { type: 'input-group'; id: string; inputs: GamemasterInputDef[]; submitLabel: string; submitDisabled?: boolean }
+  | {
+      type: 'input-group';
+      id: string;
+      inputs: GamemasterInputDef[];
+      submitLabel: string;
+      submitDisabled?: boolean;
+      /** Empty the fields after a submit (the "Spieler hinzufügen" fields). */
+      clearOnSubmit?: boolean;
+    }
   | { type: 'info'; id: string; text: string }
   | { type: 'nav'; id: string; hideBack?: boolean; hideForward?: boolean };
 

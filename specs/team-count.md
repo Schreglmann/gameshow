@@ -200,7 +200,7 @@ Declared on `GameTypeInfo.supportedTeamCounts` in
 - Config: `GameshowConfig.teamCount?: 0|1|2|3|4`. `AppConfig.pointSystemEnabled` is unchanged.
 - localStorage: additive keys `team3`, `team4`, `team3Name`, …, `team4JokersUsed`. Existing keys
   keep their meaning; no migration.
-- **WS channel renamed to `gamemaster-team-state-v2`** (was `gamemaster-team-state`). A stale cached PWA
+- **WS channel renamed to `gamemaster-team-state-v3`** (was `gamemaster-team-state`). A stale cached PWA
   would normalize a 4-team payload down to two teams and re-broadcast it, silently destroying team
   3/4 rosters and points mid-show. Renaming makes an old peer simply fail to sync, which is
   visible — the same reasoning that renamed the correct-answers channel (see the comment block in

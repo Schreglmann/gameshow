@@ -22,11 +22,13 @@ import { GAME_TYPE_INFO } from '@/data/gameTypeInfo';
  *     upcoming shows use the same game, the FIRST stays Neu/Ungespielt and the
  *     LATER one(s) show Eingeplant.
  * G itself and every show after G are excluded. See specs/game-planning.md.
+ *
+ * Players are registry ids (`GameshowConfig.players`), so identity is plain id
+ * equality — a renamed player is still the same player. Callers turn ids into
+ * names with `playerLabel` (src/utils/playerRegistry.ts). See specs/players.md.
  */
 
 export type Overlap = 'fresh' | 'none' | 'planned' | 'partial' | 'full';
-
-const norm = (s: string) => s.trim().toLowerCase();
 
 /**
  * Precomputed split of the gameshow timeline relative to the gameshow being
@@ -37,8 +39,8 @@ const norm = (s: string) => s.trim().toLowerCase();
 export interface OverlapContext {
   playedShows: GameshowConfig[];
   plannedShows: GameshowConfig[];
-  /** Current gameshow roster, normalised (trimmed + lower-cased, blanks dropped). */
-  currentPlayersLower: string[];
+  /** Current gameshow's player ids (blanks dropped). */
+  currentPlayerIds: string[];
 }
 
 export function buildOverlapContext(
@@ -56,7 +58,7 @@ export function buildOverlapContext(
   return {
     playedShows: ids.slice(0, playedEnd).map(k => gameshows[k]!),
     plannedShows: active < cur ? ids.slice(active, cur).map(k => gameshows[k]!) : [],
-    currentPlayersLower: currentPlayers.map(norm).filter(Boolean),
+    currentPlayerIds: currentPlayers.filter(Boolean),
   };
 }
 
@@ -65,20 +67,20 @@ export function buildOverlapContext(
  * the current roster + timeline. See the module docstring for the model.
  */
 export function classifyOverlap(ref: string, ctx: OverlapContext): Overlap {
-  const P = ctx.currentPlayersLower;
+  const P = ctx.currentPlayerIds;
   const played = new Set<string>();
   let everPlayed = false;
   for (const gs of ctx.playedShows) {
     if (!gs.gameOrder.includes(ref)) continue;
     everPlayed = true;
-    const showPlayers = new Set((gs.players ?? []).map(norm));
+    const showPlayers = new Set(gs.players ?? []);
     for (const x of P) if (showPlayers.has(x)) played.add(x);
   }
   if (P.length > 0 && played.size === P.length) return 'full';
   if (played.size > 0) return 'partial';
   for (const gs of ctx.plannedShows) {
     if (!gs.gameOrder.includes(ref)) continue;
-    const showPlayers = new Set((gs.players ?? []).map(norm));
+    const showPlayers = new Set(gs.players ?? []);
     if (P.some(x => showPlayers.has(x))) return 'planned';
   }
   if (everPlayed) return 'none';
@@ -95,7 +97,7 @@ export function classifyGameOverlap(refs: string[], ctx: OverlapContext): Overla
   if (!refs.length) return null;
   const overlaps = refs.map(r => classifyOverlap(r, ctx));
   if (overlaps.every(o => o === 'fresh')) return 'fresh';
-  if (!ctx.currentPlayersLower.length) return null;
+  if (!ctx.currentPlayerIds.length) return null;
   if (overlaps.some(o => o === 'fresh' || o === 'none')) return 'none';
   if (overlaps.some(o => o === 'planned')) return 'planned';
   if (overlaps.every(o => o === 'full')) return 'full';
@@ -104,20 +106,19 @@ export function classifyGameOverlap(refs: string[], ctx: OverlapContext): Overla
 
 /**
  * Current-roster members who already played `ref` in a happened show — i.e. the
- * people who already know the game. Returns their original-cased names, deduped,
- * in first-seen order. Backs the "who knows it" tooltip on partial/full badges.
+ * people who already know the game. Returns their ids, deduped, in first-seen
+ * order. Backs the "who knows it" tooltip on partial/full badges.
  */
 export function playersWhoPlayed(ref: string, ctx: OverlapContext): string[] {
-  const P = new Set(ctx.currentPlayersLower);
+  const P = new Set(ctx.currentPlayerIds);
   const seen = new Set<string>();
   const out: string[] = [];
   for (const gs of ctx.playedShows) {
     if (!gs.gameOrder.includes(ref)) continue;
-    for (const p of gs.players ?? []) {
-      const lower = norm(p);
-      if (P.has(lower) && !seen.has(lower)) {
-        seen.add(lower);
-        out.push(p.trim());
+    for (const id of gs.players ?? []) {
+      if (P.has(id) && !seen.has(id)) {
+        seen.add(id);
+        out.push(id);
       }
     }
   }
@@ -128,7 +129,7 @@ export function playersWhoPlayed(ref: string, ctx: OverlapContext): string[] {
 export interface RefShowRef {
   id: string;
   name: string;
-  /** Current-roster members that are in this gameshow (the overlap). */
+  /** Ids of the current-roster members that are in this gameshow (the overlap). */
   overlapPlayers: string[];
 }
 
@@ -145,12 +146,12 @@ export interface RefProvenance {
  * one current-roster member.
  */
 export function refProvenance(ref: string, ctx: OverlapContext, gameshows: Record<string, GameshowConfig>): RefProvenance {
-  const P = new Set(ctx.currentPlayersLower);
+  const P = new Set(ctx.currentPlayerIds);
   const collect = (shows: GameshowConfig[]): RefShowRef[] => {
     const out: RefShowRef[] = [];
     for (const gs of shows) {
       if (!gs.gameOrder.includes(ref)) continue;
-      const overlap = (gs.players ?? []).filter(p => P.has(norm(p)));
+      const overlap = (gs.players ?? []).filter(id => P.has(id));
       if (P.size > 0 && overlap.length === 0) continue;
       // Resolve the id back from the record (config keys are the ids).
       const id = Object.keys(gameshows).find(k => gameshows[k] === gs) ?? gs.name;
@@ -166,7 +167,7 @@ export function refProvenance(ref: string, ctx: OverlapContext, gameshows: Recor
 export interface InstanceUsage {
   gameshowId: string;
   gameshowName: string;
-  /** The gameshow's roster (these players played this instance). */
+  /** The gameshow's player ids (these players played this instance). */
   players: string[];
   /** True when the gameshow is upcoming (active-or-later): scheduled, not yet played. */
   planned: boolean;
@@ -252,23 +253,22 @@ function resolveEntry(ref: string, games: GameFileSummary[]): PlayerHistoryEntry
  * See specs/player-stats.md.
  */
 export function computePlayerHistory(
-  player: string,
+  playerId: string,
   games: GameFileSummary[],
   gameshows: Record<string, GameshowConfig> = {},
   referenceIndex = Infinity,
 ): PlayerHistory {
-  const playerLower = norm(player);
   const groups: PlayerHistoryGroup[] = [];
   const playedFiles = new Set<string>();
   const playedRefs = new Set<string>();
   const plannedRefs = new Set<string>();
   const typeCounts = new Map<GameType, number>();
 
-  if (playerLower) {
+  if (playerId) {
     const ids = Object.keys(gameshows);
     ids.forEach((gsId, idx) => {
       const gs = gameshows[gsId]!;
-      if (!(gs.players ?? []).some(p => norm(p) === playerLower)) return;
+      if (!(gs.players ?? []).includes(playerId)) return;
       const planned = idx >= referenceIndex;
       const entries = gs.gameOrder.map(ref => resolveEntry(ref, games));
       groups.push({ gameshowId: gsId, gameshowName: gs.name, planned, entries });

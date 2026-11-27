@@ -139,9 +139,19 @@ export function useEditableConfig(): EditableConfig {
   // own landed write as a remote change.
   // The shell's SaveStatusIndicator owns the "Gespeichert" toast — it is mounted
   // outside the panes and so can also report a save that outlived this one.
+  //
+  // Several instances can be mounted at once (a tab plus the player lightbox
+  // over it). A save written by ANOTHER instance must not just move this one's
+  // baseline: its own config would then differ from the baseline and count as
+  // unsaved edits forever — every later remote change (e.g. a player added on
+  // the show) would be refused as a conflict. So an instance without edits of
+  // its own takes the saved config as its state.
   useEffect(() => onSaved((key, json) => {
     if (key !== CONFIG_SAVE_KEY) return;
+    const current = configRef.current ? JSON.stringify(configRef.current) : null;
+    const wasClean = current !== null && current === savedSnapshotRef.current;
     savedSnapshotRef.current = json;
+    if (wasClean && current !== json) adoptRemoteRef.current(JSON.parse(json) as AppConfig);
   }), []);
 
   // React to a content-changed broadcast for config.json: adopt silently when clean,

@@ -202,9 +202,9 @@ describe('CorrectAnswersTracker', () => {
       expect(document.querySelectorAll('.gm-correct-team')[0]?.textContent).toContain('Carla');
     });
 
-    // The show pressed "Teams tauschen" — the flag rides `gamemaster-team-state-v2`.
+    // The show pressed "Teams tauschen" — the flag rides `gamemaster-team-state-v3`.
     act(() => {
-      __emitChannelForTests('gamemaster-team-state-v2', {
+      __emitChannelForTests('gamemaster-team-state-v3', {
         team1: ['Anna'],
         team2: ['Carla'],
         team1Points: 0,

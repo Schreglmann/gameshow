@@ -485,6 +485,29 @@ export type GameFile = SingleInstanceGameFile | MultiInstanceGameFile;
 
 // ── Full app config ──
 
+/**
+ * A player in the global registry (`AppConfig.players`). The nickname is
+ * required; first name and surname may be empty (a player added during the
+ * show has only the nickname until the admin completes it). A full name
+ * (first + last) exists only once, and so does the nickname of a player
+ * without one. The show calls the player by `nickname`. The id is a slug made
+ * when the player is created and never changes, so a rename reaches every
+ * gameshow and the stats. See specs/players.md.
+ */
+export interface Player {
+  id: string;
+  firstName: string;
+  lastName: string;
+  /** Spitzname — what the show and the gamemaster call the player. */
+  nickname: string;
+  /**
+   * Switched off globally: stays in the gameshows they are in, but no
+   * autocomplete offers them unless one of their names is typed in full.
+   * Absent = active. See specs/players.md ("Disabled players").
+   */
+  disabled?: boolean;
+}
+
 export interface GameshowConfig {
   name: string;
   /**
@@ -496,6 +519,10 @@ export interface GameshowConfig {
    */
   showTitle?: string;
   gameOrder: string[];
+  /**
+   * The gameshow's players, as ids into the global registry `AppConfig.players`.
+   * See specs/players.md.
+   */
   players?: string[];
   enabledJokers?: string[];
   /**
@@ -591,6 +618,11 @@ export interface AppConfig {
    * means `DEFAULT_SHOW_TITLE` ("Game Show"). See specs/show-title.md.
    */
   showTitle?: string;
+  /**
+   * The global player registry. Gameshows reference these players by id.
+   * Absent means no players yet. See specs/players.md.
+   */
+  players?: Player[];
   pointSystemEnabled?: boolean;
   teamRandomizationEnabled?: boolean;
   /**
@@ -812,12 +844,24 @@ export interface SettingsResponse {
    */
   backgroundMusicSource?: BackgroundMusicSource;
   /**
-   * Roster of the active gameshow (`GameshowConfig.players`), configured in the
-   * admin Gameshows tab. Prefills the HomeScreen randomization textarea. Empty
-   * or omitted when the gameshow has no configured roster. Optional so existing
-   * test fixtures don't need it. See specs/team-management.md.
+   * Players of the active gameshow (`GameshowConfig.players`), resolved from
+   * the registry. Drawn into the hidden team draw when it is empty. Empty or
+   * omitted when the gameshow has no configured players. Optional so existing
+   * test fixtures don't need it. See specs/players.md.
    */
-  players?: string[];
+  players?: Player[];
+  /**
+   * The whole player registry (`AppConfig.players`) — the candidates the show's
+   * and the gamemaster's add fields suggest. Optional so existing test fixtures
+   * don't need it. See specs/players.md.
+   */
+  registry?: Player[];
+  /**
+   * Deleted players from the local bin (`players-bin.json`) — suggested only
+   * for a name typed in full; adding one restores them. Optional so existing
+   * test fixtures don't need it. See specs/players.md ("Player bin").
+   */
+  binned?: Player[];
   /**
    * How many games the active gameshow runs (`gameOrder.length`) — the "N" of
    * the header counter "Spiel x von N", which the long-name check needs to size
@@ -825,6 +869,22 @@ export interface SettingsResponse {
    * fixtures don't need it. See specs/team-management.md.
    */
   totalGames?: number;
+}
+
+/**
+ * `POST /api/live-players` — adds and removes made on the show or the GM,
+ * written to the active gameshow's `players`. An add names a registry player
+ * by id, or a new name (found or created in the registry). A remove is a
+ * registry id. See specs/players.md.
+ */
+export interface LivePlayersRequest {
+  add?: ({ id: string } | { firstName?: string; lastName?: string; nickname: string })[];
+  remove?: string[];
+}
+
+export interface LivePlayersResponse {
+  /** The added players as the registry holds them, in request order. */
+  players: Player[];
 }
 
 export interface GameDataResponse {

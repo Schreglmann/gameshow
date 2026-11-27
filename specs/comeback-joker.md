@@ -39,7 +39,7 @@ killing late-show tension without any house-ruling.
       flag is set, and — once that team is selected — the doubled value in its points line, which is
       the same number the award books. Standard-mode `wer-kennt-mehr`'s summary renders the same
       screen (`inline`), so it carries the badge too.
-- [x] `doubleNextGame` rides the cached `gamemaster-team-state-v2` channel (cross-device + reconnect),
+- [x] `doubleNextGame` rides the cached `gamemaster-team-state-v3` channel (cross-device + reconnect),
       is persisted to localStorage, and is cleared by `RESET_POINTS`, `RESET_JOKERS`, and `CLEAR_ALL`.
 
 ## State / data changes

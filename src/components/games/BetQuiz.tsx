@@ -8,6 +8,7 @@ import { toMediaSrc } from '@/utils/assetUrl';
 import { fadeAudio } from '@/utils/fadeAudio';
 import { useMusicPlayer } from '@/context/MusicContext';
 import { useGameContext } from '@/context/GameContext';
+import { useRosterDisplayNames } from '@/hooks/useRosterDisplayNames';
 import { teamName } from '@/utils/teamNames';
 import { ALL_TEAM_KEYS, teamKeys, teamPoints, isTeamKey, type TeamKey } from '@/utils/teams';
 import { teamDisplayOrder } from '@/utils/teamOrder';
@@ -160,6 +161,7 @@ function BetQuizInner({
   setGameTimer,
 }: InnerProps) {
   const { state } = useGameContext();
+  const playerLabels = useRosterDisplayNames();
   // Resuming (back-navigation): open at the last question's answer phase. The
   // live bet/result of that round isn't reconstructed — the answer is shown for
   // review (see specs/game-back-review.md).
@@ -196,7 +198,6 @@ function BetQuizInner({
   // Serialized so the controls effect depends on the point VALUES, not on the
   // whole teams object (which changes identity on every unrelated mutation).
   const pointsKey = ALL_TEAM_KEYS.map(k => teamPoints(state.teams, k)).join(',');
-  const membersKey = ALL_TEAM_KEYS.map(k => (state.teams[k] ?? []).join(' ')).join('|');
 
   // Keep latest values readable from the command handler without re-registering on every change.
   const bettingTeamRef = useRef(bettingTeam);
@@ -432,7 +433,7 @@ function BetQuizInner({
       // GM control panel → mirror the frontend order (GM faces the crowd).
       const teamSubs = {} as Record<TeamKey, string | undefined>;
       for (const key of ALL_TEAM_KEYS) {
-        const members = state.teams[key] ?? [];
+        const members = playerLabels[key];
         teamSubs[key] = members.length > 0 ? members.join(', ') : undefined;
       }
       controls.push({
@@ -484,8 +485,7 @@ function BetQuizInner({
       }
     }
     setGamemasterControls(controls);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, pointSystemEnabled, bettingTeam, bet, betValid, betCapExceeded, betNum, result, qIdx, questions.length, isExample, q?.questionAudio, audioDuration, audioPlaying, answerAudioActive, answerAudioPlaying, membersKey, pointsKey, currentTeamPoints, teamLabels, state.teams.orderSwapped, state.settings.teamMirrorEnabled, state.settings.teamCount, setGamemasterControls, setNavState]);
+  }, [phase, pointSystemEnabled, bettingTeam, bet, betValid, betCapExceeded, betNum, result, qIdx, questions.length, isExample, q?.questionAudio, audioDuration, audioPlaying, answerAudioActive, answerAudioPlaying, playerLabels, pointsKey, currentTeamPoints, teamLabels, state.teams.orderSwapped, state.settings.teamMirrorEnabled, state.settings.teamCount, setGamemasterControls, setNavState]);
 
   // Gamemaster command routing
   const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
@@ -677,7 +677,7 @@ function BetQuizInner({
           <div className="bet-quiz-host-panel">
             <div className="bet-quiz-host-row" data-team-count={showOrder.length}>
               {showOrder.map(teamKey => {
-                const members = state.teams[teamKey] ?? [];
+                const members = playerLabels[teamKey];
                 return (
                   <div className="bet-quiz-team-choice" data-team={teamKey} key={teamKey}>
                     {members.length > 0 && (
@@ -726,7 +726,7 @@ function BetQuizInner({
 
   const betNumber = Number.isFinite(betNum) ? betNum : 0;
   const bannerTeamLabel = bettingTeam ? teamLabels[bettingTeam] : '';
-  const bannerMembers = bettingTeam ? (state.teams[bettingTeam] ?? []).join(', ') : '';
+  const bannerMembers = bettingTeam ? playerLabels[bettingTeam].join(', ') : '';
 
   return (
     <>

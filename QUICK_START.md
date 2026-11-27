@@ -4,7 +4,7 @@
 
 ## 🚀 Get Started in 3 Minutes
 
-> **Fresh clone without the git-crypt key?** The server detects that `config.json` is encrypted (or missing) and writes a minimal default config (an empty "Beispiele" gameshow). Open the admin's **Spiele** tab and click **"Beispiele erstellen"** (or run `npm run fixtures`) to generate one real example game per type — with self-synthesized, copyright-free images and music. `npm run validate` is git-crypt-aware and exits 0 with a friendly message. See [specs/clean-install.md](specs/clean-install.md) and [specs/example-games.md](specs/example-games.md).
+> **Fresh clone without the git-crypt key?** The server detects that `config.json` is encrypted (or missing) and writes a minimal default config (a "Beispiele" gameshow with nine made-up example players, but no games yet). Open the admin's **Spiele** tab and click **"Beispiele erstellen"** (or run `npm run fixtures`) to generate one real example game per type — with self-synthesized, copyright-free images and music. `npm run validate` is git-crypt-aware and exits 0 with a friendly message. See [specs/clean-install.md](specs/clean-install.md) and [specs/example-games.md](specs/example-games.md).
 
 ### Step 1: Install Dependencies
 ```bash
@@ -192,7 +192,7 @@ References in `gameOrder`:
 
 ## 🎮 Running the Gameshow
 
-1. **Setup teams**: players enter their names on the home page
+1. **Setup teams**: the gameshow's players (admin **Spieler** tab + the gameshow's player list) are drawn into teams on the home page; add more there
 2. **View rules**: global rules screen
 3. **Start**: begin with the first game
 4. **Navigate**: click or press arrow keys to advance

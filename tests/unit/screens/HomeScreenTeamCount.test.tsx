@@ -6,7 +6,10 @@ import HomeScreen from '@/components/screens/HomeScreen';
 import { GameProvider } from '@/context/GameContext';
 
 const fetchSettings = vi.fn();
-vi.mock('@/services/api', () => ({ fetchSettings: (...a: unknown[]) => fetchSettings(...a) }));
+vi.mock('@/services/api', () => ({
+  fetchSettings: (...a: unknown[]) => fetchSettings(...a),
+  syncLivePlayers: () => Promise.resolve({ players: [] }),
+}));
 vi.mock('@/services/useBackendSocket', () => ({
   sendWs: () => true, onWsOpen: () => () => {}, useWsChannel: () => {},
 }));

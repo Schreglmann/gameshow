@@ -6,6 +6,8 @@ import userEvent from '@testing-library/user-event';
 import { GameProvider, useGameContext } from '@/context/GameContext';
 import { ALL_TEAM_KEYS, teamRoster } from '@/utils/teams';
 import type { TeamState } from '@/types/game';
+import { fullName } from '@/utils/playerNames';
+import { names, rp } from '../../_helpers/players';
 
 const fetchSettings = vi.fn();
 vi.mock('@/services/api', () => ({ fetchSettings: (...a: unknown[]) => fetchSettings(...a) }));
@@ -27,9 +29,9 @@ function Consumer() {
     <div>
       <div data-testid="loaded">{String(state.settingsLoaded)}</div>
       <div data-testid="revealed">{String(state.teams.teamsRevealed)}</div>
-      <div data-testid="teams">{JSON.stringify(ALL_TEAM_KEYS.map(k => teamRoster(state.teams, k)))}</div>
-      <button data-testid="assign" onClick={() => assignTeams(['a', 'b', 'c', 'd'])} />
-      <button data-testid="reconcile" onClick={() => reconcileTeamDraw(['a', 'b', 'c', 'd', 'e'])} />
+      <div data-testid="teams">{JSON.stringify(ALL_TEAM_KEYS.map(k => teamRoster(state.teams, k).map(fullName)))}</div>
+      <button data-testid="assign" onClick={() => assignTeams(names('A', 'B', 'C', 'D'))} />
+      <button data-testid="reconcile" onClick={() => reconcileTeamDraw(names('A', 'B', 'C', 'D', 'E'))} />
       <button data-testid="reveal" onClick={() => revealTeams()} />
       <button data-testid="reset" onClick={() => dispatch({ type: 'RESET_POINTS' })} />
       <button data-testid="clear-all" onClick={() => dispatch({ type: 'CLEAR_ALL' })} />
@@ -90,18 +92,20 @@ describe('teamsRevealed', () => {
   });
 
   it('restores the stored flag on reload', async () => {
-    localStorage.setItem('team1', JSON.stringify(['Anna']));
-    localStorage.setItem('team2', JSON.stringify(['Ben']));
+    localStorage.setItem('team1', JSON.stringify([rp('Anna', 'Müller')]));
+    localStorage.setItem('team2', JSON.stringify([rp('Ben')]));
     localStorage.setItem('teamsRevealed', 'false');
     await ready();
     expect(revealed()).toBe('false');
-    expect(teams()[0]).toEqual(['Anna']);
+    expect(teams()[0]).toEqual(['Anna Müller']);
   });
 
   it('derives the flag from the rosters for legacy state without the key', async () => {
+    // A pre-update roster: a plain name string, converted on read.
     localStorage.setItem('team1', JSON.stringify(['Anna']));
     await ready();
     expect(revealed()).toBe('true');
+    expect(teams()[0]).toEqual(['Anna']);
   });
 
   it('RESET_POINTS keeps it, CLEAR_ALL hides again', async () => {
@@ -123,12 +127,12 @@ describe('teamsRevealed', () => {
     expect(revealed()).toBe('true');
   });
 
-  it('broadcasts the flag over gamemaster-team-state-v2', async () => {
+  it('broadcasts the flag over gamemaster-team-state-v3', async () => {
     const user = userEvent.setup();
     await ready();
     await user.click(screen.getByTestId('reveal'));
     const sent = sendWs.mock.calls
-      .filter(c => (c as unknown[])[0] === 'gamemaster-team-state-v2')
+      .filter(c => (c as unknown[])[0] === 'gamemaster-team-state-v3')
       .map(c => (c as unknown[])[1] as TeamState);
     expect(sent[sent.length - 1]!.teamsRevealed).toBe(true);
   });
@@ -136,14 +140,14 @@ describe('teamsRevealed', () => {
   it('applies an inbound flag, and derives it for a legacy payload without one', async () => {
     await ready();
     const base = {
-      team1: ['A'], team2: ['B'],
+      team1: [rp('A')], team2: [rp('B')],
       team1Points: 0, team2Points: 0,
       team1JokersUsed: [], team2JokersUsed: [],
     };
-    act(() => { emit('gamemaster-team-state-v2', { ...base, teamsRevealed: false, rev: 50 }); });
+    act(() => { emit('gamemaster-team-state-v3', { ...base, teamsRevealed: false, rev: 50 }); });
     await waitFor(() => expect(teams()[0]).toEqual(['A']));
     expect(revealed()).toBe('false');
-    act(() => { emit('gamemaster-team-state-v2', { ...base, rev: 60 }); });
+    act(() => { emit('gamemaster-team-state-v3', { ...base, rev: 60 }); });
     await waitFor(() => expect(revealed()).toBe('true'));
   });
 });

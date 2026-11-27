@@ -12,6 +12,8 @@ import { DEFAULT_TEAM_COUNT } from '../src/utils/teams.js';
 import { normalizePointMode, pointModeRule } from '../src/utils/pointMode.js';
 import { resolveShowTitle } from '../src/utils/showTitle.js';
 import { resolveTeamColors } from '../src/utils/teamColors.js';
+import { applyLivePlayers, resolveGameshowPlayers } from '../src/utils/playerRegistry.js';
+import { loadPlayerBin, recordRegistryChange } from './player-bin.js';
 import { effectiveTeamCount, gameIsScorable, listIncompatibleGames, hasTeamSplit } from './team-count.js';
 import { isAudioFile, normalizeAudioFile } from './normalize.js';
 import { fetchAndSavePoster, videoFilenameToSlug, MOVIE_POSTERS_SUBDIR } from './movie-posters.js';
@@ -3855,6 +3857,9 @@ app.get('/api/run-of-show', async (_req, res) => {
   }
 });
 
+/** Unknown gameshow player ids already reported, so a bad config logs once, not per request. */
+const loggedUnknownPlayerIds = new Set<string>();
+
 app.get('/api/settings', async (_req, res) => {
   try {
     const config = await loadConfig();
@@ -3905,10 +3910,111 @@ app.get('/api/settings', async (_req, res) => {
       jokersInLastGame: config.jokersInLastGame === true,
       jokerUsageScope: config.jokerUsageScope === 'per-game' ? 'per-game' : 'per-gameshow',
       backgroundMusicSource: config.backgroundMusicSource === 'default' ? 'default' : 'theme',
-      players: activeShow?.players ?? [],
+      // The active gameshow's player ids resolved to registry players. An
+      // unknown id is skipped (and logged once). See specs/players.md.
+      players: resolveGameshowPlayers(config.players, activeShow?.players, id => {
+        if (loggedUnknownPlayerIds.has(id)) return;
+        loggedUnknownPlayerIds.add(id);
+        console.warn(`[settings] Gameshow "${config.activeGameshow}" lists unknown player id "${id}" — skipped`);
+      }),
+      // The whole registry, for the show's and the GM's add-field autocomplete.
+      registry: resolveGameshowPlayers(config.players, (config.players ?? []).map(p => p.id)),
+      // Deleted players (players-bin.json): suggested only for a name typed in full.
+      binned: await (async () => {
+        const ids = new Set((config.players ?? []).map(p => p.id));
+        return (await loadPlayerBin(ROOT_DIR)).filter(p => !ids.has(p.id));
+      })(),
     });
   } catch {
     res.status(500).json({ error: 'Failed to load config' });
+  }
+});
+
+// ── Live player adds/removes (show + gamemaster) ──
+//
+// POST /api/live-players — the show writes every add and remove made on the
+// show or the GM into the active gameshow's `players`; a new name becomes a
+// registry player with only the nickname. See specs/players.md ("Sync to the
+// gameshow").
+type LiveAdd = { id: string } | { firstName?: string; lastName?: string; nickname: string };
+
+function parseLivePlayersBody(body: unknown): { add: LiveAdd[]; remove: string[] } | null {
+  if (!body || typeof body !== 'object') return null;
+  const raw = body as Record<string, unknown>;
+  const add: LiveAdd[] = [];
+  const remove: string[] = [];
+  if (raw.add !== undefined) {
+    if (!Array.isArray(raw.add) || raw.add.length > 200) return null;
+    for (const entry of raw.add) {
+      if (!entry || typeof entry !== 'object') return null;
+      const e = entry as Record<string, unknown>;
+      if (typeof e.id === 'string' && e.id) {
+        add.push({ id: e.id });
+      } else if (typeof e.nickname === 'string' && e.nickname.trim()) {
+        const firstName = typeof e.firstName === 'string' ? e.firstName : '';
+        const lastName = typeof e.lastName === 'string' ? e.lastName : '';
+        add.push({ firstName, lastName, nickname: e.nickname });
+      } else {
+        return null;
+      }
+    }
+  }
+  if (raw.remove !== undefined) {
+    if (!Array.isArray(raw.remove) || raw.remove.length > 200) return null;
+    for (const id of raw.remove) {
+      if (typeof id !== 'string') return null;
+      remove.push(id);
+    }
+  }
+  return { add, remove };
+}
+
+app.post('/api/live-players', async (req, res) => {
+  const request = parseLivePlayersBody(req.body);
+  if (!request) {
+    res.status(400).json({ error: 'Body must be { add?: ({ id } | { nickname, firstName?, lastName? })[], remove?: string[] }' });
+    return;
+  }
+  try {
+    const result = await withConfigWriteLock(async () => {
+      let raw: Buffer;
+      try {
+        raw = await readFile(CONFIG_PATH);
+      } catch {
+        return { ok: false as const, status: 409, error: 'Keine config.json vorhanden.' };
+      }
+      if (isGitCryptBlob(raw)) return { ok: false as const, status: 409, error: 'config.json ist verschlüsselt.' };
+      let config: AppConfig;
+      try {
+        config = JSON.parse(raw.toString('utf8')) as AppConfig;
+      } catch {
+        return { ok: false as const, status: 409, error: 'config.json ist kein gültiges JSON.' };
+      }
+      const before = JSON.parse(raw.toString('utf8')) as unknown;
+      const applied = applyLivePlayers(config, request, await loadPlayerBin(ROOT_DIR));
+      if (!applied.ok) return { ok: false as const, status: 409, error: applied.error };
+      if (applied.changed) {
+        // Removed players go to the bin, restored ones come out of it.
+        await recordRegistryChange(ROOT_DIR, before, config);
+        const indent = await detectJsonIndent(CONFIG_PATH);
+        const tmpPath = `${CONFIG_PATH}.${randomUUID()}.tmp`;
+        try {
+          await writeFile(tmpPath, JSON.stringify(config, null, indent) + '\n', 'utf8');
+          await rename(tmpPath, CONFIG_PATH);
+        } catch (err) {
+          await unlink(tmpPath).catch(() => { /* tmp may already be gone */ });
+          throw err;
+        }
+      }
+      return { ok: true as const, players: applied.players };
+    });
+    if (!result.ok) {
+      res.status(result.status).json({ error: result.error });
+      return;
+    }
+    res.json({ players: result.players });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to save players: ${(err as Error).message}` });
   }
 });
 
@@ -4589,6 +4695,18 @@ app.get('/api/backend/bandle/audio-status/:bandlePath', (req, res) => {
   res.json({ available: tracks.length > 0, tracks });
 });
 
+// GET /api/backend/player-bin — deleted players (players-bin.json), for the
+// admin's gameshow combobox. See specs/players.md ("Player bin").
+app.get('/api/backend/player-bin', async (_req, res) => {
+  try {
+    const config = JSON.parse(await readFile(CONFIG_PATH, 'utf8')) as AppConfig;
+    const ids = new Set((config.players ?? []).map(p => p.id));
+    res.json({ players: (await loadPlayerBin(ROOT_DIR)).filter(p => !ids.has(p.id)) });
+  } catch {
+    res.json({ players: await loadPlayerBin(ROOT_DIR) });
+  }
+});
+
 // GET /api/backend/config — return full config.json
 app.get('/api/backend/config', async (_req, res) => {
   try {
@@ -4604,6 +4722,15 @@ app.put('/api/backend/config', async (req, res) => {
   const tmpPath = `${CONFIG_PATH}.tmp`;
   try {
     await withConfigWriteLock(async () => {
+      // Players this write removes from the registry go to the local bin (and
+      // restored ones come out), before the config lands. An unreadable or
+      // encrypted old config bins nothing. See specs/players.md ("Player bin").
+      let before: unknown = null;
+      try {
+        const raw = await readFile(CONFIG_PATH);
+        if (!isGitCryptBlob(raw)) before = JSON.parse(raw.toString('utf8'));
+      } catch { /* no old config */ }
+      await recordRegistryChange(ROOT_DIR, before, req.body);
       const indent = await detectJsonIndent(CONFIG_PATH);
       await writeFile(tmpPath, JSON.stringify(req.body, null, indent) + '\n', 'utf8');
       await rename(tmpPath, CONFIG_PATH);

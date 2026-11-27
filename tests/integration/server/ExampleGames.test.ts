@@ -2,7 +2,8 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { mkdtemp, rm, readFile, readdir, stat } from 'fs/promises';
 import { tmpdir } from 'os';
 import path from 'path';
-import { materializeExamples, EXAMPLE_GAMES } from '../../../server/example-games';
+import { materializeExamples, applyExampleGameshow, EXAMPLE_GAMES } from '../../../server/example-games';
+import { buildDefaultConfig } from '../../../server/clean-install';
 import type { AppConfig } from '../../../src/types/config';
 
 /**
@@ -78,5 +79,38 @@ describe('materializeExamples (generates real media)', () => {
     expect(again.createdGames.length).toBe(EXAMPLE_GAMES.length);
     const config = JSON.parse(await readFile(configPath, 'utf8')) as AppConfig;
     expect(config.gameshows.beispiele.gameOrder.length).toBe(EXAMPLE_GAMES.length);
+  });
+});
+
+describe('applyExampleGameshow (players)', () => {
+  const real = { id: 'real-person', firstName: 'Real', lastName: 'Person', nickname: 'Real' };
+
+  it('seeds the example players into an empty registry and the Beispiele gameshow', () => {
+    const config = { ...buildDefaultConfig(), players: [] as AppConfig['players'], gameshows: {} } as AppConfig;
+    applyExampleGameshow(config, ['a', 'b']);
+    expect(config.activeGameshow).toBe('beispiele');
+    expect(config.players).toHaveLength(9);
+    expect(config.gameshows.beispiele).toEqual({
+      name: 'Beispiele',
+      gameOrder: ['a', 'b'],
+      players: ['michael-huber', 'michaela-pichler', 'johannes-kaiser', 'johanna-koller', 'anna-berger', 'ben-lechner', 'maus'],
+    });
+  });
+
+  it('never adds example players to a real registry, and keeps the gameshow\'s players', () => {
+    const config = {
+      ...buildDefaultConfig(),
+      players: [real],
+      gameshows: { beispiele: { name: 'Beispiele', gameOrder: ['old'], players: ['real-person'] } },
+    } as AppConfig;
+    applyExampleGameshow(config, ['a']);
+    expect(config.players).toEqual([real]);
+    expect(config.gameshows.beispiele).toEqual({ name: 'Beispiele', gameOrder: ['a'], players: ['real-person'] });
+  });
+
+  it('leaves the gameshow without players when a real registry has none of its own there', () => {
+    const config = { ...buildDefaultConfig(), players: [real], gameshows: {} } as AppConfig;
+    applyExampleGameshow(config, ['a']);
+    expect(config.gameshows.beispiele).toEqual({ name: 'Beispiele', gameOrder: ['a'] });
   });
 });

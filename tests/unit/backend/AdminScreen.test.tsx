@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { render, screen, waitFor, act, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { ThemeProvider } from '@/context/ThemeContext';
 import { GameProvider } from '@/context/GameContext';
 import AdminScreen from '@/components/screens/AdminScreen';
+import { openPlayer } from '@/components/backend/openPlayer';
 import { enqueueSave } from '@/services/saveQueue';
 
 vi.mock('@/services/api', () => ({
@@ -18,6 +19,7 @@ vi.mock('@/services/api', () => ({
 }));
 
 vi.mock('@/services/backendApi', () => ({
+  fetchPlayerBin: vi.fn().mockResolvedValue([]),
   fetchGames: vi.fn().mockResolvedValue([]),
   fetchGame: vi.fn().mockResolvedValue({}),
   fetchConfig: vi.fn().mockResolvedValue({
@@ -25,7 +27,8 @@ vi.mock('@/services/backendApi', () => ({
     teamRandomizationEnabled: true,
     globalRules: [],
     activeGameshow: 'gs1',
-    gameshows: { gs1: { name: 'Show 1', gameOrder: [] } },
+    players: [{ id: 'anna-mueller', firstName: 'Anna', lastName: 'Müller', nickname: 'Ani' }],
+    gameshows: { gs1: { name: 'Show 1', gameOrder: [], players: ['anna-mueller'] } },
   }),
   fetchAssets: vi.fn().mockResolvedValue({ files: [], subfolders: [] }),
   saveConfig: vi.fn().mockResolvedValue(undefined),
@@ -94,26 +97,29 @@ describe('AdminScreen', () => {
     expect(screen.getByRole('button', { name: /Session/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Config/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Gameshows/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Spiele/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Spieler$/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Spiele$/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Assets/ })).toBeInTheDocument();
   });
 
-  it('renders the Gameshows tab between Config and Spiele', () => {
+  it('renders the Gameshows and Spieler tabs between Config and Spiele', () => {
     renderAdmin();
     const labels = Array.from(document.querySelectorAll('.admin-nav-item'))
-      .map(el => el.textContent ?? '');
-    const config = labels.findIndex(t => t.includes('Config'));
-    const gameshows = labels.findIndex(t => t.includes('Gameshows'));
-    const spiele = labels.findIndex(t => t.includes('Spiele'));
+      .map(el => (el.textContent ?? '').trim());
+    const config = labels.indexOf('Config');
+    const gameshows = labels.indexOf('Gameshows');
+    const spieler = labels.indexOf('Spieler');
+    const spiele = labels.indexOf('Spiele');
     expect(config).toBeGreaterThanOrEqual(0);
     expect(gameshows).toBe(config + 1);
-    expect(spiele).toBe(gameshows + 1);
+    expect(spieler).toBe(gameshows + 1);
+    expect(spiele).toBe(spieler + 1);
   });
 
   it('renders an SVG icon (not an emoji) in each nav tab', () => {
     renderAdmin();
     // Each primary tab + the separate Antworten/System buttons carry an inline SVG icon.
-    for (const name of [/Session/, /Config/, /Gameshows/, /Spiele/, /Assets/, /Antworten/, /System/]) {
+    for (const name of [/Session/, /Config/, /Gameshows/, /^Spieler$/, /^Spiele$/, /Assets/, /Antworten/, /System/]) {
       expect(screen.getByRole('button', { name }).querySelector('svg')).toBeInTheDocument();
     }
     // The old emoji glyphs are gone.
@@ -139,10 +145,41 @@ describe('AdminScreen', () => {
   it('switches to GamesTab when Spiele is clicked', async () => {
     const user = userEvent.setup();
     renderAdmin();
-    await user.click(screen.getByRole('button', { name: /Spiele/ }));
+    await user.click(screen.getByRole('button', { name: /^Spiele$/ }));
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Spiele' })).toBeInTheDocument();
     });
+  });
+
+  it('switches to the Spieler tab (player registry) when Spieler is clicked', async () => {
+    const user = userEvent.setup();
+    renderAdmin();
+    await user.click(screen.getByRole('button', { name: /^Spieler$/ }));
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Spieler' })).toBeInTheDocument();
+    });
+    expect(window.location.hash).toBe('#players');
+  });
+
+  it('opens the Spieler tab from the #players hash', async () => {
+    renderAdmin('#players');
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Spieler' })).toBeInTheDocument();
+    });
+  });
+
+  it('opens the player lightbox over the current tab when a player name is clicked anywhere', async () => {
+    const user = userEvent.setup();
+    renderAdmin('#gameshows');
+    await screen.findByRole('heading', { name: 'Gameshows' });
+    act(() => openPlayer('anna-mueller'));
+    const dialog = await screen.findByRole('dialog', { name: 'Anna „Ani“ Müller' });
+    expect(within(dialog).getByText('Statistik')).toBeInTheDocument();
+    // The tab does not change.
+    expect(window.location.hash).toBe('#gameshows');
+    expect(screen.getByRole('heading', { name: 'Gameshows' })).toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: 'Schließen' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('switches to ConfigTab when Config is clicked', async () => {
@@ -184,7 +221,7 @@ describe('AdminScreen', () => {
     const user = userEvent.setup();
     renderAdmin();
     expect(screen.getByText('Team Verwaltung')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /Spiele/ }));
+    await user.click(screen.getByRole('button', { name: /^Spiele$/ }));
     expect(screen.queryByText('Team Verwaltung')).not.toBeInTheDocument();
   });
 
@@ -199,7 +236,7 @@ describe('AdminScreen', () => {
     });
     await waitFor(() => expect(screen.getByText('Speichern…')).toBeInTheDocument(), { timeout: 2000 });
 
-    await user.click(screen.getByRole('button', { name: /Spiele/ }));
+    await user.click(screen.getByRole('button', { name: /^Spiele$/ }));
     expect(screen.getByText('Speichern…')).toBeInTheDocument();
   });
 
@@ -207,14 +244,14 @@ describe('AdminScreen', () => {
     const user = userEvent.setup();
     renderAdmin();
     // Go to Spiele
-    await user.click(screen.getByRole('button', { name: /Spiele/ }));
+    await user.click(screen.getByRole('button', { name: /^Spiele$/ }));
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Spiele' })).toBeInTheDocument();
     });
     // Go to Session
     await user.click(screen.getByRole('button', { name: /Session/ }));
     // Go back to Spiele — should reload
-    await user.click(screen.getByRole('button', { name: /Spiele/ }));
+    await user.click(screen.getByRole('button', { name: /^Spiele$/ }));
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Spiele' })).toBeInTheDocument();
     });
@@ -260,7 +297,7 @@ describe('AdminScreen', () => {
   it('switches to Assets tab when GamesTab onGoToAssets is triggered', async () => {
     const user = userEvent.setup();
     renderAdmin();
-    await user.click(screen.getByRole('button', { name: /Spiele/ }));
+    await user.click(screen.getByRole('button', { name: /^Spiele$/ }));
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: 'Spiele' })).toBeInTheDocument();
     });
@@ -284,7 +321,7 @@ describe('AdminScreen', () => {
 
     const user = userEvent.setup();
     renderAdmin();
-    await user.click(screen.getByRole('button', { name: /Spiele/ }));
+    await user.click(screen.getByRole('button', { name: /^Spiele$/ }));
     await waitFor(() => {
       expect(screen.getByText('Quiz 1')).toBeInTheDocument();
     });

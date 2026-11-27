@@ -94,6 +94,55 @@ describe('SessionTab', () => {
     expect(screen.getByDisplayValue('Charlie')).toBeInTheDocument();
   });
 
+  it('shows full names, never the shortened show labels', () => {
+    localStorage.setItem('team1', JSON.stringify([
+      { firstName: 'Michi', lastName: 'Huber', id: 'michi-huber' },
+      { firstName: 'Anna', lastName: '' },
+    ]));
+    localStorage.setItem('team2', JSON.stringify([{ firstName: 'Michi', lastName: 'Pichler', id: 'michi-pichler' }]));
+    renderSessionTab();
+    expect(screen.getByDisplayValue('Michi Huber, Anna')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Michi Pichler')).toBeInTheDocument();
+  });
+
+  it('keeps the registry id of a player whose name was left unchanged', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    localStorage.setItem('team1', JSON.stringify([{ firstName: 'Michi', lastName: 'Huber', id: 'michi-huber' }]));
+    renderSessionTab();
+
+    const team1Input = screen.getByPlaceholderText('Anna Müller, Ben Huber, ...');
+    await user.type(team1Input, ', Anna');
+    await user.tab();
+
+    await waitFor(() => {
+      expect(JSON.parse(localStorage.getItem('team1') ?? '[]')).toEqual([
+        { firstName: 'Michi', lastName: 'Huber', id: 'michi-huber' },
+        { firstName: '', lastName: '', nickname: 'Anna' },
+      ]);
+    });
+  });
+
+  it('refuses a player listed in two teams and saves no roster', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    localStorage.setItem('team1', JSON.stringify([{ firstName: 'Anna', lastName: 'Müller' }]));
+    renderSessionTab();
+
+    const team2Input = screen.getByPlaceholderText('Clara Weber, Dave Bauer, ...');
+    await user.type(team2Input, 'anna müller');
+    await user.tab();
+
+    expect(await screen.findByText(/„Anna Müller“ ist mehrfach eingetragen/)).toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem('team2') ?? '[]')).toEqual([]);
+    // The refused text stays in the field so it can be fixed.
+    expect(team2Input).toHaveValue('anna müller');
+  });
+
+  it('converts a legacy string roster from localStorage instead of dropping it', () => {
+    localStorage.setItem('team1', JSON.stringify(['Tobi R.']));
+    renderSessionTab();
+    expect(screen.getByDisplayValue('Tobi R.')).toBeInTheDocument();
+  });
+
   it('initializes points inputs from localStorage', () => {
     localStorage.setItem('team1Points', '10');
     localStorage.setItem('team2Points', '25');
@@ -105,8 +154,8 @@ describe('SessionTab', () => {
 
   it('initializes with empty team inputs when localStorage is empty', () => {
     renderSessionTab();
-    expect(screen.getByPlaceholderText('Alice, Bob, ...')).toHaveValue('');
-    expect(screen.getByPlaceholderText('Clara, Dave, ...')).toHaveValue('');
+    expect(screen.getByPlaceholderText('Anna Müller, Ben Huber, ...')).toHaveValue('');
+    expect(screen.getByPlaceholderText('Clara Weber, Dave Bauer, ...')).toHaveValue('');
   });
 
   it('initializes points to 0 when localStorage is empty', () => {
@@ -120,13 +169,17 @@ describe('SessionTab', () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderSessionTab();
 
-    const team1Input = screen.getByPlaceholderText('Alice, Bob, ...');
+    const team1Input = screen.getByPlaceholderText('Anna Müller, Ben Huber, ...');
     await user.clear(team1Input);
-    await user.type(team1Input, 'Alice, Bob');
+    await user.type(team1Input, 'Alice Weber, bob');
     await user.tab();
 
+    // Parsed into players: first word = first name, every word capitalized.
     await waitFor(() => {
-      expect(localStorage.getItem('team1')).toBe('["Alice","Bob"]');
+      expect(JSON.parse(localStorage.getItem('team1') ?? '[]')).toEqual([
+        { firstName: '', lastName: '', nickname: 'Alice Weber' },
+        { firstName: '', lastName: '', nickname: 'bob' },
+      ]);
     });
   });
 
@@ -134,13 +187,13 @@ describe('SessionTab', () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderSessionTab();
 
-    const team2Input = screen.getByPlaceholderText('Clara, Dave, ...');
+    const team2Input = screen.getByPlaceholderText('Clara Weber, Dave Bauer, ...');
     await user.clear(team2Input);
     await user.type(team2Input, 'Charlie');
     await user.tab();
 
     await waitFor(() => {
-      expect(localStorage.getItem('team2')).toBe('["Charlie"]');
+      expect(JSON.parse(localStorage.getItem('team2') ?? '[]')).toEqual([{ firstName: '', lastName: '', nickname: 'Charlie' }]);
     });
   });
 
@@ -148,7 +201,7 @@ describe('SessionTab', () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderSessionTab();
 
-    const team1Input = screen.getByPlaceholderText('Alice, Bob, ...');
+    const team1Input = screen.getByPlaceholderText('Anna Müller, Ben Huber, ...');
     await user.type(team1Input, 'New');
 
     expect(localStorage.getItem('team1')).toBeNull();
@@ -178,7 +231,7 @@ describe('SessionTab', () => {
     expect(screen.getAllByRole('spinbutton')[0]).toHaveValue(3);
 
     await act(async () => {
-      emitWsMessage('gamemaster-team-state-v2', { ...remoteTeams, team1Points: 11, rev: 5 });
+      emitWsMessage('gamemaster-team-state-v3', { ...remoteTeams, team1Points: 11, rev: 5 });
     });
 
     await waitFor(() => {
@@ -190,11 +243,11 @@ describe('SessionTab', () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderSessionTab();
 
-    const team1Input = screen.getByPlaceholderText('Alice, Bob, ...');
+    const team1Input = screen.getByPlaceholderText('Anna Müller, Ben Huber, ...');
     await user.type(team1Input, 'Alice');
 
     await act(async () => {
-      emitWsMessage('gamemaster-team-state-v2', { ...remoteTeams, team1: ['Remote'], rev: 5 });
+      emitWsMessage('gamemaster-team-state-v3', { ...remoteTeams, team1: [{ firstName: 'Remote', lastName: '' }], rev: 5 });
     });
 
     expect(team1Input).toHaveValue('Alice');
@@ -206,7 +259,7 @@ describe('SessionTab', () => {
 
     // Operator opens the tab at 0, a game awards 7 while it sits open.
     await act(async () => {
-      emitWsMessage('gamemaster-team-state-v2', { ...remoteTeams, team1Points: 7, rev: 5 });
+      emitWsMessage('gamemaster-team-state-v3', { ...remoteTeams, team1Points: 7, rev: 5 });
     });
 
     // Focus and leave the name field without changing anything — this is the
@@ -224,7 +277,7 @@ describe('SessionTab', () => {
 
     // Team 2 scores 9 while the tab is open...
     await act(async () => {
-      emitWsMessage('gamemaster-team-state-v2', { ...remoteTeams, team2Points: 9, rev: 5 });
+      emitWsMessage('gamemaster-team-state-v3', { ...remoteTeams, team2Points: 9, rev: 5 });
     });
 
     // ...then the operator corrects team 1 only.

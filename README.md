@@ -29,7 +29,7 @@ Open the app in a browser. You will see the **Home Screen**.
 
 ![Home Screen](./docs/screenshots/home-screen.png)
 
-The players configured for the gameshow are listed on the home screen. Add anyone else with the **Name hinzufügen** field (several at once, separated by commas), or remove a name with the ✕ next to it.
+The players configured for the gameshow are listed on the home screen. Every player has a first name, a surname and a nickname (Spitzname); the show calls them by nickname, and only when two players share a nickname does it add as much of the surname as it takes to tell them apart ("Michi H." / "Michi P."). Add anyone else with the **Name hinzufügen** field, which suggests the known players while you type; a name that isn't known is added as written (several at once separated by commas). Remove a name with the ✕ next to it. A player who is already in the draw can't be added twice. Every add and remove on the show or the gamemaster also updates the gameshow's player list in the admin; a new name becomes a player with only a nickname, to be completed in the **Spieler** tab.
 
 The app draws the teams in the background straight away and keeps them hidden. The gamemaster sees the draw on their phone: tapping a player opens a menu to move them to another team or remove them, and **Neu mischen** draws again. Adding or removing a player later only places or removes that one player. Click **Teams zuweisen** to show the teams; moving players and **Neu mischen** keep working after that. Revealed too early? **Zuweisung verbergen** on the gamemaster puts the show back to the player list without changing the draw.
 
