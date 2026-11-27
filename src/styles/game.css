@@ -1409,7 +1409,7 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     column-gap: clamp(6px, 0.8vw, 12px);
-    row-gap: clamp(3px, 0.35vw, 6px);
+    row-gap: clamp(5px, 0.6vw, 10px);
     margin: 0;
 }
 

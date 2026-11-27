@@ -292,7 +292,7 @@ main {
     grid-template-columns: 1fr;
     width: 100%;
     gap: clamp(16px, 2vw, 30px);
-    margin-top: clamp(24px, 4vw, 60px);
+    margin-top: clamp(4px, 1.5vw, 20px);
     padding: 0;
 }
 
@@ -350,6 +350,14 @@ main {
        on the span below gives the same height anyway; `overflow` is the guard
        for the frame in which the fit measures the name unclamped. */
     overflow: hidden;
+}
+
+/* On the setup screen the roster started flush beneath the heading, so the name
+   sat on top of the first player. Do not tighten the heading's line-height to
+   win space here: below ~1.2 the glyphs overflow the line box, the fit in
+   `useFitTeamName` reads that as "does not fit" and shrinks every name a step. */
+#teams .team h2.team-card-name {
+    margin-bottom: clamp(12px, 1.6vw, 24px);
 }
 
 .team-card-name-text {
