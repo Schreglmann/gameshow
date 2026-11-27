@@ -306,7 +306,9 @@ function ColorGuessInner({
   useQuizAutoScroll(qKey, 'top', 'instant', !showAnswer);
 
   useEffect(() => {
-    if (showAnswer) setTimeout(scrollToCardBottom, 100);
+    if (!showAnswer) return;
+    const id = setTimeout(scrollToCardBottom, 100);
+    return () => clearTimeout(id);
   }, [showAnswer]);
 
   if (!q) return null;
