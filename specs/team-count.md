@@ -119,7 +119,7 @@ Declared on `GameTypeInfo.supportedTeamCounts` in
 
 - [ ] `simple-quiz`, `q1`, `four-statements`, `fact-or-fake`, `audio-guess`, `video-guess`,
       `bandle`, `image-guess`, `colorguess`, `ranking`, `random-frame`, `city-compass`,
-      `quizjagd`, `final-quiz` → `0,1,2,3,4`
+      `venn`, `film-stripe`, `quizjagd`, `final-quiz` → `0,1,2,3,4`
 - [ ] `guessing-game` → `0,1,2,3,4` in `standard`, `0,2,3,4` in `auto` ("closest guess" needs an
       opponent)
 - [ ] `bet-quiz` → `0,1,2,3,4` in `standard`, **`0,2`** in `transfer` (zero-sum: the bet moves off

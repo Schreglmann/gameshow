@@ -53,6 +53,8 @@ describe('Server Config Loading', () => {
       'wer-kennt-mehr',
       'random-frame',
       'city-compass',
+      'venn',
+      'film-stripe',
     ];
 
     for (const file of files) {

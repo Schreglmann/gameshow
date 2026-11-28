@@ -213,6 +213,26 @@ Penalty variant (`scoringMode: "count-penalty"`): the loser also loses the count
 
 **Image-guess / video-guess / colorguess** (progressive reveal): use Archetype B with a task line describing the reveal mechanic.
 
+**Venn** (`venn`, optional hint circle): use Archetype B with a task line that names the hint. The hint goes into the task line, not into a line of its own, because a linked `rulesPreset` keeps only `rules[0]`.
+```json
+"rules": [
+  "Gesucht ist ein Begriff, der in alle gezeigten Kategorien passt; als Hinweis kann eine dritte Kategorie dazukommen.",
+  "Beide Teams raten gleichzeitig.",
+  "Die erste Antwort eines Teams zählt.",
+  "Antwortet ein Team falsch, darf das andere Team antworten."
+]
+```
+
+**Film-stripe** (`film-stripe`, colour stripe then time-lapse): use Archetype B with this task line.
+```json
+"rules": [
+  "Gesucht ist ein Film, zu sehen als Farbstreifen: von links nach rechts der ganze Film, jede Linie die Durchschnittsfarbe eines Moments; als Hinweis folgt der Film im Zeitraffer.",
+  "Beide Teams raten gleichzeitig.",
+  "Die erste Antwort eines Teams zählt.",
+  "Antwortet ein Team falsch, darf das andere Team antworten."
+]
+```
+
 ## Linking to a shared preset (`rulesPreset`)
 
 A game JSON may set `rulesPreset: "<id>"` to reference a preset defined in `config.json.rulesPresets[]`. At runtime the server merges the preset's archetype lines onto the game's task line:

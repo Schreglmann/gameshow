@@ -29,6 +29,8 @@ This guide explains how to **set up the app** and **create your own gameshow** u
    - [Wer kennt mehr?](#wer-kennt-mehr)
    - [Random Frame (Zufallsbild)](#random-frame-zufallsbild)
    - [City Compass (Städte-Kompass)](#city-compass-städte-kompass)
+   - [Schnittmenge (Venn)](#schnittmenge-venn)
+   - [Filmstreifen (Film Stripe)](#filmstreifen-film-stripe)
 5. [Uploading Media (Images & Audio)](#5-uploading-media-images--audio)
 6. [Global Settings](#6-global-settings)
 7. [Jokers](#7-jokers)
@@ -533,6 +535,43 @@ A compass rose with a `?` in the middle and named cities around it, each at the 
 Editing a question while the show is running is safe: swap a city and the rose redraws on the stage screen within a second, without jumping to a different question.
 
 See [GAME_TYPES.md](../GAME_TYPES.md) for the full field reference and [specs/games/city-compass.md](../specs/games/city-compass.md) for behaviour details.
+
+---
+
+### Schnittmenge (Venn)
+
+Two overlapping circles, each with a category. Teams name the term that fits both — *Planet* and *Schokoriegel* give *Mars*.
+
+**Each question has:**
+- **Kategorie 1** and **Kategorie 2** — the two circles the question opens with. They should already have one clear answer
+- **Hinweis-Kategorie** *(optional)* — a third category. It appears as a dashed third circle when the host advances, before the answer
+- **Antwort** — the term that fits every category
+- **Antwort-Bild** *(optional)* — shown with the answer
+- **Vorschau** — the diagram as the audience will see it, once two categories are filled in
+
+Every category has to really contain the answer. Long category names are set smaller or broken into two lines automatically; check the preview.
+
+See [GAME_TYPES.md](../GAME_TYPES.md) for the field reference and [specs/games/venn.md](../specs/games/venn.md) for behaviour details.
+
+---
+
+### Filmstreifen (Film Stripe)
+
+A whole film shown as one stripe of colours, left to right in film order. Teams name the film. The hint is the film as a short time-lapse.
+
+**Each question has:**
+- **Video** — the film. Picking it fills in the answer from the file name
+- **Antwort** — the film title
+- **Frage** *(optional)* — a custom prompt (defaults to *"Welcher Film ist das?"*)
+- **Antwort-Bild** *(optional)* — shown with the answer; the film poster works well
+
+**Streifen berechnen.** The stripe is not computed during the show. Press **Streifen berechnen** above the questions once the films are chosen: the server samples every film and stores the stripe and the time-lapse stills locally. This takes up to a few minutes per film (about three for a 4K film on the local disk, longer from the NAS); the progress bar shows the film being worked on, and the job also appears in the System tab. Films that already have a current stripe are skipped.
+
+Under each video field you see the stripe as a thin preview. *"kein Streifen berechnet"* means the film will show a notice on stage instead of a stripe. *"Streifen veraltet"* means the video file was replaced since — compute again.
+
+Once computed, the game runs without the video files: you can prepare at home with the NAS mounted and play at the venue without it.
+
+See [GAME_TYPES.md](../GAME_TYPES.md) for the field reference and [specs/games/film-stripe.md](../specs/games/film-stripe.md) for behaviour details.
 
 ---
 

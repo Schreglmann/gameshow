@@ -11,7 +11,7 @@ import type { GameType } from '../../../src/types/config';
 const VALID_TYPES: GameType[] = [
   'simple-quiz', 'bet-quiz', 'guessing-game', 'final-quiz', 'audio-guess', 'video-guess',
   'q1', 'four-statements', 'fact-or-fake', 'quizjagd', 'bandle', 'image-guess', 'colorguess', 'ranking',
-  'wer-kennt-mehr', 'random-frame', 'city-compass',
+  'wer-kennt-mehr', 'random-frame', 'city-compass', 'venn', 'film-stripe',
 ];
 
  
@@ -85,6 +85,15 @@ function validateQuestion(type: string, q: any): void {
         expect(typeof n.lat).toBe('number');
         expect(typeof n.lon).toBe('number');
       }
+      break;
+    case 'film-stripe':
+      expect(typeof q.video === 'string' && q.video.startsWith('/videos/')).toBe(true);
+      expect(q.answer).toBeTruthy();
+      break;
+    case 'venn':
+      expect(Array.isArray(q.sets) && q.sets.length >= 2 && q.sets.length <= 3).toBe(true);
+      for (const s of q.sets) expect(typeof s === 'string' && s.trim().length > 0).toBe(true);
+      expect(typeof q.answer === 'string' && q.answer.trim().length > 0).toBe(true);
       break;
   }
 }

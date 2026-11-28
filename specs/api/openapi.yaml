@@ -141,6 +141,31 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/film-stripe/frame:
+    get:
+      operationId: frontend_getFilmStripeFrame
+      tags: [frontend]
+      summary: One time-lapse still of a film stripe (film-stripe game)
+      description: |
+        Serves still `i` of the precomputed film stripe of the video at `path`. Read
+        from the local cache only — the source video is never touched, so this works
+        with the NAS unmounted. Stripes are computed ahead of the show through the
+        admin `film-stripe/prepare` endpoint; how many stills a film has is the
+        `stripe.frames` field of its question in `GET /api/game/{index}`.
+        See [specs/games/film-stripe.md](../games/film-stripe.md).
+      parameters:
+        - { name: path, in: query, required: true, schema: { type: string }, description: "Video path relative to the videos asset root (no leading /videos/)." }
+        - { name: i, in: query, required: true, schema: { type: integer, minimum: 0 }, description: "Index of the still, 0-based, in film order." }
+      responses:
+        "200":
+          description: The JPEG still
+          content:
+            image/jpeg: { schema: { type: string, format: binary } }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /videos-sdr/{start}/{end}/{splat}:
     get:
       operationId: frontend_getVideoSdr
@@ -1999,6 +2024,75 @@ paths:
             text/event-stream:
               schema: { type: string, description: SSE lines }
 
+  /api/backend/assets/videos/film-stripe/status:
+    get:
+      operationId: admin_filmStripeStatus
+      tags: [admin]
+      summary: Whether a film stripe is computed for each given video
+      description: Backs the stripe preview, the "x/y Filme vorbereitet" count and the button label in the Filmstreifen editor.
+      parameters:
+        - { name: paths, in: query, required: false, schema: { type: string }, description: "Pipe-separated (`|`) list of video rel-paths (no leading /videos/)." }
+      responses:
+        "200":
+          description: Stripe status per video
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: object
+                    description: "Map of video rel-path → stripe status."
+                    additionalProperties:
+                      type: object
+                      required: [ready, current, sourceReachable, frames, colors]
+                      properties:
+                        ready: { type: boolean, description: "A stripe is in the cache." }
+                        current: { type: boolean, description: "The video file is unchanged since the stripe was computed. Also true when the file cannot be read right now." }
+                        sourceReachable: { type: boolean, description: "The video file can be read right now (local or NAS)." }
+                        frames: { type: integer, description: "Number of time-lapse stills." }
+                        colors:
+                          type: array
+                          items: { type: string }
+                          description: "The stripe as `#rrggbb` colours in film order; empty when not ready."
+
+  /api/backend/assets/videos/film-stripe/prepare:
+    post:
+      operationId: admin_filmStripePrepare
+      tags: [admin]
+      summary: Compute film stripes (colour stripe + time-lapse stills) for videos
+      description: |
+        Samples each film at 240 moments, reduces every frame to its average colour and
+        keeps every 5th frame as a still. Resolves each source from local or the NAS
+        mount; the result is cached locally and is the only thing the show reads. A
+        stripe that already matches its video file is kept unless `force`. Streams SSE:
+        `data: { path, percent }` while a film is sampled, `data: { path, ready: true }` or
+        `data: { path, itemError }` per film (a failure does not abort the batch),
+        `data: { percent }` for the batch, then `data: { percent: 100, done: true, failures }`.
+        See [specs/games/film-stripe.md](../games/film-stripe.md).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [paths]
+              properties:
+                paths:
+                  type: array
+                  items: { type: string }
+                  description: "Video rel-paths (no leading /videos/)."
+                force: { type: boolean, description: "Recompute stripes that are already current." }
+      responses:
+        "200":
+          description: SSE stream of progress events
+          content:
+            text/event-stream:
+              schema: { type: string, description: SSE lines }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
   /api/backend/assets/videos/random-frame/prerender-status:
     get:
       operationId: admin_randomFramePrerenderStatus
@@ -3344,7 +3438,7 @@ components:
       enum: [simple-quiz, bet-quiz, guessing-game, final-quiz, audio-guess,
              video-guess, q1, four-statements, fact-or-fake, quizjagd, bandle,
              image-guess, colorguess, ranking, wer-kennt-mehr, random-frame,
-             city-compass]
+             city-compass, venn, film-stripe]
 
     SettingsResponse:
       type: object
@@ -3846,6 +3940,8 @@ components:
         - $ref: "#/components/schemas/WerKenntMehrConfig"
         - $ref: "#/components/schemas/RandomFrameConfig"
         - $ref: "#/components/schemas/CityCompassConfig"
+        - $ref: "#/components/schemas/VennConfig"
+        - $ref: "#/components/schemas/FilmStripeConfig"
       discriminator:
         propertyName: type
 
@@ -4112,6 +4208,79 @@ components:
         info: { type: string }
         answerImage: { type: string }
         disabled: { type: boolean }
+
+    VennConfig:
+      allOf:
+        - $ref: "#/components/schemas/BaseGameConfig"
+        - type: object
+          required: [type, questions]
+          properties:
+            type: { const: venn }
+            questions:
+              type: array
+              items: { $ref: "#/components/schemas/VennQuestion" }
+
+    VennQuestion:
+      description: |
+        One "Schnittmenge" puzzle: `answer` is the term that belongs to every
+        category in `sets`. The first two sets are on screen from the start, a
+        third is the hint circle. See [specs/games/venn.md](../games/venn.md).
+      type: object
+      required: [sets, answer]
+      properties:
+        gmInfo: { type: string, description: "Gamemaster-only note, shown in the GM card under the answer and never rendered on the show. Not secret: it is part of the game config the show receives." }
+        sets:
+          type: array
+          minItems: 2
+          maxItems: 3
+          items: { type: string }
+          description: Category names, one per circle, in reveal order.
+        answer: { type: string }
+        answerImage: { type: string }
+        disabled: { type: boolean }
+
+    FilmStripeConfig:
+      allOf:
+        - $ref: "#/components/schemas/BaseGameConfig"
+        - type: object
+          required: [type, questions]
+          properties:
+            type: { const: film-stripe }
+            questions:
+              type: array
+              items: { $ref: "#/components/schemas/FilmStripeQuestion" }
+
+    FilmStripeData:
+      description: |
+        A film reduced to colours. Added to each question by the server from the
+        film-stripe cache; never present in an authored game file.
+      type: object
+      required: [colors, frames, framePositions]
+      properties:
+        colors:
+          type: array
+          items: { type: string }
+          description: "One `#rrggbb` per sampled moment, in film order."
+        frames: { type: integer, description: "Number of time-lapse stills served by `GET /api/film-stripe/frame`." }
+        framePositions:
+          type: array
+          items: { type: integer }
+          description: "For each still, the index of its moment in `colors`."
+
+    FilmStripeQuestion:
+      description: |
+        A film shown as a colour stripe. See [specs/games/film-stripe.md](../games/film-stripe.md).
+      type: object
+      required: [video, answer]
+      properties:
+        gmInfo: { type: string, description: "Gamemaster-only note, shown in the GM card under the answer and never rendered on the show. Not secret: it is part of the game config the show receives." }
+        video: { type: string, description: "DAM video path the stripe is computed from, e.g. `/videos/Dune.m4v`." }
+        answer: { type: string, description: "Film title — the answer." }
+        question: { type: string, description: "Optional prompt (default: 'Welcher Film ist das?')." }
+        answerImage: { type: string, description: "Optional reveal image, usually the poster." }
+        disabled: { type: boolean }
+        stripe:
+          $ref: "#/components/schemas/FilmStripeData"
 
     MultiInstanceGameFile:
       type: object

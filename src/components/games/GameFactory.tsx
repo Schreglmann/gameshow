@@ -19,6 +19,8 @@ const Ranking = lazyWithRetry(() => import('./Ranking'));
 const WerKenntMehr = lazyWithRetry(() => import('./WerKenntMehr'));
 const RandomFrame = lazyWithRetry(() => import('./RandomFrame'));
 const CityCompass = lazyWithRetry(() => import('./CityCompass'));
+const Venn = lazyWithRetry(() => import('./Venn'));
+const FilmStripe = lazyWithRetry(() => import('./FilmStripe'));
 
 function renderGame(props: GameComponentProps) {
   switch (props.config.type) {
@@ -56,6 +58,10 @@ function renderGame(props: GameComponentProps) {
       return <RandomFrame {...props} />;
     case 'city-compass':
       return <CityCompass {...props} />;
+    case 'venn':
+      return <Venn {...props} />;
+    case 'film-stripe':
+      return <FilmStripe {...props} />;
     default:
       return (
         <div className="quiz-container">

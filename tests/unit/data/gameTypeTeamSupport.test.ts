@@ -49,7 +49,7 @@ describe('supportedTeamCounts', () => {
 describe('the type-level matrix', () => {
   const anyCount: GameType[] = [
     'simple-quiz', 'q1', 'four-statements', 'fact-or-fake', 'audio-guess', 'video-guess',
-    'bandle', 'image-guess', 'colorguess', 'ranking', 'random-frame', 'city-compass',
+    'bandle', 'image-guess', 'colorguess', 'ranking', 'random-frame', 'city-compass', 'venn', 'film-stripe',
     'quizjagd', 'final-quiz', 'bet-quiz', 'guessing-game', 'wer-kennt-mehr',
   ];
 

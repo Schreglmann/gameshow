@@ -110,6 +110,7 @@ function prefixForBgTask(type: string): string {
     case 'hdr-probe':         return '📊 HDR-Probe:';
     case 'faststart':         return '⚡ Faststart:';
     case 'whisper-asr':       return '🎙️ Whisper:';
+    case 'film-stripe':       return '🎞️ Filmstreifen:';
     default:                   return '⚙️';
   }
 }

@@ -133,8 +133,14 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | Cover oder Original (uses simple-quiz) | [games/cover-oder-original.md](games/cover-oder-original.md) | ✅ Implemented |
 | Random frame (guess the movie from a random video still) | [games/random-frame.md](games/random-frame.md) | ✅ Implemented |
 | City compass (guess the center city from its neighbors' bearings) | [games/city-compass.md](games/city-compass.md) | ✅ Implemented |
+| Venn / Schnittmenge (the term that fits both categories of two overlapping circles) | [games/venn.md](games/venn.md) | ✅ Implemented |
+| Film stripe / Filmstreifen (guess the film from a stripe of its colours over time) | [games/film-stripe.md](games/film-stripe.md) | ✅ Implemented |
+| Welches Land fehlt? (uses simple-quiz, generated maps) | [games/welches-land-fehlt.md](games/welches-land-fehlt.md) | ✅ Implemented |
 | Ein Stern. Würde nicht wiederkommen. (uses simple-quiz) | [games/ein-stern.md](games/ein-stern.md) | ✅ Implemented |
 | Sprachsalat (uses simple-quiz) | [games/sprachsalat.md](games/sprachsalat.md) | ✅ Implemented — clips placed, need listen-check |
+| Inhaltsverzeichnis (uses four-statements) | [games/inhaltsverzeichnis.md](games/inhaltsverzeichnis.md) | ✅ Implemented |
+| Zutatenliste (uses simple-quiz) | [games/zutatenliste.md](games/zutatenliste.md) | ✅ Implemented |
+| Mandela-Effekt (uses simple-quiz) | [games/mandela-effekt.md](games/mandela-effekt.md) | ✅ Implemented |
 
 ---
 

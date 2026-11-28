@@ -32,6 +32,7 @@ All return `application/json` unless noted. Full schemas: [openapi.yaml](../spec
 | `GET` | `/videos-compressed/:start/:end/:path` | Range-GET H.264 SDR segment stream. |
 | `GET` | `/videos-sdr/:start/:end/:path` | Range-GET HDR→SDR tone-mapped segment stream. |
 | `GET` | `/api/random-frame?path=<asset>&seed=<n>&variant=<n>&qindex=<n>&start=<s>&end=<s>` | `image/jpeg` — a random still frame from a video (random-frame game). Re-roll by bumping `variant` (the GM rotate counter); for a reachable source it's folded into the seed, for an unreachable source it cycles the per-question prerendered fallback frames (matched by `qindex`). Add `&prerendered=1` to force the downloaded frame (stopgap while a live frame loads). |
+| `GET` | `/api/film-stripe/frame?path=<asset>&i=<n>` | `image/jpeg` — still `i` of the precomputed time-lapse of a film (film-stripe game). Served from the local cache only; 404 when the stripe was never computed. The colours and the number of stills arrive with the question as `stripe` in `GET /api/game/:index`. |
 | `GET` | `/local-assets/**` | Raw asset files (images, audio, videos, background-music, bandle-audio). |
 | `GET` | `/api/health` | **Optional.** `{ ok, uptimeSeconds, startedAt }`. The reference show polls it before an automatic page reload, so a reload never lands on the browser's error page while the server is restarting. See [specs/crash-recovery.md](../specs/crash-recovery.md). |
 

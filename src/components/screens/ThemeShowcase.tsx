@@ -13,6 +13,8 @@ import ColorPickerField from '@/components/backend/ColorPickerField';
 import DeadlineTimer from '@/components/common/DeadlineTimer';
 import { ColorPie } from '@/components/games/ColorGuess';
 import CompassRose from '@/components/common/CompassRose';
+import VennDiagram from '@/components/common/VennDiagram';
+import FilmStripeBar from '@/components/common/FilmStripeBar';
 import { QRCodeSVG } from 'qrcode.react';
 import RulesEditor from '@/components/backend/RulesEditor';
 import SpellCheckPanel, { type SpellGroup } from '@/components/backend/SpellCheckPanel';
@@ -125,6 +127,16 @@ const SPELL_DEMO_CTX: SpellCheckCtxValue = {
   allowWord: () => {},
   ignore: () => {},
 };
+
+/** A made-up film for the stripe showcase: a cold blue opening, a warm middle, a dark
+ *  finale — with the scene-to-scene flicker a real stripe has. */
+const SHOWCASE_FILM_STRIPE: string[] = Array.from({ length: 160 }, (_, i) => {
+  const t = i / 159;
+  const hue = t < 0.35 ? 212 - t * 60 : t < 0.7 ? 34 + (t - 0.35) * 40 : 268 - (t - 0.7) * 120;
+  const flicker = ((i * 37) % 11) - 5;
+  const lightness = Math.max(8, Math.min(62, (t < 0.7 ? 42 : 24) + flicker * 2.4));
+  return `hsl(${Math.round(hue)} ${t < 0.7 ? 46 : 30}% ${Math.round(lightness)}%)`;
+});
 
 // Admin row passes `themes={ADMIN_THEMES}` (curated subset); frontend row uses all THEMES.
 function ThemeRow({ value, onChange, themes = THEMES }: { value: ThemeId; onChange: (id: ThemeId) => void; themes?: typeof THEMES }) {
@@ -1337,6 +1349,43 @@ function FrontendShowcase() {
               ]}
               solved
             />
+          </div>
+        </GlassCard>
+      </Section>
+
+      {/* Film stripe ("Filmstreifen"): the stripe alone, as a film opens, and as the
+          timeline it becomes under the time-lapse, with the position marker. The
+          colours are the stripe's own content, so the theme only shows in the frame
+          around it and in the notice for a film without a stripe.
+          See specs/games/film-stripe.md. */}
+      <Section title="Filmstreifen (Farbstreifen)">
+        <GlassCard>
+          <div className="film-stripe-stage">
+            <FilmStripeBar colors={SHOWCASE_FILM_STRIPE} />
+          </div>
+        </GlassCard>
+        <GlassCard>
+          <div className="film-stripe-stage film-stripe-stage--timelapse">
+            <FilmStripeBar colors={SHOWCASE_FILM_STRIPE} markerIndex={74} />
+          </div>
+          <div className="film-stripe-stage">
+            <div className="film-stripe-missing">Für diesen Film wurde noch kein Farbstreifen berechnet.</div>
+          </div>
+        </GlassCard>
+      </Section>
+
+      {/* Venn ("Schnittmenge"): the open puzzle with a long category name, and the
+          solved three-circle state — the hint circle carries the gold token, the
+          answer pill the success token. See specs/games/venn.md. */}
+      <Section title="Schnittmenge (Venn-Diagramm)">
+        <GlassCard>
+          <div className="venn-stage">
+            <VennDiagram sets={['Programmiersprache', 'Stadt im Burgenland']} />
+          </div>
+        </GlassCard>
+        <GlassCard>
+          <div className="venn-stage">
+            <VennDiagram sets={['Planet', 'Schokoriegel', 'Römischer Gott']} solved answer="Mars" />
           </div>
         </GlassCard>
       </Section>

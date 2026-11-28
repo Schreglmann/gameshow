@@ -95,6 +95,8 @@ The admin's "Neues Spiel" dialog lists all 16 types:
 | `wer-kennt-mehr` | Final game — both teams name as many of a thing as possible; the team that named more scores that count |
 | `random-frame` | Guess the movie/show from a single random still frame pulled from a video (GM can re-roll) |
 | `city-compass` | Name the hidden city at the center of a compass rose, from the cities around it at their true bearing |
+| `venn` | Name the term that belongs to both categories of two overlapping circles; a third circle is the hint |
+| `film-stripe` | Name the film from a stripe of its average colours over time; a time-lapse is the hint |
 
 See [GAME_TYPES.md](GAME_TYPES.md) for the per-type field reference.
 

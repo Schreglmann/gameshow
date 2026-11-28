@@ -33,8 +33,10 @@ describe('Config Types', () => {
       'wer-kennt-mehr',
       'random-frame',
       'city-compass',
+      'venn',
+      'film-stripe',
     ];
-    expect(types).toHaveLength(15);
+    expect(types).toHaveLength(17);
   });
 
   it('SimpleQuizQuestion supports all optional fields', () => {

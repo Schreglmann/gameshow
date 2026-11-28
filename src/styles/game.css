@@ -2003,6 +2003,252 @@ textarea {
     }
 }
 
+/* ── Venn ("Schnittmenge") ── */
+
+.venn-stage {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    /* Explicit width for the same reason as `.city-compass-stage`: the diagram's own
+     * `width: 100%` needs a definite parent width. */
+    width: 100%;
+    gap: clamp(6px, 1.2vw, 12px);
+    margin: clamp(6px, 1.2vw, 12px) 0;
+}
+
+/* Sized like `.compass-rose`: by width alone, derived from the height it may take
+ * times the ratio VennDiagram passes in as `--venn-aspect`. A question with a hint
+ * circle is nearly square, so without the height cap it would push the answer off
+ * the screen. Type sizes are SVG user units set in vennLayout.ts and need no
+ * breakpoints — the labels keep their share of the diagram at every width. */
+.venn-diagram {
+    --venn-max-height: min(60vh, 760px);
+
+    width: 100%;
+    max-width: min(100%, calc(var(--venn-max-height) * var(--venn-aspect, 1.5)));
+    aspect-ratio: var(--venn-aspect, 1.5);
+    height: auto;
+    display: block;
+    overflow: visible;
+    color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.92, var(--text-fade-floor, 0)));
+}
+
+/* Translucent fills, so the overlap is visibly denser than either circle alone —
+ * that area is what the question is about. */
+.venn-diagram__circle {
+    fill: rgba(var(--primary-rgb), 0.2);
+    stroke: currentColor;
+    stroke-opacity: 0.6;
+    stroke-width: 4;
+}
+
+/* The third circle is a hint, not part of the original puzzle, and says so. */
+.venn-diagram__circle--hint {
+    fill: rgba(var(--card-gold-rgb, var(--gold-warm-rgb)), 0.18);
+    stroke: rgba(var(--card-gold-rgb, var(--gold-warm-rgb)), 0.95);
+    stroke-opacity: 1;
+    stroke-dasharray: 14 10;
+}
+
+.venn-diagram__label {
+    fill: currentColor;
+    font-weight: 700;
+}
+
+.venn-diagram__label--hint {
+    fill: var(--card-gold, var(--gold-warm));
+}
+
+.venn-diagram__focus {
+    transition: transform 420ms ease-in-out;
+}
+
+.venn-diagram__unknown {
+    fill: currentColor;
+    font-weight: 800;
+}
+
+/* Same answer colours as `.compass-rose__pill` and `.quiz-answer`. The pill is
+ * nearly opaque: three circle outlines cross right behind the answer. */
+.venn-diagram__pill {
+    fill: var(--card-bg, rgba(0, 0, 0, 0.6));
+    stroke: rgba(var(--card-success-rgb, var(--success-rgb)), 0.85);
+    stroke-width: 4;
+}
+
+.venn-diagram__solution {
+    fill: var(--card-success, var(--success));
+    font-weight: 800;
+    letter-spacing: 0.5px;
+}
+
+.venn-diagram__solved {
+    filter: drop-shadow(0 0 12px rgba(var(--card-success-rgb, var(--success-rgb)), 0.35));
+}
+
+/* Scoped override for the admin preview, which sits in a form column. */
+.venn-diagram.venn-diagram--fit {
+    --venn-max-height: 300px;
+}
+
+@keyframes venn-circle-in {
+    from { opacity: 0; transform: scale(0.82); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes venn-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes venn-pop-in {
+    0% { opacity: 0; transform: scale(0.4); }
+    65% { opacity: 1; transform: scale(1.12); }
+    100% { opacity: 1; transform: scale(1); }
+}
+
+.venn-diagram__circle {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: venn-circle-in 420ms ease-out backwards;
+}
+
+.venn-diagram__label {
+    animation: venn-fade-in 300ms ease-out backwards;
+}
+
+.venn-diagram__unknown,
+.venn-diagram__solved {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: venn-pop-in 340ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .venn-diagram__circle,
+    .venn-diagram__label,
+    .venn-diagram__unknown,
+    .venn-diagram__solved {
+        animation: none;
+    }
+
+    .venn-diagram__focus {
+        transition: none;
+    }
+}
+
+/* ── Film stripe ("Filmstreifen") ── */
+
+.film-stripe-stage {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    gap: clamp(8px, 1.6vw, 16px);
+    margin: clamp(8px, 1.6vw, 16px) 0;
+}
+
+/* The stripe is the whole picture while it is the only thing on stage, and steps
+ * back to a timeline once the time-lapse plays above it. The height is a share of
+ * the viewport, not of the width: on a wide projector a width-based stripe would
+ * push the answer off the screen. */
+.film-stripe-bar {
+    --film-stripe-height: clamp(96px, 26vh, 300px);
+
+    position: relative;
+    width: 100%;
+    height: var(--film-stripe-height);
+    border-radius: var(--radius-md, 10px);
+    overflow: hidden;
+    /* Shows through only if a colour is transparent or the SVG fails to paint. */
+    background: rgba(var(--glass-rgb), 0.08);
+    box-shadow: 0 0 0 1px rgba(var(--card-text-rgb, var(--text-rgb)), 0.18);
+    transition: height 360ms ease-in-out;
+}
+
+.film-stripe-stage--timelapse .film-stripe-bar {
+    --film-stripe-height: clamp(40px, 8vh, 96px);
+}
+
+.film-stripe-bar__colors {
+    display: block;
+    width: 100%;
+    height: 100%;
+    /* Wipe in from the left — the film runs once across the screen. */
+    animation: film-stripe-wipe 5s linear backwards;
+}
+
+@keyframes film-stripe-wipe {
+    from { clip-path: inset(0 100% 0 0); }
+    to { clip-path: inset(0 0 0 0); }
+}
+
+/* Position of the still that is on screen. Light with a dark outline, so it reads
+ * on a bright and on a dark stretch of film alike. */
+.film-stripe-bar__marker {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    margin-left: -2px;
+    background: #fff;
+    box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.75);
+    pointer-events: none;
+}
+
+.film-stripe-timelapse {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    /* Reserve the frame's box before the first still arrives, so the stripe below
+     * does not jump when it does. */
+    aspect-ratio: 16 / 9;
+    max-height: min(46vh, 560px);
+}
+
+.film-stripe-timelapse__frame {
+    max-width: 100%;
+    max-height: 100%;
+    border-radius: var(--radius-md, 10px);
+    object-fit: contain;
+    user-select: none;
+}
+
+.film-stripe-timelapse__loading,
+.film-stripe-missing {
+    font-size: clamp(0.95em, 1.8vw, 1.2em);
+    color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.7, var(--text-fade-floor, 0)));
+    text-align: center;
+}
+
+.film-stripe-missing {
+    width: 100%;
+    padding: clamp(18px, 4vw, 40px) clamp(12px, 3vw, 24px);
+    border: 1px dashed rgba(var(--card-text-rgb, var(--text-rgb)), 0.3);
+    border-radius: var(--radius-md, 10px);
+}
+
+/* Scoped override for the admin preview: a thin strip under the video field. */
+.film-stripe-bar.film-stripe-bar--fit {
+    --film-stripe-height: 34px;
+    transition: none;
+}
+
+.film-stripe-bar--fit .film-stripe-bar__colors {
+    animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .film-stripe-bar__colors {
+        animation: none;
+    }
+
+    .film-stripe-bar {
+        transition: none;
+    }
+}
+
 /* ── Video loading spinner ── */
 .video-loading-spinner {
     width: 48px;

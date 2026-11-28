@@ -15,11 +15,14 @@
  */
 
 import path from 'path';
-import { mkdir, writeFile, rename, readFile } from 'fs/promises';
+import { mkdir, writeFile, rename, readFile, stat } from 'fs/promises';
+import ffmpegStatic from 'ffmpeg-static';
 import type { AppConfig, GameConfig } from '../src/types/config.js';
 import { renderMediaItem, type MediaItem } from './example-media.js';
 import { buildDefaultConfig, isGitCryptBlob } from './clean-install.js';
 import { exampleGameshowPlayerIds, examplePlayers } from './example-players.js';
+import { buildFilmStripe, createFrameExtractor, filmStripeDir } from './film-stripe.js';
+import { probeVideoTracks } from './video-probe.js';
 
 export interface ExampleGame {
   /** File name without extension, e.g. `beispiel-simple-quiz` → games/beispiel-simple-quiz.json */
@@ -387,6 +390,36 @@ export const EXAMPLE_GAMES: ExampleGame[] = [
       ],
     },
   },
+  {
+    fileName: 'beispiel-film-stripe',
+    media: [
+      // A film whose colour changes over time, so the stripe has bands to look at.
+      { type: 'video', dest: 'videos/Beispiele/film-farben.mp4', spec: { kind: 'colors', seconds: 24, colors: ['0x1f4e8c', '0x2a9d8f', '0xe9c46a', '0xf4a261', '0xe76f51', '0x6d2e46'] } },
+    ],
+    gameFile: {
+      type: 'film-stripe',
+      title: 'Beispiel: Filmstreifen',
+      rules: ['Gesucht ist ein Film, zu sehen als Farbstreifen: von links nach rechts der ganze Film, jede Linie die Durchschnittsfarbe eines Moments; als Hinweis folgt der Film im Zeitraffer.', ...B],
+      questions: [
+        { video: '/videos/Beispiele/film-farben.mp4', answer: 'Beispiel-Film' },
+        { video: '/videos/Beispiele/film-farben.mp4', answer: 'Farbfilm', question: 'Wie heißt dieser Film?' },
+      ],
+    },
+  },
+  {
+    fileName: 'beispiel-venn',
+    gameFile: {
+      type: 'venn',
+      title: 'Beispiel: Schnittmenge',
+      rules: ['Gesucht ist ein Begriff, der in alle gezeigten Kategorien passt; als Hinweis kann eine dritte Kategorie dazukommen.', ...B],
+      questions: [
+        { sets: ['Planet', 'Schokoriegel', 'Römischer Gott'], answer: 'Mars' },
+        { sets: ['Programmiersprache', 'Insel', 'Kaffeesorte'], answer: 'Java' },
+        { sets: ['Raubkatze', 'Sportmarke'], answer: 'Puma' },
+        { sets: ['Gemüse', 'Deutscher Bundeskanzler'], answer: 'Kohl' },
+      ],
+    },
+  },
 ];
 
 /**
@@ -441,6 +474,21 @@ async function writeJsonAtomic(filePath: string, value: unknown): Promise<void> 
  * "Beispiele" gameshow referencing them. Idempotent: regenerates media and
  * overwrites the games + gameshow on every run.
  */
+/** Compute the film stripe of one generated example video into the local video cache. */
+async function buildExampleFilmStripe(localAssetsBase: string, relPath: string): Promise<void> {
+  const ffmpegBin = ffmpegStatic as unknown as string | null;
+  if (!ffmpegBin) throw new Error('ffmpeg-static binary not found');
+  const sourcePath = path.join(localAssetsBase, 'videos', relPath);
+  const source = await stat(sourcePath);
+  const probe = await probeVideoTracks(sourcePath);
+  await buildFilmStripe({
+    dir: filmStripeDir(path.join(localAssetsBase, 'videos', '.cache'), relPath),
+    source: { mtimeMs: source.mtimeMs, size: source.size },
+    duration: probe.videoInfo?.duration ?? 0,
+    extractFrame: createFrameExtractor({ ffmpegBin, sourcePath }),
+  });
+}
+
 export async function materializeExamples(opts: {
   gamesDir: string;
   localAssetsBase: string;
@@ -459,6 +507,16 @@ export async function materializeExamples(opts: {
   await mkdir(path.join(localAssetsBase, 'images'), { recursive: true });
   await mkdir(path.join(localAssetsBase, 'audio'), { recursive: true });
   for (const item of items) await renderMediaItem(item, localAssetsBase);
+
+  // 1b. Film stripes. The show never computes one (it takes minutes for a real film),
+  // so the film-stripe example would open with "kein Farbstreifen berechnet" unless
+  // its stripe is made here. See specs/games/film-stripe.md.
+  const stripeVideos = new Set<string>();
+  for (const game of EXAMPLE_GAMES) {
+    if (game.gameFile.type !== 'film-stripe') continue;
+    for (const q of game.gameFile.questions) stripeVideos.add(q.video.replace(/^\/+videos\/+/, ''));
+  }
+  for (const relPath of stripeVideos) await buildExampleFilmStripe(localAssetsBase, relPath);
 
   // 2. Game files.
   await mkdir(gamesDir, { recursive: true });

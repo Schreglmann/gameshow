@@ -162,6 +162,8 @@ Instance-specific fields override the base config. So an instance can have its o
 | `wer-kennt-mehr` | Final game: both teams name as many of a thing as possible; the team that named more scores that count (tie splits) | Yes |
 | `random-frame` | Guess the movie/show from a single random still frame extracted from a video at runtime (GM can re-roll) | Yes |
 | `city-compass` | Name the hidden city at the center of a compass rose, from the cities placed around it at their true bearing | Yes |
+| `venn` | Name the term that belongs to both categories of two overlapping circles; an optional third circle is a hint | Yes |
+| `film-stripe` | Name the film from a stripe of its average colours over time; a time-lapse is the hint (stripes are precomputed in the admin) | Yes |
 
 See [GAME_TYPES.md](GAME_TYPES.md) for detailed per-type documentation.
 

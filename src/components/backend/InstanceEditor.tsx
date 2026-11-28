@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, Fragment } from 'react';
-import type { GameType, SimpleQuizQuestion, GuessingGameQuestion, FinalQuizQuestion, Q1Question, FourStatementsQuestion, FactOrFakeQuestion, QuizjagdFlatQuestion, AudioGuessQuestion, VideoGuessQuestion, BandleQuestion, ImageGuessQuestion, ColorGuessQuestion, RankingQuestion, WerKenntMehrQuestion, RandomFrameQuestion, CityCompassQuestion } from '@/types/config';
+import type { GameType, SimpleQuizQuestion, GuessingGameQuestion, FinalQuizQuestion, Q1Question, FourStatementsQuestion, FactOrFakeQuestion, QuizjagdFlatQuestion, AudioGuessQuestion, VideoGuessQuestion, BandleQuestion, ImageGuessQuestion, ColorGuessQuestion, RankingQuestion, WerKenntMehrQuestion, RandomFrameQuestion, CityCompassQuestion, VennQuestion, FilmStripeQuestion } from '@/types/config';
 import SimpleQuizForm from './questions/SimpleQuizForm';
 import GuessingGameForm from './questions/GuessingGameForm';
 import FinalQuizForm from './questions/FinalQuizForm';
@@ -16,6 +16,8 @@ import RankingForm from './questions/RankingForm';
 import WerKenntMehrForm from './questions/WerKenntMehrForm';
 import RandomFrameForm from './questions/RandomFrameForm';
 import CityCompassForm from './questions/CityCompassForm';
+import VennForm from './questions/VennForm';
+import FilmStripeForm from './questions/FilmStripeForm';
 import RulesEditor from './RulesEditor';
 import type { InstanceUsage } from '@/utils/playerStats';
 import type { Player } from '@/types/config';
@@ -292,6 +294,22 @@ export default function InstanceEditor({ gameType, instance, onChange, otherInst
           reveal={instance.reveal === 'progressive' ? 'progressive' : undefined}
           onChangeShowDistances={v => set('showDistances', v)}
           onChangeReveal={v => set('reveal', v)}
+        />
+      )}
+      {gameType === 'film-stripe' && (
+        <FilmStripeForm
+          questions={(instance.questions ?? []) as FilmStripeQuestion[]}
+          onChange={q => set('questions', q)}
+          otherInstances={otherInstances}
+          onMoveQuestion={onMoveQuestion}
+        />
+      )}
+      {gameType === 'venn' && (
+        <VennForm
+          questions={(instance.questions ?? []) as VennQuestion[]}
+          onChange={q => set('questions', q)}
+          otherInstances={otherInstances}
+          onMoveQuestion={onMoveQuestion}
         />
       )}
       {gameType === 'wer-kennt-mehr' && (

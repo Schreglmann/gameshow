@@ -19,7 +19,9 @@ export type GameType =
   | 'ranking'
   | 'wer-kennt-mehr'
   | 'random-frame'
-  | 'city-compass';
+  | 'city-compass'
+  | 'venn'
+  | 'film-stripe';
 
 // ── Question types per game ──
 
@@ -225,6 +227,42 @@ export interface CityCompassQuestion extends GmInfoField {
   question?: string;
   /** Optional small-font subtitle rendered above the question text. */
   info?: string;
+  answerImage?: string;
+  disabled?: boolean;
+}
+
+/** A film reduced to colours, as computed by server/film-stripe.ts. */
+export interface FilmStripeData {
+  /** One `#rrggbb` per sampled moment, in film order. */
+  colors: string[];
+  /** Number of time-lapse stills served by `GET /api/film-stripe/frame`. */
+  frames: number;
+  /** For each still, the index of its moment in `colors`. */
+  framePositions: number[];
+}
+
+export interface FilmStripeQuestion extends GmInfoField {
+  /** DAM video path, e.g. "/videos/Dune.m4v". The stripe is computed from this file. */
+  video: string;
+  /** The film title — the answer teams have to name. */
+  answer: string;
+  /** Overrides the default prompt "Welcher Film ist das?". */
+  question?: string;
+  /** Optional reveal image, usually the poster. */
+  answerImage?: string;
+  disabled?: boolean;
+  /** Populated by the server from the film-stripe cache. Never present in authored
+   *  JSON; absent when the stripe has not been computed yet. */
+  stripe?: FilmStripeData;
+}
+
+/** One "Schnittmenge" puzzle: a term that belongs to every listed category. */
+export interface VennQuestion extends GmInfoField {
+  /** 2-3 category names, one per circle. The first two are on screen from the
+   *  start; a third is the hint circle added by the next host advance. */
+  sets: string[];
+  /** The term in the overlap of all circles. Never rendered before the reveal. */
+  answer: string;
   answerImage?: string;
   disabled?: boolean;
 }
@@ -438,6 +476,16 @@ export interface CityCompassConfig extends BaseGameConfig {
   reveal?: 'all' | 'progressive';
 }
 
+export interface VennConfig extends BaseGameConfig {
+  type: 'venn';
+  questions: VennQuestion[];
+}
+
+export interface FilmStripeConfig extends BaseGameConfig {
+  type: 'film-stripe';
+  questions: FilmStripeQuestion[];
+}
+
 export type GameConfig =
   | SimpleQuizConfig
   | BetQuizConfig
@@ -455,7 +503,9 @@ export type GameConfig =
   | RankingConfig
   | WerKenntMehrConfig
   | RandomFrameConfig
-  | CityCompassConfig;
+  | CityCompassConfig
+  | VennConfig
+  | FilmStripeConfig;
 
 // ── Game file types (files in games/ directory) ──
 

@@ -109,6 +109,11 @@ import {
 } from './upscale.js';
 import { installCrashHandlers, readLastCrash, STARTED_AT } from './crash-log.js';
 import { sendFileStream } from './send-file-stream.js';
+import {
+  attachFilmStripes, buildFilmStripe, createFrameExtractor, filmStripeDir, filmStripeFrameName,
+  isFilmStripeCurrent, readFilmStripe,
+  type FilmStripeManifest, type FilmStripeSource,
+} from './film-stripe.js';
 
 // Before anything else runs: an uncaught exception is written to logs/crash.log
 // and exits (the supervisor restarts), an unhandled rejection is only logged.
@@ -320,6 +325,9 @@ function deleteCacheFilesForVideo(relPath: string): void {
       }
     } catch { /* dir doesn't exist yet */ }
   }
+  // The film stripe is computed from the file itself, so it goes with it. Local-only
+  // cache, so a plain async remove is enough.
+  void rm(filmStripeDir(VIDEO_CACHE_BASE, relPath), { recursive: true, force: true }).catch(() => undefined);
   void deleteNasCacheFilesForSlug(slug);
 }
 
@@ -605,7 +613,7 @@ interface BackgroundTaskMeta {
 
 interface BackgroundTask {
   id: string;
-  type: 'sdr-warmup' | 'compressed-warmup' | 'audio-normalize' | 'poster-fetch' | 'nas-mirror' | 'hdr-probe' | 'nas-sync' | 'startup-sync' | 'faststart' | 'whisper-asr' | 'random-frame-prerender';
+  type: 'sdr-warmup' | 'compressed-warmup' | 'audio-normalize' | 'poster-fetch' | 'nas-mirror' | 'hdr-probe' | 'nas-sync' | 'startup-sync' | 'faststart' | 'whisper-asr' | 'random-frame-prerender' | 'film-stripe';
   label: string;
   /** Legacy creation timestamp — preserved for back-compat but `elapsed` now uses
    *  `runningAt ?? queuedAt`. New code should prefer those fields. */
@@ -3487,6 +3495,156 @@ async function prerenderFrames(
   return { count: files.length };
 }
 
+// ── Film stripes (game type `film-stripe`, see specs/games/film-stripe.md) ──
+// A stripe is precomputed per VIDEO (not per question — nothing about it is random) and
+// the show only ever reads the cache: the frame route below and the fields
+// /api/game/:index attaches never touch the source file.
+
+/** Cache directory of one video's stripe. */
+function filmStripeDirFor(relPath: string): string {
+  return filmStripeDir(VIDEO_CACHE_BASE, relPath);
+}
+
+/** Size + mtime of a source file, or null when it cannot be read right now. Bounded on
+ *  the NAS (specs/nas-freeze-resilience.md). */
+async function filmStripeSourceStat(fullPath: string): Promise<FilmStripeSource | null> {
+  const onNas = fullPath.startsWith(NAS_BASE + path.sep);
+  const s = onNas ? await nasStat(fullPath) : await stat(fullPath).catch(() => null);
+  return s ? { mtimeMs: s.mtimeMs, size: s.size } : null;
+}
+
+/** Stripe builds in flight, by relative video path — a second request for the same
+ *  film waits for the first instead of seeking through the file twice. */
+const filmStripeBuilds = new Map<string, Promise<FilmStripeManifest>>();
+
+/** Compute (or reuse) the stripe of one video. Throws when the source is unreachable. */
+function prepareFilmStripe(
+  relPath: string,
+  opts: { force?: boolean; onProgress?: (done: number, total: number) => void } = {},
+): Promise<FilmStripeManifest> {
+  const running = filmStripeBuilds.get(relPath);
+  if (running) return running;
+  const build = (async (): Promise<FilmStripeManifest> => {
+    const dir = filmStripeDirFor(relPath);
+    const fullPath = await resolveVideoPathWithNas(relPath);
+    if (!fullPath) throw new Error('Video nicht erreichbar');
+    const source = await filmStripeSourceStat(fullPath);
+    if (!source) throw new Error('Video nicht erreichbar');
+
+    const existing = await readFilmStripe(dir);
+    if (existing && !opts.force && isFilmStripeCurrent(existing, source)) return existing;
+
+    const probe = await cachedProbe(fullPath, relPath);
+    const duration = probe.videoInfo?.duration ?? 0;
+    // Without the tone map an HDR source decodes washed out and every colour of the
+    // stripe comes out grey.
+    const isHdr = probe.videoInfo?.isHdr === true;
+    const toneMapFilter = isHdr ? buildTonemapVf(probe.videoInfo?.maxCLL ?? 0) : undefined;
+    return buildFilmStripe({
+      dir,
+      source,
+      duration,
+      extractFrame: createFrameExtractor({
+        ffmpegBin: FFMPEG_BIN,
+        sourcePath: fullPath,
+        toneMapFilter,
+        // Low priority: a stripe is background work and must not starve a running show.
+        spawnFfmpeg: (args, options) => spawnBackgroundFfmpeg(args, options),
+      }),
+      onProgress: opts.onProgress,
+    });
+  })();
+  filmStripeBuilds.set(relPath, build);
+  void build.catch(() => undefined).finally(() => { filmStripeBuilds.delete(relPath); });
+  return build;
+}
+
+// GET /api/film-stripe/frame?path=<rel>&i=<n> — one time-lapse still of a prepared
+// stripe. Cache only: 404 when the stripe has not been computed.
+app.get('/api/film-stripe/frame', (req, res) => {
+  const relPath = typeof req.query.path === 'string' ? req.query.path : '';
+  const index = Number.parseInt(String(req.query.i ?? ''), 10);
+  if (!relPath || !isSafePath(relPath) || !Number.isInteger(index) || index < 0 || index > 999) {
+    return res.status(400).send('Invalid params');
+  }
+  const file = path.join(filmStripeDirFor(relPath), filmStripeFrameName(index));
+  if (!existsSync(file)) return res.status(404).send('Frame not available');
+  res.setHeader('Content-Type', 'image/jpeg');
+  res.setHeader('Cache-Control', 'private, max-age=3600');
+  sendFileStream(res, file);
+});
+
+// GET /api/backend/assets/videos/film-stripe/status?paths=a|b
+// → { status: { [path]: { ready, current, sourceReachable, frames, colors } } }
+// `current` is false when the video file changed since the stripe was computed.
+app.get('/api/backend/assets/videos/film-stripe/status', async (req, res) => {
+  const raw = typeof req.query.paths === 'string' ? req.query.paths : '';
+  const paths = [...new Set(raw.split('|').filter(p => p && isSafePath(p)))];
+  const status: Record<string, { ready: boolean; current: boolean; sourceReachable: boolean; frames: number; colors: string[] }> = {};
+  await Promise.all(paths.map(async relPath => {
+    const manifest = await readFilmStripe(filmStripeDirFor(relPath));
+    const fullPath = await resolveVideoPathWithNas(relPath);
+    const source = fullPath ? await filmStripeSourceStat(fullPath) : null;
+    status[relPath] = {
+      ready: manifest !== null,
+      current: manifest !== null && isFilmStripeCurrent(manifest, source),
+      sourceReachable: source !== null,
+      frames: manifest?.frames ?? 0,
+      colors: manifest?.colors ?? [],
+    };
+  }));
+  res.json({ status });
+});
+
+// POST /api/backend/assets/videos/film-stripe/prepare — compute the stripes of the
+// given videos. Body: { paths: string[], force?: boolean }. A stripe that is already
+// current is kept unless `force`. Streams SSE: `{ path, percent }` while a film is
+// sampled, `{ path, ready }` / `{ path, itemError }` per film, `{ percent }` for the
+// batch, then `{ percent: 100, done: true, failures }`.
+app.post('/api/backend/assets/videos/film-stripe/prepare', async (req, res) => {
+  const body = req.body as { paths?: unknown; force?: unknown };
+  const paths = Array.isArray(body.paths)
+    ? [...new Set(body.paths.filter((p): p is string => typeof p === 'string' && p !== '' && isSafePath(p)))]
+    : [];
+  if (paths.length === 0) return res.status(400).json({ error: 'No valid paths' });
+  const force = body.force === true;
+
+  res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' });
+  const send = (data: Record<string, unknown>) => {
+    try { res.write(`data: ${JSON.stringify(data)}\n\n`); } catch { /* client gone */ }
+  };
+
+  const taskId = bgTaskQueue('film-stripe', `Filmstreifen berechnen: ${paths.length} ${paths.length === 1 ? 'Film' : 'Filme'}`, `0/${paths.length}`);
+  bgTaskMarkRunning(taskId);
+  let done = 0;
+  let failures = 0;
+  for (const relPath of paths) {
+    let lastPercent = -1;
+    try {
+      await prepareFilmStripe(relPath, {
+        force,
+        onProgress: (n, total) => {
+          const percent = Math.floor((n / total) * 100);
+          if (percent === lastPercent) return;
+          lastPercent = percent;
+          send({ path: relPath, percent });
+          bgTaskUpdate(taskId, `${done}/${paths.length} · ${path.basename(relPath)} ${percent} %`);
+        },
+      });
+      send({ path: relPath, ready: true });
+    } catch (err) {
+      failures++;
+      send({ path: relPath, itemError: (err as Error).message });
+    }
+    done++;
+    send({ percent: Math.round((done / paths.length) * 100) });
+    bgTaskUpdate(taskId, `${done}/${paths.length}`);
+  }
+  send({ percent: 100, done: true, failures });
+  if (failures > 0 && failures === paths.length) bgTaskError(taskId, 'Alle fehlgeschlagen'); else bgTaskDone(taskId);
+  try { res.end(); } catch { /* already closed */ }
+});
+
 app.get('/api/random-frame', async (req, res) => {
   const filePath = typeof req.query.path === 'string' ? req.query.path : '';
   if (!filePath || !isSafePath(filePath)) return res.status(400).send('Invalid path');
@@ -4137,6 +4295,15 @@ app.get('/api/game/:index', async (req, res) => {
         })
       );
       gameConfig = { ...gameConfig, questions: enrichedQuestions };
+    }
+
+    // Attach the precomputed stripe of each film. Cache only — a film whose stripe
+    // was never computed simply comes without the fields, and the show says so.
+    if (gameConfig.type === 'film-stripe') {
+      gameConfig = {
+        ...gameConfig,
+        questions: await attachFilmStripes(gameConfig.questions, VIDEO_CACHE_BASE, isSafePath),
+      };
     }
 
     // Scoring is enabled for THIS game only when the show has teams AND this

@@ -57,6 +57,8 @@ const VALID_GAME_TYPES: GameType[] = [
   'wer-kennt-mehr',
   'random-frame',
   'city-compass',
+  'venn',
+  'film-stripe',
 ];
 
 function parseGameRef(ref: string): { gameName: string; instanceName: string | null } {
@@ -484,6 +486,8 @@ function validateGame(
     'wer-kennt-mehr',
     'random-frame',
     'city-compass',
+    'venn',
+    'film-stripe',
     // video-guess was missing: its questions array was never validated at all,
     // so a game with no `video` or no `answer` passed `npm run validate` and
     // only failed in front of the audience.
@@ -791,6 +795,24 @@ export function validateQuestion(
       }
       break;
     }
+
+    case 'film-stripe':
+      if (typeof question.video !== 'string' || !(question.video as string).startsWith('/videos/'))
+        errors.push(`Game "${gameRef}", question ${index}: "video" must be a path starting with "/videos/"`);
+      if (!question.answer) errors.push(`Game "${gameRef}", question ${index}: missing "answer"`);
+      break;
+
+    case 'venn':
+      // Two circles are the puzzle, a third is the hint; a fourth has no place in
+      // the drawing.
+      if (!Array.isArray(question.sets) || (question.sets as unknown[]).length < 2 || (question.sets as unknown[]).length > 3) {
+        errors.push(`Game "${gameRef}", question ${index}: "sets" must be an array of 2 or 3 entries`);
+      } else if ((question.sets as unknown[]).some(s => typeof s !== 'string' || !s.trim())) {
+        errors.push(`Game "${gameRef}", question ${index}: every "sets" entry must be a non-empty string`);
+      }
+      if (typeof question.answer !== 'string' || !(question.answer as string).trim())
+        errors.push(`Game "${gameRef}", question ${index}: missing "answer"`);
+      break;
 
     case 'wer-kennt-mehr':
       if (!Boolean(question.question) && !Boolean(question.questionImage))

@@ -133,6 +133,16 @@ const QUESTION_FIELDS: Record<GameType, ProseField[]> = {
     { kind: 'scalar', field: 'info', label: 'Zusatzinfo' },
     { kind: 'scalar', field: 'gmInfo', label: 'GM-Info' },
   ],
+  'film-stripe': [
+    { kind: 'scalar', field: 'question', label: 'Fragetext' },
+    { kind: 'scalar', field: 'answer', label: 'Antwort' },
+    { kind: 'scalar', field: 'gmInfo', label: 'GM-Info' },
+  ],
+  'venn': [
+    { kind: 'array', field: 'sets', label: 'Kategorie' },
+    { kind: 'scalar', field: 'answer', label: 'Antwort' },
+    { kind: 'scalar', field: 'gmInfo', label: 'GM-Info' },
+  ],
 };
 
 const INSTANCE_RESERVED_KEYS = new Set(['template', 'archive']);

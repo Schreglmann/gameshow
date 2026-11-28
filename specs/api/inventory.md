@@ -33,6 +33,7 @@ Source files (line numbers link to the declaration):
 | `GET` | `/videos-compressed/:start/:end/*splat` | [1776](../../server/index.ts#L1776) | Serves pre-transcoded H.264 SDR video segment for a given range. | Range-GET; used by `<video>` tags in `simple-quiz`/`video-guess`/etc. |
 | `GET` | `/videos-sdr/:start/:end/*splat` | [1854](../../server/index.ts#L1854) | Serves pre-transcoded HDR→SDR tone-mapped video segment. | Range-GET; video-guess + any HDR source. |
 | `GET` | `/api/random-frame` | [2848](../../server/index.ts#L2848) | Extracts a single random still frame from a video (random-frame game), auto-skipping near-black frames, cached by `(path, seed+variant)`. Falls back to per-question prerendered frames when the source is unreachable; `prerendered=1` forces the downloaded frame (stopgap while live loads). | Query: `path`, `seed?`, `variant?`, `qindex?`, `prerendered?`, `start?`, `end?` → `image/jpeg`. |
+| `GET` | `/api/film-stripe/frame` | — | One time-lapse still of a precomputed film stripe (film-stripe game). Cache only: never touches the source video. | Query: `path`, `i`. Responds `image/jpeg`; 404 when the stripe was never computed. |
 | `GET` | `/*splat` | [5434](../../server/index.ts#L5434) | SPA fallback — returns `index.html` for any path not matched above. | Prod only. Mirrors `/show/`, `/admin/`, `/gamemaster/`. |
 
 ### 1.2 Frontend / shared public API (consumed by show + gamemaster PWAs)
@@ -132,6 +133,8 @@ All asset mutations broadcast `assets-changed` on the WebSocket. All writes are 
 | `GET` | `/api/backend/assets/videos/random-frame/source-reachable` | `admin` | — | Whether a random-frame source video can be read now (local or NAS). | Query: `path` | `{ reachable: boolean }` |
 | `POST` | `/api/backend/assets/videos/random-frame/prerender-select` | `admin` | — | Mark which downloaded variant of a question shows first (sets the `first` marker; no reorder). | Body: `{ path; index; first }` | `{ success; first }` |
 | `POST` | `/api/backend/assets/videos/random-frame/prerender-reload` | `admin` | — | Re-extract a single downloaded variant (raw slot) from the source (requires reachable source). | Body: `{ path; index; slot; frameStart?; frameEnd? }` | `{ success }` / 409 |
+| `GET` | `/api/backend/assets/videos/film-stripe/status` | `admin` | — | Whether a film stripe is computed for each video, whether it still matches the video file, and its colours for a preview. | Query: `paths` (pipe-separated rel-paths) | `{ status: { [path]: { ready; current; sourceReachable; frames; colors } } }` |
+| `POST` | `/api/backend/assets/videos/film-stripe/prepare` | `admin` | — | Compute film stripes (240 colours + 48 time-lapse stills per video) into the local cache. Skips stripes that are current unless `force`. | Body: `{ paths; force? }` | SSE: `{ path, percent }`, `{ path, ready }` / `{ path, itemError }`, `{ percent }`, `{ percent: 100, done, failures }` |
 | `GET` | `/api/backend/assets/videos/warm-preview` | `admin` | [4563](../../server/index.ts#L4563) | Preview which videos the active gameshow would warm, with HDR-probe flags. | — | `{ videos: WarmPreviewVideo[] }` |
 | `POST` | `/api/backend/assets/videos/warm-all` | `admin` | [4587](../../server/index.ts#L4587) | Queue warmup for every selected video. | Body: `{ selected?: Array<{ path; hdrProbe }> }` | `{ queued: number }` |
 
@@ -279,6 +282,7 @@ This is the raw material for the three `docs/replace-*.md` guides. For each zone
 - `GET /videos-compressed/:start/:end/*splat`
 - `GET /videos-sdr/:start/:end/*splat`
 - `GET /api/random-frame` (random-frame game: random still extraction; offline prerendered fallback)
+- `GET /api/film-stripe/frame` (film-stripe game: time-lapse stills from the precomputed cache)
 - `GET /local-assets/**` (asset serving)
 - `GET /api/health` (optional — waited on before an automatic reload)
 

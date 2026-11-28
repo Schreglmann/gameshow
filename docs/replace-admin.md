@@ -91,6 +91,8 @@ A replacement admin PWA must implement the full `/api/backend/*` surface listed 
 | `GET` | `/api/backend/assets/videos/random-frame/source-reachable` | Whether a random-frame source video is reachable (enables reload in the preview). |
 | `POST` | `/api/backend/assets/videos/random-frame/prerender-select` | Choose which downloaded variant shows first. |
 | `POST` | `/api/backend/assets/videos/random-frame/prerender-reload` | Re-extract a single downloaded variant from the source. |
+| `GET` | `/api/backend/assets/videos/film-stripe/status` | Whether a film stripe is computed per video, whether it is current, and its colours. |
+| `POST` | `/api/backend/assets/videos/film-stripe/prepare` | Compute film stripes (colour stripe + time-lapse stills) per video. SSE. |
 | `GET` | `/api/backend/assets/videos/warm-preview` | Preview what warm-all would touch. |
 | `POST` | `/api/backend/assets/videos/warm-all` | Queue warmup for selected videos. |
 
@@ -236,6 +238,7 @@ Endpoints that always stream SSE:
 - `POST /api/backend/assets/:category/youtube-download`
 - `POST /api/backend/audio-cover-fetch`
 - `POST /api/backend/assets/videos/random-frame/prerender`
+- `POST /api/backend/assets/videos/film-stripe/prepare`
 
 Endpoints that either short-circuit to JSON or stream SSE:
 - `POST /api/backend/assets/videos/faststart`

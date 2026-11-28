@@ -184,6 +184,14 @@ The host picks a video; players see a **single random still frame** pulled from 
 
 A compass rose with a `?` in the middle and named cities around it, each at the true compass bearing it has from the hidden city — Prague really is drawn north-west of Vienna, Budapest east of it. Teams work out which city is in the middle from those directions alone; the host can add the distance to each name to make it easier, or reveal the surrounding cities one at a time. Everything is drawn as SVG from coordinates in the game file, so it works with no network at all.
 
+#### Schnittmenge (Venn)
+
+Two overlapping circles, each labelled with a category — *Planet* and *Schokoriegel*. Teams name the term that belongs in the overlap (*Mars*). If nobody gets it, the host adds a third circle with one more category as a hint.
+
+#### Filmstreifen (Film Stripe)
+
+A whole film compressed into one stripe of colours: every moment becomes one line in its average colour, left to right. Teams name the film from the colours alone; the hint is the film as an 8-second time-lapse. Stripes are computed in the admin ahead of the show, so the game runs without the video files.
+
 ---
 
 ### 5. Awarding Points

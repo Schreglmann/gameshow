@@ -19,8 +19,8 @@ When the host navigates **back** into a previous game, it opens at that game's *
 
 ## Scope of "resume at end"
 Applies to the games that already support stepping back through their questions:
-- **Positional** (`qIdx` + `showAnswer`): `simple-quiz`, `audio-guess`, `video-guess`, `image-guess`, `colorguess`, `random-frame` → resume = `qIdx = last`, `showAnswer = true`
-- **Progressive-reveal / phased**: `q1`, `four-statements`, `bandle` (`revealedCount = full`, `showAnswer = true`), `ranking` (`revealedCount = full`, no `showAnswer`), `bet-quiz` & `wer-kennt-mehr` (`phase = 'answer'` on the last question)
+- **Positional** (`qIdx` + `showAnswer`): `simple-quiz`, `audio-guess`, `video-guess`, `image-guess`, `colorguess`, `random-frame`, `film-stripe` → resume = `qIdx = last`, `showAnswer = true`
+- **Progressive-reveal / phased**: `q1`, `four-statements`, `bandle`, `venn` (`revealedCount = full`, `showAnswer = true`), `ranking` (`revealedCount = full`, no `showAnswer`), `bet-quiz` & `wer-kennt-mehr` (`phase = 'answer'` on the last question)
 
 Out of scope: `quizjagd`, `final-quiz`, `guessing-game`, `fact-or-fake` (see AC). Reconstructing the live bet/count *result* UI for `bet-quiz`/`wer-kennt-mehr` is out of scope — the resumed answer view shows the question and its correct answer; the per-team bet/count outcome from the live round is not re-displayed.
 

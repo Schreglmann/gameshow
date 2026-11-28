@@ -34,7 +34,12 @@ export type AudioSpec =
 
 /** Synthetic video for the random-frame example — a short colourful animated test
  *  pattern (frames are never black, so the auto-skip-black logic has something to keep). */
-export type VideoSpec = { kind: 'scenes'; seconds?: number };
+export type VideoSpec =
+  | { kind: 'scenes'; seconds?: number }
+  /** Equal-length sections, each on its own background colour — the film-stripe
+   *  example needs a film whose colour changes over time; the plain test pattern
+   *  averages to the same grey in every frame. */
+  | { kind: 'colors'; colors: string[]; seconds?: number };
 
 /** `dest` is the path relative to `local-assets/`, e.g. `images/Beispiele/bild-apfel.png`. */
 export type MediaItem =
@@ -235,12 +240,29 @@ function renderVideo(spec: VideoSpec, dest: string): Promise<void> {
   const ffmpeg = ffmpegStatic as unknown as string;
   if (!ffmpeg) return Promise.reject(new Error('ffmpeg-static binary not found'));
   const seconds = spec.seconds ?? 20;
+  let input: string[];
+  if (spec.kind === 'colors') {
+    // One `color` source per section, concatenated, with the animated test pattern
+    // small in the middle so the stills are not flat rectangles.
+    const each = seconds / spec.colors.length;
+    const sources = spec.colors.flatMap(c => ['-f', 'lavfi', '-i', `color=c=${c}:s=640x360:r=24:d=${each}`]);
+    const n = spec.colors.length;
+    const concat = `${spec.colors.map((_, i) => `[${i}:v]`).join('')}concat=n=${n}:v=1:a=0[bg]`;
+    input = [
+      ...sources,
+      '-f', 'lavfi', '-i', `testsrc2=size=224x126:rate=24:duration=${seconds}`,
+      '-filter_complex', `${concat};[bg][${n}:v]overlay=(W-w)/2:(H-h)/2:shortest=1[v]`,
+      '-map', '[v]',
+    ];
+  } else {
+    input = ['-f', 'lavfi', '-i', `testsrc2=size=640x360:rate=24:duration=${seconds}`];
+  }
   return new Promise((resolve, reject) => {
     const proc = spawn(
       ffmpeg,
       [
         '-hide_banner', '-loglevel', 'error',
-        '-f', 'lavfi', '-i', `testsrc2=size=640x360:rate=24:duration=${seconds}`,
+        ...input,
         '-pix_fmt', 'yuv420p', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '28',
         '-y', dest,
       ],

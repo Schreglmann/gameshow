@@ -62,6 +62,8 @@ A full content management system accessible at `/admin` that allows the gameshow
 | fact-or-fake | statement*, isFact toggle (Fakt/Fake)*, description* |
 | quizjagd | question*, answer*, difficulty (3/5/7)*, isExample; plus questionsPerTeam setting |
 | audio-guess | Read-only info panel — questions are filesystem-derived; link to Assets tab |
+| venn | sets[2..3]* (Kategorie 1, Kategorie 2, optional Hinweis-Kategorie), answer*, answerImage; live diagram preview |
+| film-stripe | video*, answer* (prefilled from the file name), question, answerImage; "Streifen berechnen" bar + per-question stripe preview |
 All question forms support Add, Delete, Move Up, Move Down.
 
 ### Config
