@@ -340,6 +340,7 @@ export default function FilmStripeForm({ questions, onChange, otherInstances, on
                     value={q.answerImage || undefined}
                     category="images"
                     onChange={v => update(i, { answerImage: v || undefined })}
+                    searchQuery={q.answer}
                   />
                 </div>
               </>

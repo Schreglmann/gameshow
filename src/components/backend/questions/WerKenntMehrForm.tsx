@@ -139,6 +139,7 @@ export default function WerKenntMehrForm({ questions, onChange, otherInstances, 
                     value={q.questionImage}
                     category="images"
                     onChange={v => update(i, { questionImage: v })}
+                    searchQuery={q.question}
                   />
                 </div>
                 <div className="full-width">

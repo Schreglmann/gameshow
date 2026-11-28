@@ -144,6 +144,7 @@ export default function FactOrFakeForm({ questions, onChange, otherInstances, on
                   value={q.questionImage}
                   category="images"
                   onChange={v => update(i, { questionImage: v })}
+                  searchQuery={q.statement}
                 />
               </div>
               <div className="question-fields-col">
@@ -166,6 +167,7 @@ export default function FactOrFakeForm({ questions, onChange, otherInstances, on
           key={previewImage.path}
           path={previewImage.path}
           onClose={() => setPreviewImage(null)}
+          searchQuery={previewImage.field === 'questionImage' ? questions[previewImage.index]?.statement : undefined}
           onChange={path => {
             update(previewImage.index, { [previewImage.field]: path });
             setPreviewImage({ ...previewImage, path });

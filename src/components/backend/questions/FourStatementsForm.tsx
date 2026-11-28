@@ -144,6 +144,7 @@ export default function FourStatementsForm({ questions, onChange, otherInstances
                         value={q.answerImage}
                         category="images"
                         onChange={v => update(i, { answerImage: v || undefined })}
+                        searchQuery={q.answer}
                         extras={extras}
                       />
                     );

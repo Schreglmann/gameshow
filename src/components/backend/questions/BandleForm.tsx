@@ -700,6 +700,7 @@ export default function BandleForm({ questions, onChange, otherInstances, onMove
                       value={q.answerImage}
                       category="images"
                       onChange={v => update(i, { answerImage: v })}
+                      searchQuery={q.answer}
                     />
                   </div>
                   <GmInfoField segKey={`q${i}.gmInfo`} value={q.gmInfo} onChange={v => update(i, { gmInfo: v })} />

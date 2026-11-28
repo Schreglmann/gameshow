@@ -209,9 +209,15 @@ interface ModalProps {
    * everything else defaults to `RENDER_BOX_QUIZ` (1920 × 540).
    */
   renderBox?: { w: number; h: number };
+  /**
+   * Pre-fills the 🌐 Online search field. The search itself waits for the
+   * user's Suchen / Enter. Game forms pass the question text for a question
+   * image and the answer for an answer image.
+   */
+  searchQuery?: string;
 }
 
-export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiSelect, hiddenBasenames, multiSelectLabel, rateLimitedFiles, disabledFilePath, renderBox }: ModalProps) {
+export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiSelect, hiddenBasenames, multiSelectLabel, rateLimitedFiles, disabledFilePath, renderBox, searchQuery }: ModalProps) {
   const coverUrl = useCoverUrl();
   const [files, setFiles] = useState<string[]>([]);
   const [fileMeta, setFileMeta] = useState<Record<string, AssetFileMeta>>({});
@@ -874,7 +880,8 @@ export function PickerModal({ category, onSelect, onClose, multiSelect, onMultiS
             </div>
             <div className="picker-online-body">
               <ImageSearchPanel
-                defaultQuery=""
+                defaultQuery={searchQuery?.trim() ?? ''}
+                autoSearch={false}
                 renderBox={renderBox ?? RENDER_BOX_QUIZ}
                 selectedUrl={onlineCandidate?.url}
                 busyUrl={onlineDownloading ? onlineCandidate?.url : undefined}
@@ -1084,6 +1091,8 @@ interface FieldProps {
    * online image-search mode. Only relevant when `category === 'images'`.
    */
   renderBox?: { w: number; h: number };
+  /** Forwarded to <PickerModal>: pre-fills the online image search (question text or answer). */
+  searchQuery?: string;
 }
 
 function VideoInfo({ src }: { src: string }) {
@@ -1122,7 +1131,7 @@ function VideoInfo({ src }: { src: string }) {
   );
 }
 
-export function AssetField({ label, value, category, onChange, readOnly = false, extras, scope, audioStart, audioEnd, audioLoop, renderBox }: FieldProps) {
+export function AssetField({ label, value, category, onChange, readOnly = false, extras, scope, audioStart, audioEnd, audioLoop, renderBox, searchQuery }: FieldProps) {
   const [open, setOpen] = useState(false);
   const [preview, setPreview] = useState(false);
   const isImage = isImageCategory(category);
@@ -1213,6 +1222,7 @@ export function AssetField({ label, value, category, onChange, readOnly = false,
               onChange={readOnly ? undefined : onChange}
               canUpscale={!readOnly}
               renderBox={renderBox}
+              searchQuery={searchQuery}
             />
           )}
           {preview && !isImage && createPortal(
@@ -1253,6 +1263,7 @@ export function AssetField({ label, value, category, onChange, readOnly = false,
           onSelect={url => { onChange(url); setOpen(false); }}
           onClose={() => setOpen(false)}
           renderBox={renderBox}
+          searchQuery={searchQuery}
         />,
         document.body,
       )}

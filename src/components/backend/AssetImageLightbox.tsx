@@ -28,12 +28,14 @@ interface Props {
   canUpscale?: boolean;
   /** Render box for the picker's online search and the upscale/replace modal. */
   renderBox?: { w: number; h: number };
+  /** Pre-fills the picker's 🌐 Online search in "↻ Ersetzen" — question text or answer. */
+  searchQuery?: string;
 }
 
 // Enlarged view of an image used in a game: swap the question's image through
 // the picker, or AI-upscale the file. Shared by every image lightbox in the
 // game editor — see specs/dam-image-replace.md "Ersetzen aus dem Frage-Editor".
-export default function AssetImageLightbox({ path, onClose, onChange, canUpscale = true, renderBox }: Props) {
+export default function AssetImageLightbox({ path, onClose, onChange, canUpscale = true, renderBox, searchQuery }: Props) {
   const imageSrc = useImageSrc();
   const shownPath = resolveReplacedImage(path).path;
   const src = imageSrc(path);
@@ -107,6 +109,7 @@ export default function AssetImageLightbox({ path, onClose, onChange, canUpscale
         <PickerModal
           category="images"
           renderBox={renderBox}
+          searchQuery={searchQuery}
           onSelect={url => {
             setPickerOpen(false);
             onChange(url);

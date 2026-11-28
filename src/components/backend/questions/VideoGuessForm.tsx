@@ -1340,6 +1340,7 @@ const QuestionBlock = memo(function QuestionBlock({
             value={q.answerImage}
             category="images"
             onChange={handleAnswerImageChange}
+            searchQuery={q.answer}
             readOnly={readOnly}
           />
         </div>

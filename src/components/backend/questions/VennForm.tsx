@@ -116,6 +116,7 @@ export default function VennForm({ questions, onChange, otherInstances, onMoveQu
                     value={q.answerImage}
                     category="images"
                     onChange={v => update(i, { answerImage: v || undefined })}
+                    searchQuery={q.answer}
                   />
                 </div>
                 {previewSets.length >= 2 && (

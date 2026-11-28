@@ -75,6 +75,7 @@ export default function FinalQuizForm({ questions, onChange, otherInstances, onM
                   value={q.answerImage}
                   category="images"
                   onChange={v => update(i, { answerImage: v })}
+                  searchQuery={q.answer}
                 />
               </div>
             )}

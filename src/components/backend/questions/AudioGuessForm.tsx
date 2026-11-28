@@ -243,6 +243,7 @@ export default function AudioGuessForm({ questions, onChange, otherInstances, on
                     value={q.answerImage}
                     category="images"
                     onChange={v => update(i, { answerImage: v })}
+                    searchQuery={q.answer}
                     extras={extras}
                   />
                 );

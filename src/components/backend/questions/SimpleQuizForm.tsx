@@ -298,6 +298,7 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
                       value={q.questionImage}
                       category="images"
                       onChange={v => update(i, { questionImage: v })}
+                      searchQuery={q.question}
                       extras={extras}
                     />
                   );
@@ -362,6 +363,7 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
                       value={q.answerImage}
                       category="images"
                       onChange={v => update(i, { answerImage: v })}
+                      searchQuery={q.answer}
                       extras={extras}
                     />
                   );
@@ -434,6 +436,9 @@ export default function SimpleQuizForm({ questions, onChange, otherInstances, on
           key={previewImage.path}
           path={previewImage.path}
           onClose={() => setPreviewImage(null)}
+          searchQuery={previewImage.field === 'questionImage'
+            ? questions[previewImage.index]?.question
+            : questions[previewImage.index]?.answer}
           onChange={path => {
             update(previewImage.index, { [previewImage.field]: path });
             setPreviewImage({ ...previewImage, path });

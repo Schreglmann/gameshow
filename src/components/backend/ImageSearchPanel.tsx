@@ -83,6 +83,9 @@ interface Props {
   // auto-pagination or "Mehr laden" appends. Parents can use this to clear
   // any selection tied to the previous result set.
   onSearch?: (query: string) => void;
+  // When false, `defaultQuery` only pre-fills the field and the first search
+  // waits for the user's submit (picker's 🌐 Online mode). Default true.
+  autoSearch?: boolean;
 }
 
 export default function ImageSearchPanel({
@@ -96,6 +99,7 @@ export default function ImageSearchPanel({
   renderFilterToggle = true,
   onHiddenCountChange,
   onSearch,
+  autoSearch = true,
 }: Props) {
   const [query, setQuery] = useState(defaultQuery);
   // `submittedQuery` is the query the currently-displayed results belong to.
@@ -154,10 +158,11 @@ export default function ImageSearchPanel({
     }
   }, [activeProviderList]);
 
-  // Auto-run an initial search when a default query is provided. With no
-  // default (new-image upload flow), wait for the user to type one.
+  // Auto-run an initial search when a default query is provided (unless the
+  // caller opted out). With no default (new-image upload flow), wait for the
+  // user to type one.
   useEffect(() => {
-    if (defaultQuery.trim()) void runSearch(defaultQuery.trim());
+    if (autoSearch && defaultQuery.trim()) void runSearch(defaultQuery.trim());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

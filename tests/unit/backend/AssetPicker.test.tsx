@@ -266,6 +266,14 @@ describe('AssetField image lightbox', () => {
     expect(lightboxImg()).not.toBeNull();
   });
 
+  it('Ersetzen pre-fills the online search with the searchQuery', async () => {
+    mockSearchImages.mockResolvedValue({ results: [], partial: false, page: 1, hasMore: false });
+    const { user } = await openLightbox({ searchQuery: 'Taylor Swift' });
+    await user.click(screen.getByRole('button', { name: 'Ersetzen' }));
+    await user.click(screen.getByRole('button', { name: '🌐 Online' }));
+    expect(screen.getByPlaceholderText('Suchbegriff')).toHaveValue('Taylor Swift');
+  });
+
   it('Hochskalieren opens the replace modal on the AI tab with the measured dims and render box', async () => {
     const { user } = await openLightbox({ renderBox: { w: 1920, h: 648 } });
     measure(350, 263);
@@ -406,6 +414,28 @@ describe('PickerModal online mode', () => {
     await user.click(await screen.findByRole('button', { name: '🌐 Online' }));
     expect(screen.getByPlaceholderText('Suchbegriff')).toBeInTheDocument();
     expect(screen.getByLabelText(/Speichern in:/i)).toBeInTheDocument();
+  });
+
+  it('pre-fills the online search with searchQuery but searches only on submit', async () => {
+    mockSearchImages.mockClear();
+    const user = userEvent.setup();
+    render(<PickerModal category="images" onSelect={vi.fn()} onClose={vi.fn()} searchQuery="  Matthew Mercer " />);
+    await user.click(await screen.findByRole('button', { name: '🌐 Online' }));
+    const input = screen.getByPlaceholderText('Suchbegriff');
+    expect(input).toHaveValue('Matthew Mercer');
+    expect(mockSearchImages).not.toHaveBeenCalled();
+    await user.type(input, '{Enter}');
+    await waitFor(() => expect(mockSearchImages).toHaveBeenCalledTimes(1));
+    expect(mockSearchImages.mock.calls[0][0]).toBe('Matthew Mercer');
+  });
+
+  it('leaves the online search empty without searchQuery', async () => {
+    mockSearchImages.mockClear();
+    const user = userEvent.setup();
+    render(<PickerModal category="images" onSelect={vi.fn()} onClose={vi.fn()} />);
+    await user.click(await screen.findByRole('button', { name: '🌐 Online' }));
+    expect(screen.getByPlaceholderText('Suchbegriff')).toHaveValue('');
+    expect(mockSearchImages).not.toHaveBeenCalled();
   });
 
   it('downloads with desiredName in Title Case and resolves the picker', async () => {

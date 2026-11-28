@@ -442,6 +442,7 @@ export default function CityCompassForm({
                       value={q.answerImage || undefined}
                       category="images"
                       onChange={v => update(i, { answerImage: v || undefined })}
+                      searchQuery={q.center?.name}
                     />
                   </div>
                 </>
