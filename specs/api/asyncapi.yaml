@@ -231,7 +231,8 @@ channels:
       config.json, theme-settings.json, or a games/*.json changes on disk
       (from any source: admin CMS, direct edit, git, fixtures). Flags
       (`config` / `theme` / `games`) tell clients what to re-fetch so edits
-      apply without a page reload. NOT cached — late joiners fetch fresh on
+      apply without a page reload. `filmStripes` is sent by a finished
+      film-stripe build (a cache write the watcher does not see). NOT cached — late joiners fetch fresh on
       mount. Zone: shared (show re-fetches settings + current game; admin/show
       re-fetch theme). See specs/live-config-reload.md.
 
@@ -711,6 +712,7 @@ components:
           config: { type: boolean, description: "config.json changed → re-fetch settings + current game" }
           theme: { type: boolean, description: "theme-settings.json changed → re-fetch theme" }
           games: { type: boolean, description: "a games/*.json changed → re-fetch current game" }
+          filmStripes: { type: boolean, description: "a film stripe finished computing (not a file the watcher sees; sent by the film-stripe build) → re-fetch current game, whose questions carry the cached `stripe`" }
 
     # ─── Cached bidirectional ───
 

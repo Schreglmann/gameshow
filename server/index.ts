@@ -610,6 +610,15 @@ interface BackgroundTaskMeta {
   end?: number;
   track?: number;
   kind?: 'compressed' | 'sdr';
+  /** State of a `film-stripe` batch, so an admin form that did not start it can still
+   *  follow it. Films run in `paths` order: the first `done` of them are finished. */
+  filmStripe?: {
+    paths: string[];
+    done: number;
+    failed: Array<{ path: string; error: string }>;
+    current?: string;
+    currentPercent?: number;
+  };
 }
 
 interface BackgroundTask {
@@ -687,11 +696,21 @@ function bgTaskUpdate(id: string, detail: string): void {
   if (t) { t.detail = detail; broadcastSystemStatus(); }
 }
 
-/** Trigger an async system-status broadcast (debounced — only fires if >500ms since last). */
+/** Trigger an async system-status broadcast, at most one per 500 ms. A call inside the
+ *  window schedules one trailing broadcast instead of being dropped, so the last change
+ *  of a burst (a task finishing right after a progress update) always goes out. */
 let _lastSystemBroadcast = 0;
+let _trailingSystemBroadcast: ReturnType<typeof setTimeout> | null = null;
 function broadcastSystemStatus(): void {
   const now = Date.now();
-  if (now - _lastSystemBroadcast < 500) return;
+  const wait = 500 - (now - _lastSystemBroadcast);
+  if (wait > 0) {
+    _trailingSystemBroadcast ??= setTimeout(() => {
+      _trailingSystemBroadcast = null;
+      broadcastSystemStatus();
+    }, wait);
+    return;
+  }
   _lastSystemBroadcast = now;
   buildSystemStatusPayload()
     .then(data => broadcast('system-status', data))
@@ -3541,7 +3560,7 @@ function prepareFilmStripe(
     // stripe comes out grey.
     const isHdr = probe.videoInfo?.isHdr === true;
     const toneMapFilter = isHdr ? buildTonemapVf(probe.videoInfo?.maxCLL ?? 0) : undefined;
-    return buildFilmStripe({
+    const manifest = await buildFilmStripe({
       dir,
       source,
       duration,
@@ -3554,6 +3573,10 @@ function prepareFilmStripe(
       }),
       onProgress: opts.onProgress,
     });
+    // The stripe lives in the video cache, which the content watcher does not see: tell
+    // an open show to re-fetch its game so the stripe appears without a reload.
+    broadcast('content-changed', { filmStripes: true });
+    return manifest;
   })();
   filmStripeBuilds.set(relPath, build);
   void build.catch(() => undefined).finally(() => { filmStripeBuilds.delete(relPath); });
@@ -3599,9 +3622,11 @@ app.get('/api/backend/assets/videos/film-stripe/status', async (req, res) => {
 
 // POST /api/backend/assets/videos/film-stripe/prepare — compute the stripes of the
 // given videos. Body: { paths: string[], force?: boolean }. A stripe that is already
-// current is kept unless `force`. Streams SSE: `{ path, percent }` while a film is
-// sampled, `{ path, ready }` / `{ path, itemError }` per film, `{ percent }` for the
-// batch, then `{ percent: 100, done: true, failures }`.
+// current is kept unless `force`. Streams SSE: `{ taskId }` first (the background task
+// the run is tracked under), `{ path, percent }` while a film is sampled, `{ path, ready }`
+// / `{ path, itemError }` per film, `{ percent }` for the batch, then
+// `{ percent: 100, done: true, failures }`. The task's `meta.filmStripe` mirrors the run
+// over the `system-status` channel for admin forms that did not start it.
 app.post('/api/backend/assets/videos/film-stripe/prepare', async (req, res) => {
   const body = req.body as { paths?: unknown; force?: unknown };
   const paths = Array.isArray(body.paths)
@@ -3615,12 +3640,26 @@ app.post('/api/backend/assets/videos/film-stripe/prepare', async (req, res) => {
     try { res.write(`data: ${JSON.stringify(data)}\n\n`); } catch { /* client gone */ }
   };
 
-  const taskId = bgTaskQueue('film-stripe', `Filmstreifen berechnen: ${paths.length} ${paths.length === 1 ? 'Film' : 'Filme'}`, `0/${paths.length}`);
+  const run: NonNullable<BackgroundTaskMeta['filmStripe']> = { paths, done: 0, failed: [] };
+  const taskId = bgTaskQueue('film-stripe', `Filmstreifen berechnen: ${paths.length} ${paths.length === 1 ? 'Film' : 'Filme'}`, `0 % · Film 1/${paths.length}`, { filmStripe: run });
   bgTaskMarkRunning(taskId);
-  let done = 0;
+  send({ taskId });
+  // The batch percent leads the detail: the System tab reads the first `nn %` for its bar
+  // and its ETA, which must cover the whole batch, not the film being sampled.
+  const updateTask = () => {
+    const filmPercent = run.currentPercent ?? 0;
+    const batchPercent = Math.floor(((run.done + filmPercent / 100) / paths.length) * 100);
+    const film = run.current
+      ? ` · Film ${run.done + 1}/${paths.length} · ${path.basename(run.current)} ${filmPercent} %`
+      : ` · ${run.done}/${paths.length} Filme`;
+    bgTaskUpdate(taskId, `${batchPercent} %${film}`);
+  };
   let failures = 0;
   for (const relPath of paths) {
     let lastPercent = -1;
+    run.current = relPath;
+    run.currentPercent = 0;
+    updateTask();
     try {
       await prepareFilmStripe(relPath, {
         force,
@@ -3628,18 +3667,23 @@ app.post('/api/backend/assets/videos/film-stripe/prepare', async (req, res) => {
           const percent = Math.floor((n / total) * 100);
           if (percent === lastPercent) return;
           lastPercent = percent;
+          run.currentPercent = percent;
           send({ path: relPath, percent });
-          bgTaskUpdate(taskId, `${done}/${paths.length} · ${path.basename(relPath)} ${percent} %`);
+          updateTask();
         },
       });
       send({ path: relPath, ready: true });
     } catch (err) {
       failures++;
-      send({ path: relPath, itemError: (err as Error).message });
+      const message = (err as Error).message;
+      run.failed.push({ path: relPath, error: message });
+      send({ path: relPath, itemError: message });
     }
-    done++;
-    send({ percent: Math.round((done / paths.length) * 100) });
-    bgTaskUpdate(taskId, `${done}/${paths.length}`);
+    run.done++;
+    delete run.current;
+    delete run.currentPercent;
+    send({ percent: Math.round((run.done / paths.length) * 100) });
+    updateTask();
   }
   send({ percent: 100, done: true, failures });
   if (failures > 0 && failures === paths.length) bgTaskError(taskId, 'Alle fehlgeschlagen'); else bgTaskDone(taskId);

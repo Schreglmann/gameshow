@@ -2067,6 +2067,8 @@ paths:
         keeps every 5th frame as a still. Resolves each source from local or the NAS
         mount; the result is cached locally and is the only thing the show reads. A
         stripe that already matches its video file is kept unless `force`. Streams SSE:
+        `data: { taskId }` first (the `film-stripe` background task whose `meta.filmStripe`
+        mirrors the run on `system-status`),
         `data: { path, percent }` while a film is sampled, `data: { path, ready: true }` or
         `data: { path, itemError }` per film (a failure does not abort the batch),
         `data: { percent }` for the batch, then `data: { percent: 100, done: true, failures }`.
@@ -5565,6 +5567,26 @@ components:
                       end: { type: number }
                       track: { type: integer }
                       kind: { type: string, enum: [compressed, sdr] }
+                      filmStripe:
+                        type: object
+                        description: >-
+                          State of a `film-stripe` batch, so an admin form that did not start
+                          it can follow it. Films run in `paths` order: the first `done` of them
+                          are finished.
+                        required: [paths, done, failed]
+                        properties:
+                          paths: { type: array, items: { type: string } }
+                          done: { type: integer }
+                          failed:
+                            type: array
+                            items:
+                              type: object
+                              required: [path, error]
+                              properties:
+                                path: { type: string }
+                                error: { type: string }
+                          current: { type: string, description: "Film being sampled." }
+                          currentPercent: { type: integer, description: "Progress of the current film, 0–100." }
             whisperJobs:
               type: array
               items:

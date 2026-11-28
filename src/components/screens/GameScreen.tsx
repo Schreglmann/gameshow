@@ -113,7 +113,8 @@ export default function GameScreen() {
   // changes on disk, so typo fixes / appended questions / a reordered gameOrder
   // apply to the running game without a reload.
   useWsChannel<ContentChangedPayload>('content-changed', (payload) => {
-    if (payload?.config || payload?.games) loadGame(false);
+    // `filmStripes`: a stripe was computed — the film-stripe game's questions carry it.
+    if (payload?.config || payload?.games || payload?.filmStripes) loadGame(false);
   });
 
   // Recover edits missed while the socket was down. `content-changed` is

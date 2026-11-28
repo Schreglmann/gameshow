@@ -33,7 +33,7 @@
  *   gm-presence                 — server → all clients ({ connected: boolean }); cached last-value
  *   show-hold                   — gamemaster → show ({ active, message? }); panic/pause hold overlay; cached last-value
  *   show-controls-hidden        — gamemaster → show ({ hidden }); hide the show's own control buttons; cached last-value
- *   content-changed             — server → all clients; file watcher fired (config/theme/games changed on disk); NOT cached
+ *   content-changed             — server → all clients; file watcher fired (config/theme/games changed on disk) or a film stripe finished (filmStripes); NOT cached
  *
  * Client→server meta messages (not channels — ride on the same socket):
  *   { type: 'show-register', id } — show PWA announces itself on every connect. `id` is a

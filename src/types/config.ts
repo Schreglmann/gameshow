@@ -986,4 +986,7 @@ export interface ContentChangedPayload {
   theme?: boolean;
   /** a games/*.json changed → re-fetch the current game. */
   games?: boolean;
+  /** a film stripe finished computing → re-fetch the current game (its questions carry
+   *  the cached stripe). Sent by the build, not the file watcher. */
+  filmStripes?: boolean;
 }

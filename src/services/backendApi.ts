@@ -823,6 +823,8 @@ export interface FilmStripeStatus {
 }
 
 export interface FilmStripePrepareEvent {
+  /** First event: the background task the run is tracked under in `system-status`. */
+  taskId?: string;
   /** Relative video path the event is about; absent on batch-level events. */
   path?: string;
   /** With `path`: progress of that film. Without: progress of the whole batch. */
@@ -832,6 +834,16 @@ export interface FilmStripePrepareEvent {
   itemError?: string;
   done?: boolean;
   failures?: number;
+}
+
+/** A film-stripe batch as the `system-status` channel carries it (`meta.filmStripe` of a
+ *  `film-stripe` background task). Films run in `paths` order: the first `done` are finished. */
+export interface FilmStripeRunMeta {
+  paths: string[];
+  done: number;
+  failed: Array<{ path: string; error: string }>;
+  current?: string;
+  currentPercent?: number;
 }
 
 /** Stripe status per relative video path. */
@@ -1763,6 +1775,7 @@ export interface SystemStatusResponse {
         end?: number;
         track?: number;
         kind?: 'compressed' | 'sdr';
+        filmStripe?: FilmStripeRunMeta;
       };
     }>;
     whisperJobs?: Array<{ video: string; language: string; status: string; phase?: string; percent: number; elapsed: number; error?: string }>;
