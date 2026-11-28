@@ -50,6 +50,10 @@ Players are compared by registry id, so a renamed player is still the same playe
 
 **Already-played gameshows hide all overlap badges.** When the gameshow card being viewed is itself before the active gameshow in config order (it has already happened), the planning aids no longer apply, so the overlap badges + provenance are hidden everywhere in that card (game-order rows, comboboxes, Planung overview). Only the active gameshow and upcoming ones show badges.
 
+## Spiele tab
+
+The admin **Spiele** list shows the per-game badge (same aggregation as the "Spiel hinzufügen…" picker) against the **active** gameshow, and can sort by it or filter to Neu / Ungespielt. See [admin-games-list.md](admin-games-list.md).
+
 ## Game editor: "Bereits gespielt von"
 
 The game editor (`GameEditor` → `InstanceEditor`) shows, per instance, a read-only derived list of which gameshows used that exact instance and their rosters — split into **Bereits gespielt** (happened shows) and **Eingeplant** (upcoming shows). Backed by `instanceUsage(ref, gameshows, activeGameshow)` in `src/utils/playerStats.ts`; `GameEditor` loads `gameshows` + `activeGameshow` from `fetchConfig()` and passes the per-instance result down as the `instanceUsage` prop.

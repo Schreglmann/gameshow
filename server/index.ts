@@ -54,6 +54,7 @@ import {
 } from './random-frame-prerender.js';
 import { setupWebSocket, broadcast, broadcastThrottled } from './ws.js';
 import { startContentWatch } from './content-watch.js';
+import { gameCreatedTimes } from './game-created-at.js';
 import { isGitCryptBlob, loadConfigWithFallback, ensureConfigFile, DEFAULT_GLOBAL_RULES } from './clean-install.js';
 import { pruneGameOrder, parseGameRef, isRefToGame, isRefToInstance, requalifyBareRefs } from './game-order.js';
 import { convertToMultiInstance, countQuestions, selectableInstanceKeys, gameshowPlayedContent } from './game-file.js';
@@ -4337,10 +4338,21 @@ app.get('/api/backend/games', async (_req, res) => {
   try {
     const files = await readdir(GAMES_DIR);
     const jsonFiles = files.filter(f => f.endsWith('.json') && !f.includes('.fingerprints.'));
+    // First-added time per file from git; files git doesn't know fall back to the
+    // file's own times. See specs/admin-games-list.md.
+    const createdTimes = await gameCreatedTimes(ROOT_DIR, path.relative(ROOT_DIR, GAMES_DIR) || 'games');
 
     const results = await Promise.all(
       jsonFiles.map(async (file): Promise<GameFileSummary | null> => {
         const fileName = file.replace('.json', '');
+        let modifiedAt: number | undefined;
+        let createdAt: number | undefined;
+        try {
+          const st = await stat(path.join(GAMES_DIR, file));
+          modifiedAt = Math.round(st.mtimeMs);
+          createdAt = createdTimes.get(fileName)
+            ?? Math.round(st.birthtimeMs > 0 ? Math.min(st.birthtimeMs, st.mtimeMs) : st.mtimeMs);
+        } catch { /* timestamps are optional */ }
         try {
           const raw = await readFile(path.join(GAMES_DIR, file));
           if (isGitCryptBlob(raw)) return null;
@@ -4395,6 +4407,8 @@ app.get('/api/backend/games', async (_req, res) => {
             disabled,
             disabledInstances,
             scoringModes,
+            modifiedAt,
+            createdAt,
           };
         } catch (err) {
           console.warn(`Skipping invalid game file "${file}": ${(err as Error).message}`);
@@ -4405,6 +4419,8 @@ app.get('/api/backend/games', async (_req, res) => {
             instances: [],
             isSingleInstance: true,
             parseError: (err as Error).message,
+            modifiedAt,
+            createdAt,
           };
         }
       })

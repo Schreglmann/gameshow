@@ -11,6 +11,7 @@ import { JOKER_CATALOG } from '@/data/jokers';
 import JokerIcon from '@/components/common/JokerIcon';
 import { useTheme } from '@/context/ThemeContext';
 import { useConfirm } from './ConfirmContext';
+import { OVERLAP_BADGE, OVERLAP_BADGE_GAME, OVERLAP_ORDER, gameRefs } from './overlapBadges';
 import { openPlayer } from './openPlayer';
 import { adminLabel, fullName, nameKey, normalizePlayerName, playerMatchesQuery } from '@/utils/playerNames';
 import { playerById, playerLabel } from '@/utils/playerRegistry';
@@ -35,12 +36,6 @@ const PlayerRegistryContext = createContext<ReadonlyMap<string, Player>>(new Map
 //
 // "Played" is derived from gameshow membership + config order, not a per-game
 // field — see src/utils/playerStats.ts and specs/game-planning.md.
-
-/** Fully-qualified refs for every selectable instance of a game (single → [fileName]). */
-function gameRefs(g: GameFileSummary): string[] {
-  if (g.isSingleInstance) return [g.fileName];
-  return g.instances.filter(i => i !== 'template').map(i => `${g.fileName}/${i}`);
-}
 
 /** Instance keys offered in the add-to-gameshow pickers: non-template, non-disabled.
  *  See specs/game-disable.md. */
@@ -67,14 +62,6 @@ function overlapTitle(
   }
   return base;
 }
-
-const OVERLAP_BADGE: Record<Overlap, { label: string; className: string; title: string }> = {
-  fresh:   { label: 'Neu',        className: 'overlap-fresh',   title: 'Noch nie in einer früheren Gameshow gespielt' },
-  none:    { label: 'Ungespielt', className: 'overlap-none',    title: 'Früher gespielt, aber mit anderen Spielern' },
-  planned: { label: 'Eingeplant', className: 'overlap-planned', title: 'In einer folgenden Gameshow mit gemeinsamen Spielern eingeplant' },
-  partial: { label: 'Teilweise',  className: 'overlap-partial', title: 'Manche der aktuellen Spieler kennen das Spiel schon' },
-  full:    { label: 'Gespielt',   className: 'overlap-full',    title: 'Alle aktuellen Spieler kennen das Spiel bereits' },
-};
 
 // ── Players combobox (multi-select with tag chips) ───────────────────────────
 //
@@ -303,14 +290,6 @@ interface ComboboxProps {
   ctx?: OverlapContext;
 }
 
-const OVERLAP_BADGE_COMBOBOX: Record<Overlap, { label: string; className: string; title: string }> = {
-  fresh:   { label: 'Neu',        className: 'overlap-fresh',   title: 'Noch nie in einer früheren Gameshow gespielt' },
-  none:    { label: 'Ungespielt', className: 'overlap-none',    title: 'Früher gespielt, aber mit anderen Spielern' },
-  planned: { label: 'Eingeplant', className: 'overlap-planned', title: 'In einer folgenden Gameshow mit gemeinsamen Spielern eingeplant' },
-  partial: { label: 'Gemischt',   className: 'overlap-partial', title: 'Manche der aktuellen Spieler kennen das Spiel schon' },
-  full:    { label: 'Gespielt',   className: 'overlap-full',    title: 'Alle aktuellen Spieler kennen das Spiel bereits' },
-};
-
 function GameCombobox({ games, value, onChange, placeholder = 'Spiel suchen...', ctx }: ComboboxProps) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
@@ -372,7 +351,7 @@ function GameCombobox({ games, value, onChange, placeholder = 'Spiel suchen...',
           ) : (
             filtered.map((g, i) => {
               const ol = ctx ? classifyGameOverlap(gameRefs(g), ctx) : null;
-              const badge = ol ? OVERLAP_BADGE_COMBOBOX[ol] : null;
+              const badge = ol ? OVERLAP_BADGE_GAME[ol] : null;
               return (
                 <button
                   key={g.fileName}
@@ -449,7 +428,7 @@ function InstanceCombobox({ instances, value, onChange, gameData, ctx, placehold
           {instances.map((inst, i) => {
             const ref = gameData ? `${gameData.fileName}/${inst}` : inst;
             const ol = ctx ? classifyOverlap(ref, ctx) : null;
-            const badge = (ol && (ol === 'fresh' || ctx!.currentPlayerIds.length > 0)) ? OVERLAP_BADGE_COMBOBOX[ol] : null;
+            const badge = (ol && (ol === 'fresh' || ctx!.currentPlayerIds.length > 0)) ? OVERLAP_BADGE_GAME[ol] : null;
             return (
               <button
                 key={inst}
@@ -545,9 +524,8 @@ function PlanningOverview({ games, ctx, gameshows, addedRefs, onAdd, showBadges 
         }
       }
     }
-    const order: Record<Overlap, number> = { fresh: 0, none: 1, planned: 2, partial: 3, full: 4 };
     result.sort((a, b) => {
-      const d = order[a.overlap] - order[b.overlap];
+      const d = OVERLAP_ORDER[a.overlap] - OVERLAP_ORDER[b.overlap];
       return d !== 0 ? d : a.title.localeCompare(b.title);
     });
     return result;

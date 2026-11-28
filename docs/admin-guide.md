@@ -256,6 +256,19 @@ Go to the **Spiele tab**.
 ![Games Tab](./screenshots/admin-games.png)
 > *Add screenshot: `docs/screenshots/admin-games.png` — the games list with search and game type badges*
 
+### Sorting and filtering the list
+
+The button next to the search field (it shows the current sort, e.g. `Name ↓`) opens sorting and filtering:
+
+- **Sort** by **Name** (default), **Typ**, **Geändert**, **Erstellt** or **Status** (Neu first, Gespielt last). Click the active sort again to reverse it. You can also click a column heading (Titel, Status, Typ, or the date) to sort by it. Sorting by **Geändert** or **Erstellt** adds a column with that date; Name and Status show no date.
+- **Filter** — tick one or more of **Neu**, **Ungespielt**, **Gemischt** and **Gespielt** to show only those games. The button then names the filter too, e.g. `Name ↓ · Neu`.
+
+Sort and filter stay set when you switch to another admin tab and come back; reloading the page resets them.
+
+The status is the same badge the gameshow's "Spiel hinzufügen…" picker shows, worked out for the **active gameshow** and its players: **Neu** = never played in an earlier gameshow, **Ungespielt** = played before, but not by these players, **Gemischt** = some of these players know it (for a game with several instances: some instances), **Gespielt** = all of these players already played it. The **Status** sort orders the list by this status, in that order. Without an active gameshow the filter and the Status sort are hidden.
+
+"Erstellt" is the date the game file was first committed to git; a game that is not committed yet shows its last save.
+
 ### Creating a new game
 
 Click **"New game"**. A dialog appears:

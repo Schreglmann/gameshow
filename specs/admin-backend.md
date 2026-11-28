@@ -38,7 +38,8 @@ A full content management system accessible at `/admin` that allows the gameshow
 ### Games
 - Table of all `.json` game files from `/games/` (git-crypt-encrypted blobs are skipped)
 - When the list is empty, a **"Beispiele erstellen"** button generates example games for every type (`POST /api/backend/games/examples`) — see [example-games.md](example-games.md)
-- Each row: filename, type badge, title, instance names, Edit / Delete buttons
+- Each row: title, status badge (Neu / Ungespielt / … against the active gameshow), type badge, instance names, date, Delete button
+- One sort + filter button next to the search (Assets-tab style popover): sort by Name · Typ · Geändert · Erstellt · Status (also by clicking a column heading), filter Neu / Ungespielt / Gemischt / Gespielt (shown on the button, e.g. `Name ↓ · Neu`); kept across tab switches — see [admin-games-list.md](admin-games-list.md)
 - Edit opens `GameEditor`:
   - Base fields: title, type, rules (add/remove/reorder), randomizeQuestions toggle
   - Changing the **type** of a game that already has questions shows a confirmation ("Spieltyp ändern?" — vorhandene Fragen gehen verloren), because the existing questions are interpreted against a different schema. On confirm the content is **reset to the clean per-type template** (`GAME_TYPE_TEMPLATES`, a single empty `v1` instance), keeping only title + theme — otherwise the new type's question form would receive incompatible data and render a blank page. On cancel the type is left unchanged. No warning (and no reset) for an already-empty game. **Exception — compatible types:** when the old and new types share a question shape (currently only `simple-quiz` ↔ `bet-quiz`, both `SimpleQuizQuestion`), the switch is silent and the questions/instances are kept (`gameTypesShareQuestionShape` in `src/data/gameTypeInfo.ts`).

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import GamesTab from '@/components/backend/GamesTab';
+import GamesTab, { resetGamesListPrefs } from '@/components/backend/GamesTab';
 import { GameProvider } from '@/context/GameContext';
 import type { GameFileSummary } from '@/types/config';
 
@@ -63,6 +63,7 @@ function renderGamesTab(props?: Partial<Parameters<typeof GamesTab>[0]>) {
 describe('GamesTab', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetGamesListPrefs();
     mockFetchGames.mockResolvedValue(sampleGames);
     mockFetchGame.mockResolvedValue(gameData);
     mockCreateGame.mockResolvedValue(undefined);
@@ -125,9 +126,8 @@ describe('GamesTab', () => {
 
   it('renders dash for single-instance games', async () => {
     renderGamesTab();
-    await waitFor(() => {
-      expect(screen.getByText('—')).toBeInTheDocument();
-    });
+    const row = (await screen.findByText('Audio Game')).closest('.games-list-row') as HTMLElement;
+    expect(row.querySelector('.games-list-instances')?.textContent).toBe('—');
   });
 
   it('renders "Spiele" tab title', async () => {
@@ -327,7 +327,9 @@ describe('GamesTab', () => {
     await waitFor(() => {
       expect(screen.getAllByTitle('Löschen')).toHaveLength(2);
     });
-    await user.click(screen.getAllByTitle('Löschen')[0]);
+    // Default sort is by title: "Audio Game" before "Quiz 1".
+    const quizRow = screen.getByText('Quiz 1').closest('.games-list-row') as HTMLElement;
+    await user.click(quizRow.querySelector('[title="Löschen"]') as HTMLElement);
     await waitFor(() => {
       expect(mockDeleteGame).toHaveBeenCalledWith('quiz-1');
     });

@@ -54,7 +54,7 @@ Source files (line numbers link to the declaration):
 
 | Method | Path | Zone | Line | Purpose | Request shape | Response shape |
 |--------|------|------|------|---------|---------------|----------------|
-| `GET` | `/api/backend/games` | `admin` | [2219](../../server/index.ts#L2219) | List every game file with metadata (file, type, title, instances[], whether it's a template). | — | `{ games: GameFileSummary[] }` |
+| `GET` | `/api/backend/games` | `admin` | [2219](../../server/index.ts#L2219) | List every game file with metadata (file, type, title, instances[], whether it's a template, `modifiedAt` + `createdAt` — see [admin-games-list.md](../admin-games-list.md)). | — | `{ games: GameFileSummary[] }` |
 | `GET` | `/api/backend/games/:fileName` | `admin` | [2269](../../server/index.ts#L2269) | Read a single game file verbatim. | Path: `fileName: string` | Raw game JSON (`GameConfig` or `MultiInstanceGameFile`) |
 | `PUT` | `/api/backend/games/:fileName` | `admin` | [2281](../../server/index.ts#L2281) | Write a game file atomically (tmp+rename). Validates against game-type schemas. | Path: `fileName`. Body: raw game JSON. | `{ ok: true }` or `{ error: string }` |
 | `POST` | `/api/backend/games/:fileName/instances/:instance/unlock-precheck` | `admin` | [2381](../../server/index.ts#L2381) | Pre-flight for video-guess instance-lock: lists missing segment caches and offline references that would break the game. | Path: `fileName`, `instance` | `{ missing: string[]; offlineReferences: string[] }` |

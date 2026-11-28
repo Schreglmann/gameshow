@@ -758,6 +758,10 @@ export interface GameFileSummary {
    */
   scoringModes?: Record<string, string>;
   parseError?: string; // set when the JSON file could not be parsed
+  /** File mtime, epoch ms. See specs/admin-games-list.md. */
+  modifiedAt?: number;
+  /** When the file was first added to git (epoch ms), else its own birthtime/mtime. See specs/admin-games-list.md. */
+  createdAt?: number;
 }
 
 // Flat format used in actual quizjagd JSON files

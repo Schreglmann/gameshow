@@ -3892,6 +3892,16 @@ components:
             Instance keys (excluding `template`) whose instance object is
             marked `disabled`. Multi-instance games only.
         parseError: { type: string }
+        modifiedAt:
+          type: number
+          description: File mtime in epoch milliseconds.
+        createdAt:
+          type: number
+          description: |
+            When the file was first added to git (author time of the adding
+            commit, following renames), in epoch milliseconds. Files git does not
+            know yet fall back to min(birthtime, mtime). See
+            [specs/admin-games-list.md](../admin-games-list.md).
 
     BaseGameConfig:
       type: object
