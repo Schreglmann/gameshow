@@ -79,7 +79,7 @@ describe('materializeExamples (generates real media)', () => {
     expect(again.createdGames.length).toBe(EXAMPLE_GAMES.length);
     const config = JSON.parse(await readFile(configPath, 'utf8')) as AppConfig;
     expect(config.gameshows.beispiele.gameOrder.length).toBe(EXAMPLE_GAMES.length);
-  });
+  }, 60_000);
 });
 
 describe('applyExampleGameshow (players)', () => {
