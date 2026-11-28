@@ -378,14 +378,8 @@ function GuessingInner({ questions, order, gameTitle, autoScoring, gameIndex, ga
         submitLabel: 'Tipp Abgeben',
       });
     }
-    if (phase === 'result') {
-      controls.push({
-        type: 'button',
-        id: 'next-question',
-        label: 'Nächste Frage',
-        variant: 'primary',
-      });
-    }
+    // Result phase: no own advance button — the nav row's "Weiter" (→ handleNext)
+    // is the single advance control (specs/gamemaster-controls.md).
     if (assetFailed) {
       controls.push({ type: 'button', id: 'asset-reload', label: 'Asset neu laden' });
     }
@@ -416,6 +410,7 @@ function GuessingInner({ questions, order, gameTitle, autoScoring, gameIndex, ga
       setGuesses(merged);
       doSubmit(merged);
     } else if (cmd.controlId === 'next-question') {
+      // Legacy id: a gamemaster on an older cached bundle still shows this button.
       handleNext();
     } else if (cmd.controlId === 'audio-playpause') {
       handleAudioPlayPause();

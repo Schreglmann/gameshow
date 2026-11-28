@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { GameProvider } from '@/context/GameContext';
 import { MusicProvider } from '@/context/MusicContext';
 import FinalQuiz from '@/components/games/FinalQuiz';
+import * as backendSocket from '@/services/useBackendSocket';
 import type { FinalQuizConfig } from '@/types/config';
 
 vi.mock('@/services/api', () => ({
@@ -345,5 +346,58 @@ describe('FinalQuiz', () => {
       expect(img).toBeInTheDocument();
       expect(img.src).toContain('/images/final.jpg');
     });
+  });
+});
+
+/** Last `gamemaster-controls` payload published by the game. */
+type GmCtrl = { type: string; id: string; hideForward?: boolean };
+function lastGmControls(spy: { mock: { calls: unknown[][] } }): GmCtrl[] {
+  const calls = spy.mock.calls.filter(([ch]) => ch === 'gamemaster-controls');
+  return (calls[calls.length - 1]?.[1] as { controls?: GmCtrl[] })?.controls ?? [];
+}
+
+// The GM panel shows exactly one advance control per phase (specs/gamemaster-controls.md).
+describe('FinalQuiz — single GM advance control', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+  });
+
+  it('judging: nav "Weiter" is hidden until all teams are judged, and no extra next-question button exists', async () => {
+    const user = userEvent.setup();
+    const sendWsSpy = vi.spyOn(backendSocket, 'sendWs');
+    renderGame();
+    await waitFor(() => expect(screen.getByText('Final Round')).toBeInTheDocument());
+    await advanceToGame(user);
+    await waitFor(() => expect(screen.getByText('Example Q')).toBeInTheDocument());
+
+    // → betting
+    const div = document.createElement('div');
+    document.body.appendChild(div);
+    await user.click(div);
+    document.body.removeChild(div);
+
+    await waitFor(() => expect(screen.getByText('Antwort anzeigen')).toBeInTheDocument());
+    await user.type(screen.getByPlaceholderText('Punkte Team 1'), '5');
+    await user.type(screen.getByPlaceholderText('Punkte Team 2'), '3');
+    await user.click(screen.getByText('Antwort anzeigen'));
+
+    await waitFor(() => expect(screen.getAllByText('Richtig').length).toBeGreaterThan(0));
+    await waitFor(() => {
+      const controls = lastGmControls(sendWsSpy);
+      expect(controls.find(c => c.id === 'nav')?.hideForward).toBe(true);
+      expect(controls.some(c => c.id === 'next-question')).toBe(false);
+    });
+
+    const richtigButtons = screen.getAllByText('Richtig');
+    await user.click(richtigButtons[0]);
+    await user.click(richtigButtons[1]);
+
+    await waitFor(() => {
+      const controls = lastGmControls(sendWsSpy);
+      expect(controls.find(c => c.id === 'nav')?.hideForward).toBeFalsy();
+      expect(controls.some(c => c.id === 'next-question')).toBe(false);
+    });
+    sendWsSpy.mockRestore();
   });
 });

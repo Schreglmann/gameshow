@@ -7,6 +7,11 @@ import type { AssetFolder } from '@/types/config';
 export const RENDER_BOX_QUIZ = { w: 1920, h: 540 };
 export const RENDER_BOX_IMAGE_GUESS = { w: 1920, h: 648 };
 
+/** The DAM's "Niedrige Auflösung" rule: the image would be upscaled in `box`, i.e. both sides are smaller. */
+export function isLowResolution(dims: { w: number; h: number }, box: { w: number; h: number }): boolean {
+  return dims.w < box.w && dims.h < box.h;
+}
+
 // Collect all folder paths recursively.
 export function getAllFolderPaths(folders: AssetFolder[], prefix = ''): string[] {
   return folders.flatMap(f => {

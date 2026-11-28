@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { seedTeams, openShowHomeForm, isolateShowWsState } from '../_helpers/setup';
+import { seedTeams, openShowHomeForm, addShowPlayers, isolateShowWsState } from '../_helpers/setup';
 
 // Frontend (show) responsive coverage. Admin responsive lives in
 // ../admin/responsive.spec.ts. Source: previously tests/e2e/responsive.spec.ts.
@@ -68,8 +68,8 @@ test.describe('Gameshow — Responsive Home Screen', () => {
 
   test('phone: teams stack vertically after assignment', async ({ page }) => {
     await page.setViewportSize(PHONE);
-    const textarea = await openShowHomeForm(page);
-    await textarea.fill('Alice, Bob, Charlie, Dave');
+    await openShowHomeForm(page);
+    await addShowPlayers(page, 'Alice, Bob, Charlie, Dave');
     await page.locator('button:has-text("Teams zuweisen")').click();
     await expect(page.locator('#team1')).toBeVisible();
     await expect(page.locator('#team2')).toBeVisible();
@@ -81,8 +81,8 @@ test.describe('Gameshow — Responsive Home Screen', () => {
 
   test('desktop: teams are side by side after assignment', async ({ page }) => {
     await page.setViewportSize(DESKTOP);
-    const textarea = await openShowHomeForm(page);
-    await textarea.fill('Alice, Bob, Charlie, Dave');
+    await openShowHomeForm(page);
+    await addShowPlayers(page, 'Alice, Bob, Charlie, Dave');
     await page.locator('button:has-text("Teams zuweisen")').click();
     await expect(page.locator('#team1')).toBeVisible();
     await expect(page.locator('#team2')).toBeVisible();

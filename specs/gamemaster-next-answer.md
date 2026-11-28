@@ -11,7 +11,8 @@ hidden all answers via "Antworten verstecken" (see
 - [ ] The GM card shows the **current question text** above the current answer (the existing
   `.gamemaster-question` element, gated on `data.question`) for every game type that has a text
   question/prompt: simple-quiz, bet-quiz, final-quiz, guessing-game, video-guess, four-statements
-  (topic), q1 (Frage), fact-or-fake (the statement), quizjagd, ranking, wer-kennt-mehr, random-frame.
+  (topic), q1 (Frage), fact-or-fake (the statement), quizjagd, ranking, wer-kennt-mehr, random-frame, city-compass,
+  venn, film-stripe.
   This is unconditional — it is shown during the question phase, not only on reveal. The
   media-guess types with no text question (audio-guess, bandle, image-guess, colorguess) show no
   question line.
@@ -27,7 +28,7 @@ hidden all answers via "Antworten verstecken" (see
   the preview alone.
 - [ ] The preview works for every game type that iterates a linear `questions[]` list:
   simple-quiz, bet-quiz, final-quiz, guessing-game, audio-guess, video-guess, bandle,
-  image-guess, colorguess, four-statements, q1, fact-or-fake, ranking.
+  image-guess, colorguess, four-statements, q1, fact-or-fake, ranking, venn, film-stripe.
 - [ ] The preview is responsive (375 / 768 / 1024 / 1920px) and themed (visible at
   `/theme-showcase`).
 - [ ] The preview is GM-only — it does not affect the player-facing `/show` projector, and no

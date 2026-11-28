@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef, type FormEvent } from 'react';
+import { useState, useEffect, useRef, useCallback, type FormEvent } from 'react';
+import SuggestInput from './SuggestInput';
 import { useGamemasterAnswer, useGamemasterControls, useSendGamemasterCommand, requestShowReemit } from '@/hooks/useGamemasterSync';
 import { useGameContext } from '@/context/GameContext';
 import { getJoker } from '@/data/jokers';
 import JokerIcon from '@/components/common/JokerIcon';
 import type { JokerTeam } from '@/types/jokers';
-import type { GamemasterControl, GamemasterButtonDef, GamemasterInputDef } from '@/types/game';
+import type { GamemasterControl, GamemasterButtonDef, GamemasterGroupRename, GamemasterInputDef } from '@/types/game';
 import { PHASE_SCREEN_LABELS } from '@/types/game';
 import { toMediaSrc } from '@/utils/assetUrl';
 import CorrectAnswersTracker from '@/components/common/CorrectAnswersTracker';
@@ -16,6 +17,7 @@ import { teamDisplayOrder } from '@/utils/teamOrder';
 import { teamJokersUsed, teamKeys, trailingTeams } from '@/utils/teams';
 import '@/styles/gamemaster.css';
 import TeamDot from './TeamDot';
+import GmButtonMenu from './GmButtonMenu';
 
 /** Neutral stand-in for a masked answer text — never derived from the answer, so its
  *  length gives nothing away. */
@@ -27,13 +29,17 @@ interface GamemasterViewProps {
    *  info, next-question preview) so the host can show the GM screen to the players.
    *  See specs/gamemaster-hide-answers.md. */
   hideAnswers?: boolean;
+  /** Raised while a control's popover (a button `menu`) is open, so the
+   *  /gamemaster screen's document-level click/key handlers don't advance the
+   *  show behind it. See specs/team-management.md ("GM button menu"). */
+  onOverlayActiveChange?: (active: boolean) => void;
 }
 
 /**
  * Shared gamemaster view: answer card + controls panel.
  * Used by both /gamemaster (full-screen) and /admin#answers (embedded).
  */
-export default function GamemasterView({ showAnswerImages = false, hideAnswers = false }: GamemasterViewProps = {}) {
+export default function GamemasterView({ showAnswerImages = false, hideAnswers = false, onOverlayActiveChange }: GamemasterViewProps = {}) {
   const data = useGamemasterAnswer();
   const controlsData = useGamemasterControls();
   const sendCommand = useSendGamemasterCommand();
@@ -238,7 +244,7 @@ export default function GamemasterView({ showAnswerImages = false, hideAnswers =
               Starte ein Spiel in einem anderen Tab — die Lösung erscheint dann automatisch hier.
             </div>
             <div className="gamemaster-waiting-description">
-              Pfeiltasten und Klicks funktionieren wie im Frontend:
+              Sobald die Steuerung entsperrt ist, funktionieren Pfeiltasten und Klicks wie im Frontend:
               Pfeil rechts / Leertaste / Klick blättert weiter, Pfeil links zurück.
             </div>
           </div>
@@ -252,6 +258,7 @@ export default function GamemasterView({ showAnswerImages = false, hideAnswers =
               key={control.id}
               control={control}
               onCommand={sendCommand}
+              onOverlayActiveChange={onOverlayActiveChange}
             />
           ))}
         </div>
@@ -511,16 +518,17 @@ function JokerTeamCard({ team, label, enabled, used, canUseComeback, onToggle }:
 interface ControlRendererProps {
   control: GamemasterControl;
   onCommand: (controlId: string, value?: string | Record<string, string>) => void;
+  onOverlayActiveChange?: (active: boolean) => void;
 }
 
-function ControlRenderer({ control, onCommand }: ControlRendererProps) {
+function ControlRenderer({ control, onCommand, onOverlayActiveChange }: ControlRendererProps) {
   switch (control.type) {
     case 'nav':
       return <NavControl control={control} onCommand={onCommand} />;
     case 'button':
       return <ButtonControl control={control} onCommand={onCommand} />;
     case 'button-group':
-      return <ButtonGroupControl control={control} onCommand={onCommand} />;
+      return <ButtonGroupControl control={control} onCommand={onCommand} onOverlayActiveChange={onOverlayActiveChange} />;
     case 'input-group':
       return <InputGroupControl control={control} onCommand={onCommand} />;
     case 'info':
@@ -564,23 +572,47 @@ function ButtonControl({ control, onCommand }: {
   );
 }
 
-function ButtonGroupControl({ control, onCommand }: {
+function ButtonGroupControl({ control, onCommand, onOverlayActiveChange }: {
   control: Extract<GamemasterControl, { type: 'button-group' }>;
-  onCommand: (id: string) => void;
+  onCommand: (id: string, value?: string | Record<string, string>) => void;
+  onOverlayActiveChange?: (active: boolean) => void;
 }) {
+  // A button with a `menu` opens a popover instead of sending its own id.
+  const [openMenu, setOpenMenu] = useState<{ id: string; anchor: HTMLElement } | null>(null);
+  const closeMenu = useCallback(() => setOpenMenu(null), []);
+  const menuButton = openMenu ? control.buttons.find(b => b.id === openMenu.id) : undefined;
+  // The button vanished (e.g. the player was moved by another device): drop the menu.
+  const menuOpen = !!(openMenu && menuButton?.menu?.length);
+  useEffect(() => {
+    if (!onOverlayActiveChange) return;
+    onOverlayActiveChange(menuOpen);
+    return () => { if (menuOpen) onOverlayActiveChange(false); };
+  }, [menuOpen, onOverlayActiveChange]);
   return (
-    <div className="gm-button-group">
-      {control.label && <div className="gm-group-label">{control.label}</div>}
-      <div className="gm-button-row">
+    <div className={`gm-button-group${control.team ? ' gm-button-group--team' : ''}`} data-team={control.team}>
+      {control.rename ? (
+        <GroupLabelRename control={control} rename={control.rename} onCommand={onCommand} />
+      ) : control.label && (
+        <div className="gm-group-label">
+          {control.team && <TeamDot team={control.team} />}
+          {control.label}
+        </div>
+      )}
+      <div className={`gm-button-row${control.layout === 'grid' ? ' gm-button-row--grid' : ''}`}>
         {control.buttons.map((btn: GamemasterButtonDef) => {
           const variantClass = btn.variant ? ` gm-btn--${btn.variant}` : '';
           const activeClass = btn.active ? ' gm-btn--active' : '';
           return (
             <button
               key={btn.id}
-              className={`gm-btn${variantClass}${activeClass}${btn.sublabel ? ' gm-btn--stacked' : ''}`}
+              className={`gm-btn${variantClass}${activeClass}${btn.sublabel ? ' gm-btn--stacked' : ''}${openMenu?.id === btn.id ? ' gm-btn--menu-open' : ''}`}
               disabled={btn.disabled}
-              onClick={() => onCommand(btn.id)}
+              aria-haspopup={btn.menu ? 'menu' : undefined}
+              aria-expanded={btn.menu ? openMenu?.id === btn.id : undefined}
+              onClick={e => {
+                if (btn.menu?.length) setOpenMenu({ id: btn.id, anchor: e.currentTarget });
+                else onCommand(btn.id);
+              }}
             >
               <span className="gm-btn-label">{btn.label}</span>
               {btn.sublabel && <span className="gm-btn-sublabel">{btn.sublabel}</span>}
@@ -588,7 +620,118 @@ function ButtonGroupControl({ control, onCommand }: {
           );
         })}
       </div>
+      {menuOpen && openMenu && menuButton && (
+        <GmButtonMenu
+          anchor={openMenu.anchor}
+          title={menuButton.menuTitle ?? menuButton.label}
+          items={menuButton.menu!}
+          onSelect={onCommand}
+          onClose={closeMenu}
+        />
+      )}
     </div>
+  );
+}
+
+/**
+ * A button-group label that is edited in place (the team name on a start-screen
+ * team card). Tap → input; Enter, ✓ or a tap outside saves, Escape or ✕
+ * cancels. The draft lives here — the show only gets `<id>:change` for the
+ * long-name hint and `<id>` on save. See specs/team-management.md.
+ */
+function GroupLabelRename({ control, rename, onCommand }: {
+  control: Extract<GamemasterControl, { type: 'button-group' }>;
+  rename: GamemasterGroupRename;
+  onCommand: (id: string, value?: string | Record<string, string>) => void;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const editing = draft !== null;
+
+  const open = () => {
+    setDraft(rename.value);
+    onCommand(`${rename.id}:change`, { name: rename.value });
+  };
+  const change = (name: string) => {
+    setDraft(name);
+    onCommand(`${rename.id}:change`, { name });
+  };
+  const save = () => {
+    if (draft === null) return;
+    setDraft(null);
+    if (draft !== rename.value) onCommand(rename.id, { name: draft });
+  };
+  const saveRef = useRef(save);
+  saveRef.current = save;
+
+  // A tap outside the editor saves. This is a document click listener, not
+  // `onBlur`: on iPad a tap on empty space does not reliably blur the input,
+  // and a blur-driven save unmounts the editor before the tap's `click`, which
+  // then reached GamemasterScreen's document handler and advanced the show. In
+  // the capture phase we see the click first, so a tap on empty space is kept
+  // from advancing; a tap on another control still does what it does.
+  useEffect(() => {
+    if (!editing) return;
+    const onClick = (e: MouseEvent) => {
+      const target = e.target as Element | null;
+      if (!target || formRef.current?.contains(target)) return;
+      if (!target.closest('button, input, textarea, select, a, [role="button"]')) e.stopPropagation();
+      saveRef.current();
+    };
+    document.addEventListener('click', onClick, true);
+    return () => document.removeEventListener('click', onClick, true);
+  }, [editing]);
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        className="gm-group-label gm-group-label--editable"
+        aria-label={`${rename.ariaLabel ?? control.label ?? ''} ändern`}
+        title="Teamname ändern"
+        onClick={open}
+      >
+        {control.team && <TeamDot team={control.team} />}
+        <span className="gm-group-label-text">{control.label}</span>
+        <svg className="gm-group-label-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M12 20h9" />
+          <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+        </svg>
+      </button>
+    );
+  }
+
+  return (
+    <form
+      ref={formRef}
+      className="gm-group-rename"
+      data-gm-no-nav
+      onSubmit={e => { e.preventDefault(); save(); }}
+    >
+      <div className="gm-group-rename-row">
+        {control.team && <TeamDot team={control.team} />}
+        <input
+          className="gm-input gm-group-rename-input"
+          autoFocus
+          value={draft}
+          placeholder={rename.placeholder}
+          aria-label={rename.ariaLabel}
+          autoComplete="off"
+          enterKeyHint="done"
+          onChange={e => change(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Escape') { e.preventDefault(); setDraft(null); }
+          }}
+        />
+        <button type="submit" className="gm-btn gm-btn--primary gm-group-rename-btn" aria-label="Speichern" title="Speichern">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+        </button>
+        <button type="button" className="gm-btn gm-group-rename-btn" aria-label="Abbrechen" title="Abbrechen" onClick={() => setDraft(null)}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+        </button>
+      </div>
+      {rename.hint && <div className="gm-group-rename-hint" role="status">{rename.hint}</div>}
+    </form>
   );
 }
 
@@ -623,26 +766,49 @@ function InputGroupControl({ control, onCommand }: {
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     onCommand(control.id, values);
+    // Add fields start empty for the next name. See specs/players.md.
+    if (control.clearOnSubmit) setValues(Object.fromEntries(control.inputs.map(i => [i.id, ''])));
   };
 
   return (
     <form className="gm-input-group" onSubmit={handleSubmit}>
       {control.inputs.map((input: GamemasterInputDef) => (
         <div key={input.id} className="gm-input-field">
-          <label className="gm-input-label">{input.label}</label>
-          <input
-            className="gm-input"
-            type={input.inputType}
-            placeholder={input.placeholder}
-            value={values[input.id] ?? ''}
-            onFocus={() => { focusedRef.current = true; }}
-            onBlur={() => { focusedRef.current = false; }}
-            onChange={e => {
-              const next = { ...values, [input.id]: e.target.value };
-              setValues(next);
-              if (input.emitOnChange) onCommand(`${control.id}:change`, next);
-            }}
-          />
+          <label className="gm-input-label" htmlFor={`gm-input-${control.id}-${input.id}`}>{input.label}</label>
+          {input.suggestions ? (
+            // Player add fields: registry autocomplete. A pick fills in the
+            // name; submitting sends it like typed text. See specs/players.md.
+            <SuggestInput
+              id={`gm-input-${control.id}-${input.id}`}
+              className="gm-input"
+              type={input.inputType}
+              placeholder={input.placeholder}
+              value={values[input.id] ?? ''}
+              suggestions={input.suggestions}
+              onFocus={() => { focusedRef.current = true; }}
+              onBlur={() => { focusedRef.current = false; }}
+              onValueChange={text => {
+                const next = { ...values, [input.id]: text };
+                setValues(next);
+                if (input.emitOnChange) onCommand(`${control.id}:change`, next);
+              }}
+            />
+          ) : (
+            <input
+              id={`gm-input-${control.id}-${input.id}`}
+              className="gm-input"
+              type={input.inputType}
+              placeholder={input.placeholder}
+              value={values[input.id] ?? ''}
+              onFocus={() => { focusedRef.current = true; }}
+              onBlur={() => { focusedRef.current = false; }}
+              onChange={e => {
+                const next = { ...values, [input.id]: e.target.value };
+                setValues(next);
+                if (input.emitOnChange) onCommand(`${control.id}:change`, next);
+              }}
+            />
+          )}
         </div>
       ))}
       <button

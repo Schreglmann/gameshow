@@ -137,6 +137,18 @@ export const GAME_TYPE_INFO: Record<GameType, GameTypeInfo> = {
     supportedTeamCounts: ANY_TEAM_COUNT,
     usesCorrectAnswerTally: true,
   },
+  'venn': {
+    label: 'Schnittmenge',
+    description: 'Zwei Kreise, zwei Kategorien – welcher Begriff passt in beide?',
+    supportedTeamCounts: ANY_TEAM_COUNT,
+    usesCorrectAnswerTally: true,
+  },
+  'film-stripe': {
+    label: 'Filmstreifen',
+    description: 'Ein ganzer Film als Farbstreifen – welcher Film ist das?',
+    supportedTeamCounts: ANY_TEAM_COUNT,
+    usesCorrectAnswerTally: true,
+  },
 };
 
 /**
@@ -163,6 +175,8 @@ export const GAME_TYPE_TEMPLATES: Record<GameType, object> = {
   'wer-kennt-mehr': { type: 'wer-kennt-mehr', rules: [], instances: { v1: { questions: [] } } },
   'random-frame': { type: 'random-frame', rules: [], instances: { v1: { questions: [] } } },
   'city-compass': { type: 'city-compass', rules: [], instances: { v1: { questions: [] } } },
+  'venn': { type: 'venn', rules: [], instances: { v1: { questions: [] } } },
+  'film-stripe': { type: 'film-stripe', rules: [], instances: { v1: { questions: [] } } },
 };
 
 /**

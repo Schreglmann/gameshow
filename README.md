@@ -29,13 +29,9 @@ Open the app in a browser. You will see the **Home Screen**.
 
 ![Home Screen](./docs/screenshots/home-screen.png)
 
-Enter the names of all players into the text field, separated by commas:
+The players configured for the gameshow are listed on the home screen. Every player has a first name, a surname and a nickname (Spitzname); the show calls them by nickname, and only when two players share a nickname does it add as much of the surname as it takes to tell them apart ("Michi H." / "Michi P."). Add anyone else with the **Name hinzufügen** field, which suggests the known players while you type; a name that isn't known is added as written (several at once separated by commas). Remove a name with the ✕ next to it. A player who is already in the draw can't be added twice. Every add and remove on the show or the gamemaster also updates the gameshow's player list in the admin; a new name becomes a player with only a nickname, to be completed in the **Spieler** tab.
 
-```
-Anna, Ben, Clara, David
-```
-
-Click **Weiter**. The app randomly assigns players to **Team 1** and **Team 2**.
+The app draws the teams in the background straight away and keeps them hidden. The gamemaster sees the draw on their phone: tapping a player opens a menu to move them to another team or remove them, and **Neu mischen** draws again. Adding or removing a player later only places or removes that one player. Click **Teams zuweisen** to show the teams; moving players and **Neu mischen** keep working after that. Revealed too early? **Zuweisung verbergen** on the gamemaster puts the show back to the player list without changing the draw.
 
 > **Tip:** If the team randomization screen does not appear, the host has disabled it — the game starts directly.
 
@@ -188,6 +184,14 @@ The host picks a video; players see a **single random still frame** pulled from 
 
 A compass rose with a `?` in the middle and named cities around it, each at the true compass bearing it has from the hidden city — Prague really is drawn north-west of Vienna, Budapest east of it. Teams work out which city is in the middle from those directions alone; the host can add the distance to each name to make it easier, or reveal the surrounding cities one at a time. Everything is drawn as SVG from coordinates in the game file, so it works with no network at all.
 
+#### Schnittmenge (Venn)
+
+Two overlapping circles, each labelled with a category — *Planet* and *Schokoriegel*. Teams name the term that belongs in the overlap (*Mars*). If nobody gets it, the host adds a third circle with one more category as a hint.
+
+#### Filmstreifen (Film Stripe)
+
+A whole film compressed into one stripe of colours: every moment becomes one line in its average colour, left to right. Teams name the film from the colours alone; the hint is the film as an 8-second time-lapse. Stripes are computed in the admin ahead of the show, so the game runs without the video files.
+
 ---
 
 ### 5. Awarding Points
@@ -239,6 +243,8 @@ npm start
 ```
 
 `npm start` serves the compiled build from `dist/`, so `npm run build` must run first on a fresh clone. (For development use `npm run dev` instead — it hot-reloads and needs no prior build.)
+
+`npm start` runs the server under a small supervisor (`scripts/supervise.cjs`): if the server process dies, it is restarted within about a second, and the crash is written to `logs/crash.log`. Server output is also kept in `logs/server-YYYY-MM-DD.log`. `npm run start:unsupervised` runs the server without it. See [specs/crash-recovery.md](./specs/crash-recovery.md).
 
 Open `http://localhost:3000` — admin panel at `http://localhost:3000/admin`, gamemaster remote at `http://localhost:3000/gamemaster`.
 

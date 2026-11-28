@@ -3,6 +3,7 @@ import { render, screen, waitFor, act } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import { GameProvider } from '@/context/GameContext';
 import SummaryScreen from '@/components/screens/SummaryScreen';
+import { names, rp } from '../../_helpers/players';
 
 // Mock canvas-confetti. The real default export is a callable that also carries
 // a `.reset()` used by SummaryScreen's unmount cleanup, so the mock needs both.
@@ -72,8 +73,8 @@ describe('SummaryScreen', () => {
   it('shows Team 2 wins when team2 has more points', async () => {
     localStorage.setItem('team1Points', '3');
     localStorage.setItem('team2Points', '8');
-    localStorage.setItem('team1', JSON.stringify(['Alice']));
-    localStorage.setItem('team2', JSON.stringify(['bob', 'dave']));
+    localStorage.setItem('team1', JSON.stringify([rp('Alice', 'Arndt')]));
+    localStorage.setItem('team2', JSON.stringify([rp('Bob', 'Brown'), rp('Dave', 'Dietz')]));
 
     renderSummaryScreen();
 
@@ -84,15 +85,27 @@ describe('SummaryScreen', () => {
     expect(screen.getByText('Dave')).toBeInTheDocument();
   });
 
+  it('adds a surname prefix where two players share a first name — across both teams', async () => {
+    localStorage.setItem('team1Points', '8');
+    localStorage.setItem('team2Points', '3');
+    localStorage.setItem('team1', JSON.stringify([rp('Michi', 'Huber'), rp('Anna', 'Arndt')]));
+    localStorage.setItem('team2', JSON.stringify([rp('Michi', 'Pichler')]));
+
+    renderSummaryScreen();
+
+    await waitFor(() => expect(screen.getByText('Team 1 hat gewonnen!')).toBeInTheDocument());
+    expect(screen.getAllByRole('listitem').map(li => li.textContent)).toEqual(['Michi H.', 'Anna']);
+  });
+
   it('lays a large winning roster out in a balanced grid', async () => {
     // Nine names used to be nine stacked paragraphs, which grew the card past
     // the viewport — see specs/team-management.md.
     localStorage.setItem('team1Points', '10');
     localStorage.setItem('team2Points', '5');
-    localStorage.setItem('team1', JSON.stringify([
-      'anna', 'bernd', 'christina', 'dominik', 'elena', 'franz', 'gabriele', 'hannes', 'isabella',
-    ]));
-    localStorage.setItem('team2', JSON.stringify(['jonas']));
+    localStorage.setItem('team1', JSON.stringify(names(
+      'Anna', 'Bernd', 'Christina', 'Dominik', 'Elena', 'Franz', 'Gabriele', 'Hannes', 'Isabella',
+    )));
+    localStorage.setItem('team2', JSON.stringify(names('Jonas')));
 
     renderSummaryScreen();
 

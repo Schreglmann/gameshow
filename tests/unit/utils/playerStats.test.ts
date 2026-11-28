@@ -21,6 +21,7 @@ function game(overrides: Partial<GameFileSummary>): GameFileSummary {
   };
 }
 
+// Players are registry ids (`GameshowConfig.players`), compared by plain equality.
 // Ordered timeline (config insertion order = oldest → newest). `active` marks
 // "now": s0/s1/s2 have happened; `active`, `cur`, `later` are upcoming.
 const gameshows: Record<string, GameshowConfig> = {
@@ -37,7 +38,7 @@ describe('buildOverlapContext', () => {
     const ctx = buildOverlapContext(gameshows, 'cur', ['A', 'C'], 'active');
     expect(ctx.playedShows.map(s => s.name)).toEqual(['S0', 'S1', 'S2']); // before active
     expect(ctx.plannedShows.map(s => s.name)).toEqual(['Aktiv']); // active..before cur
-    expect(ctx.currentPlayersLower).toEqual(['a', 'c']);
+    expect(ctx.currentPlayerIds).toEqual(['A', 'C']);
   });
 
   it('with no active show, nothing is upcoming (all before-cur = played)', () => {
@@ -207,9 +208,11 @@ describe('computePlayerHistory', () => {
     ]);
   });
 
-  it('is case-insensitive on the participant match', () => {
-    const cs: Record<string, GameshowConfig> = { s: { name: 'S', players: ['  jU '], gameOrder: ['musik/v1'] } };
-    expect(computePlayerHistory('Ju', games, cs).gameshowCount).toBe(1);
+  it('matches the participant by exact id — ids are not names', () => {
+    const cs: Record<string, GameshowConfig> = { s: { name: 'S', players: ['julia-maier'], gameOrder: ['musik/v1'] } };
+    expect(computePlayerHistory('julia-maier', games, cs).gameshowCount).toBe(1);
+    expect(computePlayerHistory('Julia-Maier', games, cs).gameshowCount).toBe(0);
+    expect(computePlayerHistory('Julia Maier', games, cs).gameshowCount).toBe(0);
   });
 
   it('returns an empty history for an unknown or blank player', () => {

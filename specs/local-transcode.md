@@ -13,7 +13,7 @@ All file operations (uploads, deletes, moves, serving) use local-assets for maxi
 - [x] NAS sync uses bandwidth throttling (2 MB/s) when video is playing
 - [x] Server-side stream detection via `POST /api/backend/stream-notify`
 - [x] Frontend `notifyStreamStart()`/`notifyStreamEnd()` notify server
-- [x] Startup bidirectional sync using `.sync-state.json` on both sides
+- [x] Startup bidirectional sync using the per-device `local-assets/.sync-state.json` (see [sync-bidirectional.md](sync-bidirectional.md) "Per-device sync state")
 - [x] Deletion propagation: file deleted on machine A → NAS sync → machine B startup sync → deleted on B
 - [x] Sync queue retries every 30s when NAS disconnects mid-sync
 - [x] Atomic NAS writes using `.tmp` + rename

@@ -8,7 +8,7 @@
  * Idempotent: skips files already present in download/ or in the parent Personen/ folder.
  *
  * Usage (from repo root):
- *   npx tsx scripts/fetch-famous-people.ts [--dry-run]
+ *   npx tsx scripts/fetch-famous-people.ts [--dry-run] [--only "Name A,Name B"]
  */
 
 import fs from 'fs';
@@ -24,8 +24,16 @@ const SAVE_DIR = path.join(process.cwd(), 'local-assets', 'images', 'Personen', 
 const EXISTING_DIR = path.join(process.cwd(), 'local-assets', 'images', 'Personen');
 const DRY_RUN = process.argv.includes('--dry-run');
 
-const USER_AGENT =
-  'Gameshow-DAM-Fetch/1.0 (https://github.com/vivid-planet/gameshow; georg.schreglmann@vivid-planet.com)';
+// Wikimedia asks for a contact in the User-Agent; set WIKIMEDIA_CONTACT to add one.
+const CONTACT = process.env.WIKIMEDIA_CONTACT;
+const USER_AGENT = CONTACT ? `Gameshow-DAM-Fetch/1.0 (${CONTACT})` : 'Gameshow-DAM-Fetch/1.0';
+
+// --only "Name A,Name B" restricts the run to those entries of PEOPLE.
+const onlyIdx = process.argv.indexOf('--only');
+const ONLY =
+  onlyIdx >= 0 && process.argv[onlyIdx + 1]
+    ? new Set(process.argv[onlyIdx + 1].split(',').map((s) => s.trim()).filter(Boolean))
+    : null;
 
 // Each entry: [display-name, optional-wikipedia-title-override]
 // Override is used when the Wikipedia article title differs from how we want
@@ -421,6 +429,22 @@ const PEOPLE: Entry[] = [
   { name: 'Vin Diesel' },
   // Authors
   { name: 'Mark Twain' },
+
+  // ─── "Wie ist der Promi gestorben" additions ────────────────────────
+  { name: 'Diana Spencer', titleEn: 'Diana, Princess of Wales' },
+  { name: 'Ayrton Senna' },
+  { name: 'Grigori Rasputin' },
+  { name: 'Steve Irwin' },
+  { name: 'Harry Houdini' },
+  { name: 'Abraham Lincoln' },
+  { name: 'Bruce Lee' },
+  { name: 'Paul Walker' },
+  { name: 'Robin Williams' },
+  { name: 'Jim Morrison' },
+  { name: 'Grace Kelly' },
+  { name: 'Tupac Shakur' },
+  { name: 'Matthew Perry' },
+  { name: 'Tycho Brahe' },
 ];
 
 function normalizeForDedup(s: string): string {
@@ -538,7 +562,12 @@ function existingNormalizedNames(): Set<string> {
 }
 
 async function main() {
-  console.log(`👤 Fetching ${PEOPLE.length} famous-people portraits...\n`);
+  const people = ONLY ? PEOPLE.filter((p) => ONLY.has(p.name)) : PEOPLE;
+  if (ONLY) {
+    const unknown = [...ONLY].filter((n) => !PEOPLE.some((p) => p.name === n));
+    if (unknown.length > 0) console.warn(`⚠  --only names not in PEOPLE: ${unknown.join(', ')}`);
+  }
+  console.log(`👤 Fetching ${people.length} famous-people portraits...\n`);
 
   if (!DRY_RUN) fs.mkdirSync(SAVE_DIR, { recursive: true });
 
@@ -557,7 +586,7 @@ async function main() {
   let lowRes = 0;
 
   let firstRealFetch = true;
-  for (const entry of PEOPLE) {
+  for (const entry of people) {
     const norm = normalizeForDedup(entry.name);
 
     if (existing.has(norm)) {

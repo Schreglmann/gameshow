@@ -1399,6 +1399,210 @@
     outline: none;
 }
 
+/* ── Team cards with many players ──
+   A card switches to 2 (3) member columns only when one column would run off
+   the bottom of the screen — measured per card by rosterFit.ts → data-columns.
+   One column and several look the same: every name sits in a soft pill (the
+   old per-row divider lines read as noise in a grid). Below 1024px the
+   cards are too narrow for three columns. See specs/team-management.md. */
+.team-members-editable[data-columns] {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    column-gap: clamp(6px, 0.8vw, 12px);
+    row-gap: clamp(5px, 0.6vw, 10px);
+    margin: 0;
+}
+
+.team-members-editable[data-columns="2"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.team-members-editable[data-columns="3"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 1023px) {
+    .team-members-editable[data-columns="3"] {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+.team-members-editable[data-columns] .team-member-row {
+    padding: 0;
+    border-bottom: none;
+}
+
+/* A pill keeps the card's normal font size whatever the column count (the 3-4 team rule in
+   layout.css included); only its padding tightens. When a name does not fit its
+   cell, rosterFit.ts shrinks that one name (inline font-size), and
+   an ellipsis is the last resort — an input cannot wrap. */
+#teams .team-members-editable[data-columns] .team-member-input {
+    padding: clamp(3px, 0.4vw, 6px) clamp(4px, 0.5vw, 6px);
+    text-overflow: ellipsis;
+    background: rgba(var(--glass-rgb), 0.07);
+}
+
+/* ── Hidden draw (random mode, before "Teams zuweisen") ──
+   The players as an alphabetical grid (team order would give the draw away),
+   an add field and the reveal button. The ✕ on a name shows on hover/focus,
+   and always on touch screens, which have no hover. With "Show-Buttons
+   ausblenden" the add form and every button are hidden (show-controls-hidden.css)
+   and only the names stay. See specs/team-management.md ("Verdeckte Auslosung"). */
+.draw-setup {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: clamp(14px, 2vw, 24px);
+    width: 100%;
+}
+
+.draw-pool-count {
+    margin: 0;
+    font-size: clamp(1em, 2vw, 1.3em);
+    text-align: center;
+    opacity: 0.85;
+}
+
+.draw-pool {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(clamp(120px, 13vw, 180px), 1fr));
+    gap: clamp(6px, 0.8vw, 10px);
+    width: 100%;
+    margin: 0;
+    padding: clamp(12px, 2vw, 24px);
+    color: var(--card-text, var(--text-primary));
+    background: var(--card-bg, rgba(var(--glass-rgb), var(--glass-opacity)));
+    backdrop-filter: blur(var(--card-backdrop-blur, var(--glass-blur)));
+    border: var(--card-border, 1px solid rgba(var(--glass-rgb), var(--glass-border-opacity)));
+    border-radius: var(--radius-lg);
+    box-shadow: var(--card-shadow, 0 8px 32px rgba(0, 0, 0, 0.2));
+}
+
+.draw-pool-name {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    padding: clamp(9px, 1.1vw, 14px) clamp(26px, 2.4vw, 32px);
+    font-size: clamp(0.95em, 1.5vw, 1.1em);
+    text-align: center;
+    border-bottom: none;
+    border-radius: var(--radius-md, 10px);
+    background: rgba(var(--glass-rgb), 0.08);
+}
+
+/* A short roster (HomeScreen: DRAW_POOL_LARGE_MAX) gets larger chips. */
+.draw-pool[data-size='large'] {
+    grid-template-columns: repeat(auto-fill, minmax(clamp(130px, 17vw, 260px), 1fr));
+    gap: clamp(8px, 1vw, 14px);
+}
+
+.draw-pool[data-size='large'] .draw-pool-name {
+    padding: clamp(12px, 1.5vw, 20px) clamp(28px, 2.6vw, 36px);
+    font-size: clamp(1.05em, 2vw, 1.45em);
+}
+
+.draw-pool-label {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.draw-pool-remove {
+    position: absolute;
+    top: 50%;
+    right: 4px;
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    font-size: 1.1em;
+    line-height: 1;
+    color: inherit;
+    background: rgba(var(--glass-rgb), 0.2);
+    border-radius: 50%;
+    box-shadow: none;
+    opacity: 0;
+    transform: translateY(-50%);
+    transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.draw-pool-remove svg {
+    display: block;
+    width: 12px;
+    height: 12px;
+}
+
+.draw-pool-name:hover .draw-pool-remove,
+.draw-pool-remove:focus-visible {
+    opacity: 1;
+}
+
+.draw-pool-remove:hover {
+    background: rgba(220, 60, 60, 0.75);
+    transform: translateY(-50%);
+    filter: none;
+}
+
+@media (hover: none) {
+    .draw-pool-remove {
+        opacity: 0.8;
+    }
+}
+
+.draw-add-form {
+    flex-direction: row;
+    flex-wrap: wrap;
+    max-width: min(680px, 100%);
+    padding: clamp(12px, 1.6vw, 18px);
+    gap: clamp(10px, 1.2vw, 14px);
+}
+
+/* The field sits in SuggestInput's wrapper (autocomplete list); the form is
+   lifted above the "Teams zuweisen" button so the open list covers it. */
+.draw-add-form {
+    position: relative;
+    z-index: 5;
+}
+
+.draw-add-form .suggest-wrap {
+    flex: 1 1 280px;
+}
+
+/* Sized to the player chips above, not the global input/button scale
+   (1.2em text, up to 20px padding), which dwarfed the roster. */
+.draw-add-form input {
+    flex: 1 1 280px;
+    min-width: 0;
+    margin: 0;
+    padding: clamp(10px, 1.2vw, 14px) clamp(14px, 1.6vw, 20px);
+    font-size: clamp(0.95em, 1.5vw, 1.1em);
+}
+
+.draw-add-form > button {
+    flex: 0 0 auto;
+    margin: 0;
+    padding: clamp(10px, 1.2vw, 14px) clamp(18px, 2.2vw, 32px);
+    font-size: clamp(0.85em, 1.2vw, 0.95em);
+}
+
+/* "„Anna“ ist schon dabei." after an add or a roster edit. See specs/players.md. */
+.draw-add-feedback {
+    max-width: min(760px, 100%);
+    margin: 0 auto;
+    padding: clamp(6px, 1vw, 10px) clamp(12px, 2vw, 20px);
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.35);
+    font-size: clamp(0.95em, 1.8vw, 1.15em);
+    text-align: center;
+    overflow-wrap: anywhere;
+}
+
+.team-edit-feedback {
+    margin-top: clamp(10px, 2vh, 20px);
+}
+
 textarea {
     width: 100%;
     height: 200px;
@@ -1796,6 +2000,252 @@ textarea {
     .compass-rose__hidden-center,
     .compass-rose__solved {
         animation: none;
+    }
+}
+
+/* ── Venn ("Schnittmenge") ── */
+
+.venn-stage {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    /* Explicit width for the same reason as `.city-compass-stage`: the diagram's own
+     * `width: 100%` needs a definite parent width. */
+    width: 100%;
+    gap: clamp(6px, 1.2vw, 12px);
+    margin: clamp(6px, 1.2vw, 12px) 0;
+}
+
+/* Sized like `.compass-rose`: by width alone, derived from the height it may take
+ * times the ratio VennDiagram passes in as `--venn-aspect`. A question with a hint
+ * circle is nearly square, so without the height cap it would push the answer off
+ * the screen. Type sizes are SVG user units set in vennLayout.ts and need no
+ * breakpoints — the labels keep their share of the diagram at every width. */
+.venn-diagram {
+    --venn-max-height: min(60vh, 760px);
+
+    width: 100%;
+    max-width: min(100%, calc(var(--venn-max-height) * var(--venn-aspect, 1.5)));
+    aspect-ratio: var(--venn-aspect, 1.5);
+    height: auto;
+    display: block;
+    overflow: visible;
+    color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.92, var(--text-fade-floor, 0)));
+}
+
+/* Translucent fills, so the overlap is visibly denser than either circle alone —
+ * that area is what the question is about. */
+.venn-diagram__circle {
+    fill: rgba(var(--primary-rgb), 0.2);
+    stroke: currentColor;
+    stroke-opacity: 0.6;
+    stroke-width: 4;
+}
+
+/* The third circle is a hint, not part of the original puzzle, and says so. */
+.venn-diagram__circle--hint {
+    fill: rgba(var(--card-gold-rgb, var(--gold-warm-rgb)), 0.18);
+    stroke: rgba(var(--card-gold-rgb, var(--gold-warm-rgb)), 0.95);
+    stroke-opacity: 1;
+    stroke-dasharray: 14 10;
+}
+
+.venn-diagram__label {
+    fill: currentColor;
+    font-weight: 700;
+}
+
+.venn-diagram__label--hint {
+    fill: var(--card-gold, var(--gold-warm));
+}
+
+.venn-diagram__focus {
+    transition: transform 420ms ease-in-out;
+}
+
+.venn-diagram__unknown {
+    fill: currentColor;
+    font-weight: 800;
+}
+
+/* Same answer colours as `.compass-rose__pill` and `.quiz-answer`. The pill is
+ * nearly opaque: three circle outlines cross right behind the answer. */
+.venn-diagram__pill {
+    fill: var(--card-bg, rgba(0, 0, 0, 0.6));
+    stroke: rgba(var(--card-success-rgb, var(--success-rgb)), 0.85);
+    stroke-width: 4;
+}
+
+.venn-diagram__solution {
+    fill: var(--card-success, var(--success));
+    font-weight: 800;
+    letter-spacing: 0.5px;
+}
+
+.venn-diagram__solved {
+    filter: drop-shadow(0 0 12px rgba(var(--card-success-rgb, var(--success-rgb)), 0.35));
+}
+
+/* Scoped override for the admin preview, which sits in a form column. */
+.venn-diagram.venn-diagram--fit {
+    --venn-max-height: 300px;
+}
+
+@keyframes venn-circle-in {
+    from { opacity: 0; transform: scale(0.82); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes venn-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes venn-pop-in {
+    0% { opacity: 0; transform: scale(0.4); }
+    65% { opacity: 1; transform: scale(1.12); }
+    100% { opacity: 1; transform: scale(1); }
+}
+
+.venn-diagram__circle {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: venn-circle-in 420ms ease-out backwards;
+}
+
+.venn-diagram__label {
+    animation: venn-fade-in 300ms ease-out backwards;
+}
+
+.venn-diagram__unknown,
+.venn-diagram__solved {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: venn-pop-in 340ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .venn-diagram__circle,
+    .venn-diagram__label,
+    .venn-diagram__unknown,
+    .venn-diagram__solved {
+        animation: none;
+    }
+
+    .venn-diagram__focus {
+        transition: none;
+    }
+}
+
+/* ── Film stripe ("Filmstreifen") ── */
+
+.film-stripe-stage {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    gap: clamp(8px, 1.6vw, 16px);
+    margin: clamp(8px, 1.6vw, 16px) 0;
+}
+
+/* The stripe is the whole picture while it is the only thing on stage, and steps
+ * back to a timeline once the time-lapse plays above it. The height is a share of
+ * the viewport, not of the width: on a wide projector a width-based stripe would
+ * push the answer off the screen. */
+.film-stripe-bar {
+    --film-stripe-height: clamp(96px, 26vh, 300px);
+
+    position: relative;
+    width: 100%;
+    height: var(--film-stripe-height);
+    border-radius: var(--radius-md, 10px);
+    overflow: hidden;
+    /* Shows through only if a colour is transparent or the SVG fails to paint. */
+    background: rgba(var(--glass-rgb), 0.08);
+    box-shadow: 0 0 0 1px rgba(var(--card-text-rgb, var(--text-rgb)), 0.18);
+    transition: height 360ms ease-in-out;
+}
+
+.film-stripe-stage--timelapse .film-stripe-bar {
+    --film-stripe-height: clamp(40px, 8vh, 96px);
+}
+
+.film-stripe-bar__colors {
+    display: block;
+    width: 100%;
+    height: 100%;
+    /* Wipe in from the left — the film runs once across the screen. */
+    animation: film-stripe-wipe 5s linear backwards;
+}
+
+@keyframes film-stripe-wipe {
+    from { clip-path: inset(0 100% 0 0); }
+    to { clip-path: inset(0 0 0 0); }
+}
+
+/* Position of the still that is on screen. Light with a dark outline, so it reads
+ * on a bright and on a dark stretch of film alike. */
+.film-stripe-bar__marker {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    margin-left: -2px;
+    background: #fff;
+    box-shadow: 0 0 0 1.5px rgba(0, 0, 0, 0.75);
+    pointer-events: none;
+}
+
+.film-stripe-timelapse {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    /* Reserve the frame's box before the first still arrives, so the stripe below
+     * does not jump when it does. */
+    aspect-ratio: 16 / 9;
+    max-height: min(46vh, 560px);
+}
+
+.film-stripe-timelapse__frame {
+    max-width: 100%;
+    max-height: 100%;
+    border-radius: var(--radius-md, 10px);
+    object-fit: contain;
+    user-select: none;
+}
+
+.film-stripe-timelapse__loading,
+.film-stripe-missing {
+    font-size: clamp(0.95em, 1.8vw, 1.2em);
+    color: rgba(var(--card-text-rgb, var(--text-rgb)), max(0.7, var(--text-fade-floor, 0)));
+    text-align: center;
+}
+
+.film-stripe-missing {
+    width: 100%;
+    padding: clamp(18px, 4vw, 40px) clamp(12px, 3vw, 24px);
+    border: 1px dashed rgba(var(--card-text-rgb, var(--text-rgb)), 0.3);
+    border-radius: var(--radius-md, 10px);
+}
+
+/* Scoped override for the admin preview: a thin strip under the video field. */
+.film-stripe-bar.film-stripe-bar--fit {
+    --film-stripe-height: 34px;
+    transition: none;
+}
+
+.film-stripe-bar--fit .film-stripe-bar__colors {
+    animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .film-stripe-bar__colors {
+        animation: none;
+    }
+
+    .film-stripe-bar {
+        transition: none;
     }
 }
 

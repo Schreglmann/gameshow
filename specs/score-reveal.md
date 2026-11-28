@@ -23,7 +23,7 @@ change, and a "Führungswechsel!" banner appears when the lead flips between the
       `useRef` — **never stored in AppState / localStorage** (honours the no-derived-state rule).
 - [x] Purely presentational: NO new AppState field, Action, reducer case, WS channel, or HTTP route.
       The animation never dispatches and never delays the `AWARD_POINTS` flow or the
-      `gamemaster-team-state-v2` broadcast (the GM keeps driving instantly).
+      `gamemaster-team-state-v3` broadcast (the GM keeps driving instantly).
 - [x] On `prefers-reduced-motion` or on an inactive show tab (`isInactiveShowTab()`), the number
       snaps instantly.
 

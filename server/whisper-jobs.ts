@@ -496,6 +496,13 @@ export function setupWhisperJobs(deps: WhisperJobsDeps): WhisperJobsApi {
       detached: true,
       stdio: ['ignore', fd, fd],
     });
+    // A failed spawn (missing binary, EACCES) emits 'error' on the next tick — after
+    // the no-pid throw below has already failed the job. Without a listener that
+    // event kills the whole server. See specs/crash-recovery.md.
+    proc.on('error', (err) => {
+      console.warn(`[whisper-jobs] spawn failed: ${err.message}`);
+      try { appendFileSync(logPath, `[whisper-jobs] spawn failed: ${err.message}\n`); } catch { /* not fatal */ }
+    });
     proc.unref();
     if (proc.pid === undefined) {
       throw new Error('Failed to spawn whisper child (no pid)');

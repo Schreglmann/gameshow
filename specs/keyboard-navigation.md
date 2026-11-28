@@ -25,7 +25,7 @@ A shared hook provides consistent keyboard and click navigation across all game 
 
 ## Long-press (skip-to-answer) variant
 
-A companion hook `useArrowRightLongPress({ enabled, onShortPress, onLongPress, holdMs? })` ([`src/hooks/useArrowRightLongPress.ts`](../src/hooks/useArrowRightLongPress.ts)) lets the host **hold the forward key to reveal everything at once**, while a short tap advances one step. Used by `ranking`, `four-statements`, and `bandle`.
+A companion hook `useArrowRightLongPress({ enabled, onShortPress, onLongPress, holdMs? })` ([`src/hooks/useArrowRightLongPress.ts`](../src/hooks/useArrowRightLongPress.ts)) lets the host **hold the forward key to reveal everything at once**, while a short tap advances one step. Used by `ranking`, `four-statements`, `bandle`, `venn`, and `film-stripe`.
 
 - The **forward key is `ArrowRight` OR `Space`** — presenter clickers map their forward button to either one, and both perform the normal advance, so both must support the hold gesture.
 - The hold is detected by whichever comes first: (1) the `holdMs` wall-clock timer (default 500 ms), or (2) the **first OS key-repeat keydown** while the key is held. Key-repeat is the more reliable "key is down" signal — some presenter clickers emit an early `keyup` no matter how long the button is physically held, which would cancel the timer on its own and defeat the long press.

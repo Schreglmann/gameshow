@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { isTouchDevice } from '@/utils/isTouchDevice';
 import { assetUrl } from '@/utils/assetUrl';
+import { pastedImageFile, pasteTimestamp } from '@/utils/filename';
 import type { AssetCategory, AssetFolder, AssetFileMeta } from '@/types/config';
 import { fetchAssets, fetchVideoCover, deleteAsset, moveAsset, mergeAsset, fetchAssetUsages, fetchAssetCategoryUsages, fetchAssetHashes, createAssetFolder, probeVideo, fetchAudioCoverList, downloadImageFromUrl, faststartVideo, fetchFaststartStatus, undoLastDelete, fetchAudioCoverMeta, overrideAudioCover, setItunesAudioCover, listTrash, fetchImageDimensions, type VideoTrackInfo, type VideoStreamInfo, type AudioCoverMetaMap, type AudioCoverSource, type ItunesCoverCandidate } from '@/services/backendApi';
 import TrashView from './TrashView';
@@ -25,7 +26,7 @@ import { getBrowserVideoWarning } from '@/services/browserVideoCompat';
 // preview modal headers to open the merge-with-another-asset flow.
 // Render boxes + folder-path helpers live in ./assetFolders so AssetPicker can
 // re-use them without creating an import cycle.
-import { RENDER_BOX_QUIZ, RENDER_BOX_IMAGE_GUESS, getAllFolderPaths } from './assetFolders';
+import { RENDER_BOX_QUIZ, RENDER_BOX_IMAGE_GUESS, getAllFolderPaths, isLowResolution } from './assetFolders';
 export { RENDER_BOX_QUIZ, RENDER_BOX_IMAGE_GUESS };
 
 const mergeIcon = (
@@ -942,21 +943,12 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       const items = e.clipboardData?.items;
       if (!items) return;
 
-      // Chrome names every pasted image "image.png" — uniquify so repeated
-      // pastes don't silently overwrite each other.
-      const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      const ts = pasteTimestamp();
       const imageFiles: File[] = [];
       for (const item of items) {
         if (item.type.startsWith('image/')) {
           const file = item.getAsFile();
-          if (file) {
-            const ext = file.name.includes('.')
-              ? file.name.split('.').pop()!.toLowerCase()
-              : (file.type.split('/')[1] || 'png');
-            const suffix = imageFiles.length > 0 ? `-${imageFiles.length}` : '';
-            const renamed = new File([file], `pasted-${ts}${suffix}.${ext}`, { type: file.type });
-            imageFiles.push(renamed);
-          }
+          if (file) imageFiles.push(pastedImageFile(file, ts, imageFiles.length));
         }
       }
       if (imageFiles.length > 0) {
@@ -2806,7 +2798,7 @@ export default function AssetsTab({ initialCategory, onCategoryChange, onNavigat
       const meta = metaByPath.get(p);
       if (!meta?.dimensions) return false;
       const box = imageGuessFiles!.has(p) ? RENDER_BOX_IMAGE_GUESS : RENDER_BOX_QUIZ;
-      if (!(meta.dimensions.width < box.w && meta.dimensions.height < box.h)) return false;
+      if (!isLowResolution({ w: meta.dimensions.width, h: meta.dimensions.height }, box)) return false;
     }
     return true;
   }, [usageFilterActive, usageFilter, usedFiles, gameshowFiles, lowResActive, imageGuessFiles, metaByPath]);

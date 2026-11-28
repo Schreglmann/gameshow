@@ -1,4 +1,4 @@
-import type { SettingsResponse, GameDataResponse, RunOfShowResponse } from '@/types/config';
+import type { SettingsResponse, GameDataResponse, RunOfShowResponse, LivePlayersRequest, LivePlayersResponse } from '@/types/config';
 
 /** Error carrying the HTTP status of a failed fetch so callers can branch on it
  *  (e.g. GameScreen treats a 404 on a live refresh as "this game no longer
@@ -29,6 +29,17 @@ export async function fetchGameData(index: number): Promise<GameDataResponse> {
 export async function fetchRunOfShow(): Promise<RunOfShowResponse> {
   const res = await fetch('/api/run-of-show');
   if (!res.ok) throw new HttpError(res.status, 'Failed to fetch run of show');
+  return res.json();
+}
+
+/** Write the show's player adds/removes into the active gameshow. See specs/players.md. */
+export async function syncLivePlayers(request: LivePlayersRequest): Promise<LivePlayersResponse> {
+  const res = await fetch('/api/live-players', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  if (!res.ok) throw new HttpError(res.status, 'Failed to sync players');
   return res.json();
 }
 

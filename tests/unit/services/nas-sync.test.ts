@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import {
   computeSyncOps,
   buildNewSyncState,
-  resolvePrevFiles,
   parseSyncState,
   applySnapshotOp,
   applyDeletionSafety,
@@ -258,29 +257,59 @@ describe('buildNewSyncState', () => {
   });
 });
 
-describe('resolvePrevFiles', () => {
-  it('uses local state when local lastSync is more recent', () => {
-    const local: SyncState = { lastSync: '2025-06-01T00:00:00Z', files: { a: '1' } };
-    const nas: SyncState = { lastSync: '2025-01-01T00:00:00Z', files: { b: '2' } };
-    expect(resolvePrevFiles(local, nas)).toEqual({ a: '1' });
+// The sync state is per device: prev is only ever this device's own local
+// `.sync-state.json` (specs/sync-bidirectional.md "Per-device sync state").
+// These cases pin down why another device's snapshot must never be used.
+describe('per-device sync state', () => {
+  it('fresh device (no local state) pulls the whole NAS library and never deletes', () => {
+    const nas = new Map<string, FileMeta>();
+    for (let i = 0; i < 200; i++) nas.set(`images/Tiere/${i}.jpg`, meta('2025-01-01', 1000 + i));
+    nas.set('audio/ABBA/Dancing Queen.m4a', meta('2025-01-01', 5000));
+
+    const ops = computeSyncOps(new Map(), nas, {});
+    expect(ops).toHaveLength(nas.size);
+    expect(ops.every(o => o.action === 'pull')).toBe(true);
+
+    const safe = applyDeletionSafety(ops, new Map(), nas, {});
+    expect(safe.vetoes).toEqual([]);
+    expect(safe.ops).toEqual(ops);
+    expect(checkBulkDelete(safe.ops, new Map(), nas).ok).toBe(true);
   });
 
-  it('uses NAS state when NAS lastSync is more recent', () => {
-    const local: SyncState = { lastSync: '2025-01-01T00:00:00Z', files: { a: '1' } };
-    const nas: SyncState = { lastSync: '2025-06-01T00:00:00Z', files: { b: '2' } };
-    expect(resolvePrevFiles(local, nas)).toEqual({ b: '2' });
+  it('fresh device with local-only files pushes them and pulls the rest', () => {
+    const local = new Map([['audio/Beispiele/bandle-1.mp3', meta('2025-06-01', 10)]]);
+    const nas = new Map([['images/a.jpg', meta('2025-01-01', 20)]]);
+    const ops = computeSyncOps(local, nas, {});
+    expect(ops).toEqual(expect.arrayContaining([
+      { action: 'push', rel: 'audio/Beispiele/bandle-1.mp3' },
+      { action: 'pull', rel: 'images/a.jpg' },
+    ]));
+    expect(ops).toHaveLength(2);
   });
 
-  it('uses local state when timestamps are equal', () => {
-    const local: SyncState = { lastSync: '2025-01-01T00:00:00Z', files: { a: '1' } };
-    const nas: SyncState = { lastSync: '2025-01-01T00:00:00Z', files: { b: '2' } };
-    expect(resolvePrevFiles(local, nas)).toEqual({ a: '1' });
+  it('a file another device added is pulled, not deleted, using this device\'s own prev', () => {
+    // Device A's own snapshot predates device B's upload of new.jpg.
+    const prevA = { 'images/old.jpg': '2025-01-01T00:00:00.000Z' };
+    const localA = new Map([['images/old.jpg', meta('2025-01-01', 10)]]);
+    const nas = new Map([
+      ['images/old.jpg', meta('2025-01-01', 10)],
+      ['images/new.jpg', meta('2025-06-01', 20)],
+    ]);
+    expect(computeSyncOps(localA, nas, prevA)).toEqual([{ action: 'pull', rel: 'images/new.jpg' }]);
   });
 
-  it('returns empty when both states are fresh (no prior sync)', () => {
-    const local: SyncState = { lastSync: '', files: {} };
-    const nas: SyncState = { lastSync: '', files: {} };
-    expect(resolvePrevFiles(local, nas)).toEqual({});
+  it('a file another device deleted is deleted locally, not pushed back', () => {
+    // Device A synced gone.jpg earlier; device B deleted it and propagated to NAS.
+    const prevA = {
+      'images/keep.jpg': '2025-01-01T00:00:00.000Z',
+      'images/gone.jpg': '2025-01-01T00:00:00.000Z',
+    };
+    const localA = new Map([
+      ['images/keep.jpg', meta('2025-01-01', 10)],
+      ['images/gone.jpg', meta('2025-01-01', 20)],
+    ]);
+    const nas = new Map([['images/keep.jpg', meta('2025-01-01', 10)]]);
+    expect(computeSyncOps(localA, nas, prevA)).toEqual([{ action: 'delete-local', rel: 'images/gone.jpg' }]);
   });
 });
 

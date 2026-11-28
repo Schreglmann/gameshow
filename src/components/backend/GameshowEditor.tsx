@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { createContext, useContext, useState, useEffect, useRef, useMemo } from 'react';
 import { isTouchDevice } from '@/utils/isTouchDevice';
-import type { GameshowConfig, GameFileSummary, GameType, PointMode } from '@/types/config';
+import type { GameshowConfig, GameFileSummary, GameType, Player, PointMode } from '@/types/config';
 import { fetchGames } from '@/services/backendApi';
 import { gameTypeMatchesQuery, gameSupportsTeamCount, gameUsesCorrectAnswerTally, teamCountSupportLabel } from '@/data/gameTypeInfo';
 import { DEFAULT_TEAM_COUNT, normalizeTeamCount } from '@/utils/teams';
@@ -11,7 +11,10 @@ import { JOKER_CATALOG } from '@/data/jokers';
 import JokerIcon from '@/components/common/JokerIcon';
 import { useTheme } from '@/context/ThemeContext';
 import { useConfirm } from './ConfirmContext';
-import PlayerStatsModal from './PlayerStatsModal';
+import { OVERLAP_BADGE, OVERLAP_BADGE_GAME, OVERLAP_ORDER, gameRefs } from './overlapBadges';
+import { openPlayer } from './openPlayer';
+import { adminLabel, fullName, nameKey, normalizePlayerName, playerMatchesQuery } from '@/utils/playerNames';
+import { playerById, playerLabel, playerShortLabels } from '@/utils/playerRegistry';
 import {
   buildOverlapContext,
   classifyOverlap,
@@ -22,16 +25,17 @@ import {
   type OverlapContext,
 } from '@/utils/playerStats';
 
+/**
+ * The player registry by id, for the helpers below that print player names
+ * (overlap tooltips, provenance lines). Gameshows store ids; the admin always
+ * shows full names. See specs/players.md.
+ */
+const PlayerRegistryContext = createContext<ReadonlyMap<string, Player>>(new Map());
+
 // ── Overlap helpers ───────────────────────────────────────────────────────────
 //
 // "Played" is derived from gameshow membership + config order, not a per-game
 // field — see src/utils/playerStats.ts and specs/game-planning.md.
-
-/** Fully-qualified refs for every selectable instance of a game (single → [fileName]). */
-function gameRefs(g: GameFileSummary): string[] {
-  if (g.isSingleInstance) return [g.fileName];
-  return g.instances.filter(i => i !== 'template').map(i => `${g.fileName}/${i}`);
-}
 
 /** Instance keys offered in the add-to-gameshow pickers: non-template, non-disabled.
  *  See specs/game-disable.md. */
@@ -45,66 +49,138 @@ function enabledInstances(g: GameFileSummary): string[] {
  * players who already know the game (from happened shows); otherwise the static
  * description.
  */
-function overlapTitle(overlap: Overlap, ref: string, ctx: OverlapContext, base: string): string {
+function overlapTitle(
+  overlap: Overlap,
+  ref: string,
+  ctx: OverlapContext,
+  base: string,
+  byId: ReadonlyMap<string, Player>,
+): string {
   if (overlap === 'partial' || overlap === 'full') {
     const who = playersWhoPlayed(ref, ctx);
-    if (who.length) return `Kennen das Spiel schon: ${who.join(', ')}`;
+    if (who.length) return `Kennen das Spiel schon: ${who.map(id => playerLabel(id, byId)).join(', ')}`;
   }
   return base;
 }
 
-const OVERLAP_BADGE: Record<Overlap, { label: string; className: string; title: string }> = {
-  fresh:   { label: 'Neu',        className: 'overlap-fresh',   title: 'Noch nie in einer früheren Gameshow gespielt' },
-  none:    { label: 'Ungespielt', className: 'overlap-none',    title: 'Früher gespielt, aber mit anderen Spielern' },
-  planned: { label: 'Eingeplant', className: 'overlap-planned', title: 'In einer folgenden Gameshow mit gemeinsamen Spielern eingeplant' },
-  partial: { label: 'Teilweise',  className: 'overlap-partial', title: 'Manche der aktuellen Spieler kennen das Spiel schon' },
-  full:    { label: 'Gespielt',   className: 'overlap-full',    title: 'Alle aktuellen Spieler kennen das Spiel bereits' },
-};
-
 // ── Players combobox (multi-select with tag chips) ───────────────────────────
+//
+// Picks players from the global registry by id. A name that is not in the
+// registry offers "„…“ neu anlegen", which opens a first/last-name form and
+// creates the player in the registry and in this gameshow in one step.
+// See specs/players.md.
 
 interface PlayersComboboxProps {
+  /** Player ids of this gameshow. */
   selected: string[];
-  knownPlayers: string[];
-  onChange: (players: string[]) => void;
-  onPlayerClick: (player: string) => void;
+  registry: Player[];
+  onChange: (ids: string[]) => void;
+  /** Create a registry player and add them here. Returns a German error, or null on success. */
+  onCreate: (firstName: string, lastName: string, nickname: string) => string | null;
+  onPlayerClick: (id: string) => void;
+  /** Deleted players (the local bin): offered only for a name typed in full. */
+  binned?: Player[];
+  /** Bring a binned player back into the registry and add them here. */
+  onRestore?: (player: Player) => void;
+  /** The input got the focus (the tab refreshes the bin). */
+  onFocusInput?: () => void;
 }
 
-function PlayersCombobox({ selected, knownPlayers, onChange, onPlayerClick }: PlayersComboboxProps) {
+interface CreateDraft {
+  firstName: string;
+  lastName: string;
+  nickname: string;
+  error: string | null;
+}
+
+/** "anna maria müller" → first "Anna", last "Maria Müller" (the form lets you fix a double first name). */
+function splitTyped(query: string): { firstName: string; lastName: string } {
+  const name = normalizePlayerName(query);
+  const space = name.indexOf(' ');
+  return space < 0 ? { firstName: name, lastName: '' } : { firstName: name.slice(0, space), lastName: name.slice(space + 1) };
+}
+
+function PlayersCombobox({ selected, registry, onChange, onCreate, onPlayerClick, binned = [], onRestore, onFocusInput }: PlayersComboboxProps) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [hlIndex, setHlIndex] = useState(-1);
+  const [note, setNote] = useState<string | null>(null);
+  const [draft, setDraft] = useState<CreateDraft | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const byId = useMemo(() => playerById(registry), [registry]);
 
-  const suggestions = knownPlayers.filter(
-    p => !selected.includes(p) && (!query || p.toLowerCase().includes(query.toLowerCase()))
+  const q = query.trim().toLowerCase();
+  // Binned (deleted) players count as disabled here: only a name typed in full.
+  const binnedIds = useMemo(() => {
+    const inRegistry = new Set(registry.map(p => p.id));
+    return new Set(binned.filter(p => !inRegistry.has(p.id)).map(p => p.id));
+  }, [registry, binned]);
+  // Disabled players only for a name typed in full. See specs/players.md.
+  const suggestions = useMemo(
+    () => [...registry, ...binned.filter(p => binnedIds.has(p.id)).map(p => ({ ...p, disabled: true }))]
+      .filter(p => !selected.includes(p.id) && playerMatchesQuery(p, q))
+      .sort((a, b) => fullName(a).localeCompare(fullName(b), 'de')),
+    [registry, binned, binnedIds, selected, q],
   );
+  // Offer to create the typed name unless the registry already has exactly it.
+  const typedKey = q ? nameKey(splitTyped(query)) : '';
+  const exact = q ? registry.find(p => nameKey(p) === typedKey) : undefined;
+  const binnedExact = q && !exact ? binned.find(p => binnedIds.has(p.id) && nameKey(p) === typedKey) : undefined;
+  const offerCreate = q !== '' && !exact && !binnedExact;
+  const itemCount = suggestions.length + (offerCreate ? 1 : 0);
 
-  const add = (player: string) => {
-    const p = player.trim();
-    if (p && !selected.includes(p)) onChange([...selected, p]);
-    setQuery('');
-    setHlIndex(-1);
+  const reset = () => { setQuery(''); setHlIndex(-1); };
+
+  const add = (player: Player) => {
+    if (binnedIds.has(player.id)) onRestore?.(binned.find(p => p.id === player.id) ?? player);
+    else if (!selected.includes(player.id)) onChange([...selected, player.id]);
+    setNote(null);
+    reset();
   };
 
-  const remove = (player: string) => onChange(selected.filter(p => p !== player));
+  const remove = (id: string) => onChange(selected.filter(p => p !== id));
+
+  const startCreate = () => {
+    setDraft({ ...splitTyped(query), nickname: '', error: null });
+    setOpen(false);
+    setNote(null);
+  };
+
+  const submitCreate = () => {
+    if (!draft) return;
+    const error = onCreate(draft.firstName, draft.lastName, draft.nickname);
+    if (error) { setDraft({ ...draft, error }); return; }
+    setDraft(null);
+    reset();
+    inputRef.current?.focus();
+  };
+
+  const pick = (i: number) => {
+    if (i < suggestions.length) add(suggestions[i]!);
+    else if (offerCreate) startCreate();
+  };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      if (open && suggestions.length) setHlIndex(i => Math.min(i + 1, suggestions.length - 1));
+      if (open && itemCount) setHlIndex(i => Math.min(i + 1, itemCount - 1));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       if (open) setHlIndex(i => Math.max(i - 1, 0));
     } else if (e.key === 'Enter' || e.key === ',') {
       e.preventDefault();
-      if (hlIndex >= 0 && hlIndex < suggestions.length) {
-        add(suggestions[hlIndex]!);
+      if (hlIndex >= 0 && hlIndex < itemCount) {
+        pick(hlIndex);
+      } else if (exact) {
+        if (selected.includes(exact.id)) setNote(`„${adminLabel(exact)}“ ist bereits in dieser Gameshow.`);
+        else add(exact);
+      } else if (binnedExact) {
+        add(binnedExact);
       } else if (open && suggestions.length === 1) {
         // Exactly one match shown → Enter adds it directly, no need to arrow-key down first.
         add(suggestions[0]!);
-      } else if (query.trim()) {
-        add(query.trim());
+      } else if (offerCreate) {
+        startCreate();
       }
     } else if (e.key === 'Backspace' && !query && selected.length) {
       remove(selected[selected.length - 1]!);
@@ -112,44 +188,94 @@ function PlayersCombobox({ selected, knownPlayers, onChange, onPlayerClick }: Pl
   };
 
   return (
-    <div className="players-combobox">
-      {selected.map(p => (
-        <span key={p} className="player-tag">
-          <button
-            type="button"
-            className="player-tag-name"
-            onMouseDown={e => { e.preventDefault(); onPlayerClick(p); }}
-            title={`Statistik für ${p}`}
-          >{p}</button>
-          <button className="player-tag-remove" onMouseDown={e => { e.preventDefault(); remove(p); }}>×</button>
-        </span>
-      ))}
-      <div className="players-input-wrap">
-        <input
-          ref={inputRef}
-          className="players-combobox-input"
-          value={query}
-          onChange={e => { setQuery(e.target.value); setOpen(true); setHlIndex(-1); }}
-          onFocus={() => setOpen(true)}
-          onBlur={() => setTimeout(() => { setOpen(false); setHlIndex(-1); }, 150)}
-          onKeyDown={handleKeyDown}
-          placeholder="Spieler hinzufügen…"
-        />
-        {open && suggestions.length > 0 && (
-          <div className="players-combobox-dropdown">
-            {suggestions.map((p, i) => (
+    <div className="players-combobox-wrap">
+      <div className="players-combobox">
+        {selected.map(id => {
+          const known = byId.has(id);
+          const label = playerLabel(id, byId);
+          return (
+            <span key={id} className={`player-tag${known ? '' : ' unknown'}`}>
               <button
-                key={p}
-                className={`players-combobox-item${i === hlIndex ? ' highlighted' : ''}`}
-                onMouseDown={e => { e.preventDefault(); add(p); }}
-                onMouseEnter={() => setHlIndex(i)}
-              >
-                {p}
-              </button>
-            ))}
-          </div>
-        )}
+                type="button"
+                className="player-tag-name"
+                onMouseDown={e => { e.preventDefault(); if (known) onPlayerClick(id); }}
+                title={known ? `${label} öffnen` : 'Nicht in der Spielerliste'}
+              >{label}</button>
+              <button className="player-tag-remove" onMouseDown={e => { e.preventDefault(); remove(id); }}>×</button>
+            </span>
+          );
+        })}
+        <div className="players-input-wrap">
+          <input
+            ref={inputRef}
+            className="players-combobox-input"
+            value={query}
+            onChange={e => { setQuery(e.target.value); setOpen(true); setHlIndex(-1); setNote(null); }}
+            onFocus={() => { setOpen(true); onFocusInput?.(); }}
+            onBlur={() => setTimeout(() => { setOpen(false); setHlIndex(-1); }, 150)}
+            onKeyDown={handleKeyDown}
+            placeholder="Spieler hinzufügen…"
+          />
+          {open && itemCount > 0 && (
+            <div className="players-combobox-dropdown">
+              {suggestions.map((p, i) => (
+                <button
+                  key={p.id}
+                  className={`players-combobox-item${i === hlIndex ? ' highlighted' : ''}`}
+                  onMouseDown={e => { e.preventDefault(); add(p); }}
+                  onMouseEnter={() => setHlIndex(i)}
+                >
+                  {adminLabel(p)}
+                  {binnedIds.has(p.id) && <span className="players-combobox-binned"> · aus dem Papierkorb</span>}
+                </button>
+              ))}
+              {offerCreate && (
+                <button
+                  className={`players-combobox-item players-combobox-create${hlIndex === suggestions.length ? ' highlighted' : ''}`}
+                  onMouseDown={e => { e.preventDefault(); startCreate(); }}
+                  onMouseEnter={() => setHlIndex(suggestions.length)}
+                >
+                  + „{query.trim()}“ neu anlegen
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
+      {note && <p className="be-field-hint" role="status">{note}</p>}
+      {draft && (
+        <form
+          className="player-create-form"
+          onSubmit={e => { e.preventDefault(); submitCreate(); }}
+        >
+          <input
+            className="be-input"
+            autoFocus
+            aria-label="Vorname"
+            placeholder="Vorname"
+            value={draft.firstName}
+            onChange={e => setDraft({ ...draft, firstName: e.target.value, error: null })}
+          />
+          <input
+            className="be-input"
+            aria-label="Nachname"
+            placeholder="Nachname"
+            value={draft.lastName}
+            onChange={e => setDraft({ ...draft, lastName: e.target.value, error: null })}
+          />
+          <input
+            className="be-input"
+            aria-label="Spitzname"
+            placeholder={draft.firstName.trim() ? `Spitzname (${draft.firstName.trim()})` : 'Spitzname (sonst Vorname)'}
+            title="So heißt der Spieler in der Show. Leer = Vorname."
+            value={draft.nickname}
+            onChange={e => setDraft({ ...draft, nickname: e.target.value, error: null })}
+          />
+          <button type="submit" className="admin-button">Anlegen</button>
+          <button type="button" className="admin-button secondary" onClick={() => setDraft(null)}>Abbrechen</button>
+          {draft.error && <p className="be-field-hint be-field-error" role="alert">{draft.error}</p>}
+        </form>
+      )}
     </div>
   );
 }
@@ -163,14 +289,6 @@ interface ComboboxProps {
   placeholder?: string;
   ctx?: OverlapContext;
 }
-
-const OVERLAP_BADGE_COMBOBOX: Record<Overlap, { label: string; className: string; title: string }> = {
-  fresh:   { label: 'Neu',        className: 'overlap-fresh',   title: 'Noch nie in einer früheren Gameshow gespielt' },
-  none:    { label: 'Ungespielt', className: 'overlap-none',    title: 'Früher gespielt, aber mit anderen Spielern' },
-  planned: { label: 'Eingeplant', className: 'overlap-planned', title: 'In einer folgenden Gameshow mit gemeinsamen Spielern eingeplant' },
-  partial: { label: 'Gemischt',   className: 'overlap-partial', title: 'Manche der aktuellen Spieler kennen das Spiel schon' },
-  full:    { label: 'Gespielt',   className: 'overlap-full',    title: 'Alle aktuellen Spieler kennen das Spiel bereits' },
-};
 
 function GameCombobox({ games, value, onChange, placeholder = 'Spiel suchen...', ctx }: ComboboxProps) {
   const [query, setQuery] = useState('');
@@ -233,7 +351,7 @@ function GameCombobox({ games, value, onChange, placeholder = 'Spiel suchen...',
           ) : (
             filtered.map((g, i) => {
               const ol = ctx ? classifyGameOverlap(gameRefs(g), ctx) : null;
-              const badge = ol ? OVERLAP_BADGE_COMBOBOX[ol] : null;
+              const badge = ol ? OVERLAP_BADGE_GAME[ol] : null;
               return (
                 <button
                   key={g.fileName}
@@ -267,6 +385,7 @@ interface InstanceComboboxProps {
 }
 
 function InstanceCombobox({ instances, value, onChange, gameData, ctx, placeholder = 'Instanz...' }: InstanceComboboxProps) {
+  const playerRegistry = useContext(PlayerRegistryContext);
   const [open, setOpen] = useState(false);
   const [hlIndex, setHlIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -309,7 +428,7 @@ function InstanceCombobox({ instances, value, onChange, gameData, ctx, placehold
           {instances.map((inst, i) => {
             const ref = gameData ? `${gameData.fileName}/${inst}` : inst;
             const ol = ctx ? classifyOverlap(ref, ctx) : null;
-            const badge = (ol && (ol === 'fresh' || ctx!.currentPlayersLower.length > 0)) ? OVERLAP_BADGE_COMBOBOX[ol] : null;
+            const badge = (ol && (ol === 'fresh' || ctx!.currentPlayerIds.length > 0)) ? OVERLAP_BADGE_GAME[ol] : null;
             return (
               <button
                 key={inst}
@@ -318,7 +437,7 @@ function InstanceCombobox({ instances, value, onChange, gameData, ctx, placehold
                 onMouseEnter={() => setHlIndex(i)}
               >
                 <span className="game-combobox-title">{inst}</span>
-                {badge && <span className={`overlap-badge ${badge.className}`} title={ol && ctx ? overlapTitle(ol, ref, ctx, badge.title) : badge.title}>{badge.label}</span>}
+                {badge && <span className={`overlap-badge ${badge.className}`} title={ol && ctx ? overlapTitle(ol, ref, ctx, badge.title, playerRegistry) : badge.title}>{badge.label}</span>}
               </button>
             );
           })}
@@ -346,18 +465,27 @@ interface PlanningProps {
  * `_players` session strings.
  */
 function ProvenanceList({ refValue, ctx, gameshows }: { refValue: string; ctx: OverlapContext; gameshows: Record<string, GameshowConfig> }) {
+  const playerRegistry = useContext(PlayerRegistryContext);
   const prov = refProvenance(refValue, ctx, gameshows);
   if (!prov.playedIn.length && !prov.plannedIn.length) return null;
-  const line = (kind: 'played' | 'planned', s: { id: string; name: string; overlapPlayers: string[] }) => (
-    <span key={`${kind}-${s.id}`} className={`planning-session${kind === 'planned' ? ' planned' : ''}`}>
-      <span className="planning-session-label">{kind === 'played' ? 'Gespielt' : 'Eingeplant'} · {s.name}</span>
-      {s.overlapPlayers.length > 0 && (
-        <>: {s.overlapPlayers.map((p, pi) => (
-          <span key={pi} className="session-player matched">{p}{pi < s.overlapPlayers.length - 1 ? ', ' : ''}</span>
-        ))}</>
-      )}
-    </span>
-  );
+  const line = (kind: 'played' | 'planned', s: { id: string; name: string; overlapPlayers: string[] }) => {
+    const shortNames = playerShortLabels(s.overlapPlayers, playerRegistry);
+    return (
+      <span key={`${kind}-${s.id}`} className={`planning-session${kind === 'planned' ? ' planned' : ''}`}>
+        <span className="planning-session-label">{kind === 'played' ? 'Gespielt' : 'Eingeplant'} · {s.name}</span>
+        {s.overlapPlayers.length > 0 && (
+          <>: {s.overlapPlayers.map((p, pi) => (
+            <span key={pi}>
+              {playerRegistry.has(p)
+                ? <button type="button" className="session-player matched is-link" onClick={() => openPlayer(p)} title={playerLabel(p, playerRegistry)}>{shortNames[pi]}</button>
+                : <span className="session-player matched">{shortNames[pi]}</span>}
+              {pi < s.overlapPlayers.length - 1 ? ', ' : ''}
+            </span>
+          ))}</>
+        )}
+      </span>
+    );
+  };
   return (
     <div className="planning-sessions">
       {prov.playedIn.map(s => line('played', s))}
@@ -376,6 +504,7 @@ function scoringModeOf(game: GameFileSummary | undefined, instance: string): str
 }
 
 function PlanningOverview({ games, ctx, gameshows, addedRefs, onAdd, showBadges }: PlanningProps) {
+  const playerRegistry = useContext(PlayerRegistryContext);
   const [search, setSearch] = useState('');
 
   const rows = useMemo(() => {
@@ -398,9 +527,8 @@ function PlanningOverview({ games, ctx, gameshows, addedRefs, onAdd, showBadges 
         }
       }
     }
-    const order: Record<Overlap, number> = { fresh: 0, none: 1, planned: 2, partial: 3, full: 4 };
     result.sort((a, b) => {
-      const d = order[a.overlap] - order[b.overlap];
+      const d = OVERLAP_ORDER[a.overlap] - OVERLAP_ORDER[b.overlap];
       return d !== 0 ? d : a.title.localeCompare(b.title);
     });
     return result;
@@ -434,7 +562,7 @@ function PlanningOverview({ games, ctx, gameshows, addedRefs, onAdd, showBadges 
             return (
               <div key={row.ref} className={`planning-row${isAdded ? ' added' : ''}`}>
                 <div className="planning-row-main">
-                  {showBadges && <span className={`overlap-badge ${badge.className}`} title={overlapTitle(row.overlap, row.ref, ctx, badge.title)}>{badge.label}</span>}
+                  {showBadges && <span className={`overlap-badge ${badge.className}`} title={overlapTitle(row.overlap, row.ref, ctx, badge.title, playerRegistry)}>{badge.label}</span>}
                   <span className="planning-title">{row.title}</span>
                   {row.instance && <span className="planning-instance">{row.instance}</span>}
                   <button
@@ -460,6 +588,16 @@ interface Props {
   id: string;
   gameshow: GameshowConfig;
   allGameshows: Record<string, GameshowConfig>;
+  /** The global player registry (`AppConfig.players`). */
+  registry: Player[];
+  /** Create a registry player and add them to this gameshow. Returns a German error, or null. */
+  onCreatePlayer: (firstName: string, lastName: string, nickname: string) => string | null;
+  /** Deleted players (the local bin), for the combobox. See specs/players.md ("Player bin"). */
+  binnedPlayers?: Player[];
+  /** Restore a binned player into the registry and add them to this gameshow. */
+  onRestorePlayer?: (player: Player) => void;
+  /** The player combobox got the focus: time to refresh the bin. */
+  onPlayersFocus?: () => void;
   /** Global `AppConfig.showTitle` — shown as the placeholder this gameshow inherits. */
   globalShowTitle?: string;
   /** Id of the active gameshow — the "now" divider for played vs. upcoming. */
@@ -471,16 +609,14 @@ interface Props {
   onChange: (updated: GameshowConfig) => void;
   onRename: (newName: string) => void;
   onDelete: () => void;
-  onNavigateToGameshow: (gameshowId: string) => void;
 }
 
-export default function GameshowEditor({ id, gameshow, allGameshows, globalShowTitle, activeGameshow, isActive, expanded, onToggleExpand, onSetActive, onChange, onRename, onDelete, onNavigateToGameshow }: Props) {
+export default function GameshowEditor({ id, gameshow, allGameshows, registry, onCreatePlayer, binnedPlayers, onRestorePlayer, onPlayersFocus, globalShowTitle, activeGameshow, isActive, expanded, onToggleExpand, onSetActive, onChange, onRename, onDelete }: Props) {
   const confirmDialog = useConfirm();
   const [availableGames, setAvailableGames] = useState<GameFileSummary[]>([]);
   const [pickGame, setPickGame] = useState('');
   const [pickInstance, setPickInstance] = useState('');
   const [showPlanning, setShowPlanning] = useState(false);
-  const [statsPlayer, setStatsPlayer] = useState<string | null>(null);
   // Inline name editing — click the name to rename in place (like DAM filenames).
   const [editingName, setEditingName] = useState(false);
   const [editName, setEditName] = useState('');
@@ -490,14 +626,7 @@ export default function GameshowEditor({ id, gameshow, allGameshows, globalShowT
     fetchGames().then(setAvailableGames).catch(() => {});
   }, []);
 
-  // Autocomplete pool = every player named in any gameshow's roster.
-  const knownPlayers = useMemo(() => {
-    const set = new Set<string>();
-    for (const gs of Object.values(allGameshows)) {
-      for (const p of gs.players ?? []) set.add(p);
-    }
-    return [...set].sort((a, b) => a.localeCompare(b));
-  }, [allGameshows]);
+  const registryById = useMemo(() => playerById(registry), [registry]);
 
   const pickedGameData = availableGames.find(g => g.fileName === pickGame);
   const pickIsSingle = pickedGameData?.isSingleInstance ?? false;
@@ -507,12 +636,6 @@ export default function GameshowEditor({ id, gameshow, allGameshows, globalShowT
     () => buildOverlapContext(allGameshows, id, currentPlayers, activeGameshow),
     [allGameshows, id, currentPlayers, activeGameshow],
   );
-  // "Now" divider for the player-stats modal: shows before the active one are
-  // played, the active one and later are upcoming ("Eingeplant").
-  const referenceIndex = useMemo(() => {
-    const i = Object.keys(allGameshows).indexOf(activeGameshow);
-    return i < 0 ? Object.keys(allGameshows).length : i;
-  }, [allGameshows, activeGameshow]);
   // A gameshow that already happened (before the active one). Its overlap badges
   // are planning aids that no longer apply, so they are hidden.
   const isPlayedShow = useMemo(() => {
@@ -610,6 +733,7 @@ export default function GameshowEditor({ id, gameshow, allGameshows, globalShowT
   };
 
   return (
+    <PlayerRegistryContext.Provider value={registryById}>
     <div className="backend-card" id={`gs-card-${id}`}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: expanded ? 6 : 0 }}>
@@ -740,9 +864,13 @@ export default function GameshowEditor({ id, gameshow, allGameshows, globalShowT
           <label className="gs-players-label">Spieler</label>
           <PlayersCombobox
             selected={currentPlayers}
-            knownPlayers={knownPlayers}
+            registry={registry}
             onChange={players => onChange({ ...gameshow, players })}
-            onPlayerClick={setStatsPlayer}
+            onCreate={onCreatePlayer}
+            onPlayerClick={openPlayer}
+            binned={binnedPlayers}
+            onRestore={onRestorePlayer}
+            onFocusInput={onPlayersFocus}
           />
           <button
             className={`be-icon-btn ${showPlanning ? 'active' : ''}`}
@@ -826,7 +954,7 @@ export default function GameshowEditor({ id, gameshow, allGameshows, globalShowT
                 <span
                   className={`overlap-badge ${badge?.className ?? ''}`}
                   style={{ flexShrink: 0, visibility: badge ? 'visible' : 'hidden' }}
-                  title={badge ? overlapTitle(overlap, ref, overlapCtx, badge.title) : undefined}
+                  title={badge ? overlapTitle(overlap, ref, overlapCtx, badge.title, registryById) : undefined}
                 >
                   {badge?.label ?? 'Ungespielt'}
                 </span>
@@ -935,17 +1063,8 @@ export default function GameshowEditor({ id, gameshow, allGameshows, globalShowT
       </>
       )}
 
-      {statsPlayer !== null && (
-        <PlayerStatsModal
-          player={statsPlayer}
-          games={availableGames}
-          gameshows={allGameshows}
-          referenceIndex={referenceIndex}
-          onNavigateToGameshow={onNavigateToGameshow}
-          onClose={() => setStatsPlayer(null)}
-        />
-      )}
     </div>
+    </PlayerRegistryContext.Provider>
   );
 }
 

@@ -67,6 +67,7 @@ games/
 - `gameshows[key].showTitle` — overrides the global `showTitle` while this gameshow is active (blank/omitted inherits it) — see [specs/show-title.md](specs/show-title.md)
 - `gameshows[key].pointMode` — how this gameshow turns a game result into points: `positional` (default, omitted — game N is worth N points), `flat` (every game 1 point) or `per-correct-answer` (one point per correct answer, read off the gamemaster's tally). The four inline-scored types keep their own scoring in every mode — see [specs/point-system.md](specs/point-system.md)
 - `teamColorsEnabled` / `teamColors` — Opt-in per-team colours (default: off). When on, every surface that renders a team marks it with an accent edge plus a dot beside the name, in all three zones; the four colours are picked in the admin Konfiguration tab and a blank one falls back to the active theme (see [specs/team-colors.md](specs/team-colors.md))
+- `players` — The global player registry: `{ id, firstName, lastName, nickname }` entries, all three required, every full name once. Each gameshow's `players` lists registry **ids**, so renaming a player renames them everywhere. Edited in the admin **Spieler** tab; the show displays nicknames (Spitznamen) and adds a surname prefix only when a nickname occurs twice (see [specs/players.md](specs/players.md))
 - `teamRandomizationEnabled` — How the teams are formed on the `HomeScreen` (default: `true`). `true` = enter a name pool that is shuffled + split automatically; `false` = **manual assignment** — add/remove players per team by hand on the show and the gamemaster (see [specs/team-management.md](specs/team-management.md))
 - `jokersInLastGame` — Allow jokers to stay available in the last game (default: `false`; when off, the joker UI is hidden in the last game)
 - `backgroundMusicSource` — Which background music the show plays (default: `"theme"`). `"theme"` = the active theme's `background-music/<theme>/` folder, falling back to the root folder; `"default"` = always the root folder. Admin toggle "Theme-Hintergrundmusik verwenden" (see [specs/background-music.md](specs/background-music.md))
@@ -161,6 +162,8 @@ Instance-specific fields override the base config. So an instance can have its o
 | `wer-kennt-mehr` | Final game: both teams name as many of a thing as possible; the team that named more scores that count (tie splits) | Yes |
 | `random-frame` | Guess the movie/show from a single random still frame extracted from a video at runtime (GM can re-roll) | Yes |
 | `city-compass` | Name the hidden city at the center of a compass rose, from the cities placed around it at their true bearing | Yes |
+| `venn` | Name the term that belongs to both categories of two overlapping circles; an optional third circle is a hint | Yes |
+| `film-stripe` | Name the film from a stripe of its average colours over time; a time-lapse is the hint (stripes are precomputed in the admin) | Yes |
 
 See [GAME_TYPES.md](GAME_TYPES.md) for detailed per-type documentation.
 

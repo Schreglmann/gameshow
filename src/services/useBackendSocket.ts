@@ -9,7 +9,7 @@
  * Auto-reconnects with exponential backoff on disconnect.
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
 
 type WsChannel =
   | 'yt-download-status'
@@ -24,7 +24,7 @@ type WsChannel =
   | 'gamemaster-answer'
   | 'gamemaster-controls'
   | 'gamemaster-command'
-  | 'gamemaster-team-state-v2'
+  | 'gamemaster-team-state-v3'
   | 'gamemaster-question-tally'
   | 'music-state'
   | 'music-command'
@@ -32,6 +32,7 @@ type WsChannel =
   | 'show-reemit-request'
   | 'gm-presence'
   | 'show-hold'
+  | 'show-controls-hidden'
   | 'content-changed';
 
 type Listener = (data: unknown) => void;
@@ -70,6 +71,37 @@ const MAX_RECONNECT_DELAY = 10000;
 let closeTimer: ReturnType<typeof setTimeout> | null = null;
 const CLOSE_GRACE_MS = 100;
 
+// Whether the socket is currently open. Drives the offline indicators on the
+// show and gamemaster screens. See specs/crash-recovery.md.
+let connected = false;
+const connectionListeners = new Set<() => void>();
+
+// Operator commands that could not be sent because the socket was down. They
+// are deliberately never queued (a stale "next" replayed later would jump the
+// show), so the gamemaster banner says "Befehl nicht gesendet" instead.
+const NOTIFY_ON_DROP: ReadonlySet<WsChannel> = new Set<WsChannel>([
+  'gamemaster-command',
+  'music-command',
+  'show-hold',
+  'show-controls-hidden',
+]);
+let droppedSends = 0;
+
+function noteDroppedSend(): void {
+  droppedSends += 1;
+  for (const fn of connectionListeners) {
+    try { fn(); } catch { /* ignore */ }
+  }
+}
+
+function setConnected(value: boolean): void {
+  if (connected === value) return;
+  connected = value;
+  for (const fn of connectionListeners) {
+    try { fn(); } catch { /* one listener's failure must not break the rest */ }
+  }
+}
+
 function getWsUrl(): string {
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
   return `${protocol}//${location.host}/api/ws`;
@@ -95,6 +127,7 @@ function connect(): void {
 
   ws.onopen = () => {
     reconnectDelay = 1000; // reset backoff on successful connect
+    setConnected(true);
     for (const fn of openListeners) {
       try { fn(); } catch { /* one listener's failure must not break the rest */ }
     }
@@ -113,6 +146,7 @@ function connect(): void {
 
   ws.onclose = () => {
     ws = null;
+    setConnected(false);
     scheduleReconnect();
   };
 
@@ -178,6 +212,7 @@ function scheduleDeferredClose(): void {
       if (anySubscribers()) return; // a listener re-subscribed in the meantime
       if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
       if (ws) { ws.close(); ws = null; }
+      setConnected(false);
     }, CLOSE_GRACE_MS);
   }
 }
@@ -193,11 +228,15 @@ function scheduleDeferredClose(): void {
  * leaves the peers on the previous value with nothing to retry.
  */
 export function sendWs(channel: WsChannel, data: unknown): boolean {
-  if (!ws || ws.readyState !== WebSocket.OPEN) return false;
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    if (NOTIFY_ON_DROP.has(channel)) noteDroppedSend();
+    return false;
+  }
   try {
     ws.send(JSON.stringify({ channel, data }));
     return true;
   } catch {
+    if (NOTIFY_ON_DROP.has(channel)) noteDroppedSend();
     return false;
   }
 }
@@ -254,6 +293,11 @@ export function __emitOpenForTests(): void {
   }
 }
 
+/** Test helper: simulate the socket opening or dropping, for the offline indicators. */
+export function __setConnectedForTests(value: boolean): void {
+  setConnected(value);
+}
+
 /** Test helper: clear the client-side last-value cache between tests. */
 export function __clearWsCacheForTests(): void {
   lastByChannel.clear();
@@ -272,6 +316,31 @@ export function useWsChannel<T>(channel: WsChannel, handler: (data: T) => void):
     subscribe(channel, fn);
     return () => unsubscribe(channel, fn);
   }, [channel]);
+}
+
+function subscribeConnection(fn: () => void): () => void {
+  connectionListeners.add(fn);
+  return () => { connectionListeners.delete(fn); };
+}
+
+/**
+ * React hook: whether the backend WebSocket is currently open. `false` before
+ * the first connect and while the server is unreachable.
+ *
+ * Only reflects the socket that other subscribers keep alive — mount it next to
+ * a `useWsChannel` / `useWsOpen` user (every PWA screen has several).
+ */
+export function useWsConnected(): boolean {
+  return useSyncExternalStore(subscribeConnection, () => connected, () => connected);
+}
+
+/**
+ * React hook: how many operator commands (`gamemaster-command`, `music-command`,
+ * `show-hold`) were dropped because the socket was not open. Only the change
+ * matters — the gamemaster banner flashes "Befehl nicht gesendet" on each bump.
+ */
+export function useDroppedSendCount(): number {
+  return useSyncExternalStore(subscribeConnection, () => droppedSends, () => droppedSends);
 }
 
 /**

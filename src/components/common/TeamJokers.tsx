@@ -92,6 +92,9 @@ export default function TeamJokers({ team, side }: TeamJokersProps) {
             aria-pressed={isUsed}
             disabled={locked}
             data-tooltip={tooltip}
+            // Stays visible when the GM hides the show's buttons: the audience
+            // reads joker state from it. See specs/gamemaster-hide-show-controls.md.
+            data-show-display
             onClick={() => handleClick(id, isUsed)}
           >
             <span className="header-joker-svg" aria-hidden="true">

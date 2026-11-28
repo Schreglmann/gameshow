@@ -24,6 +24,7 @@
 - [x] Warns when a `teamColors` entry is blank (that team falls back to the theme colour) and when `teamColors` is set while `teamColorsEnabled` is not `true` (nothing is marked). See [team-colors.md](team-colors.md)
 - [x] Warns when a gameshow sets `teamCount > 0` while the global `pointSystemEnabled` is `false` (the global switch wins — the show runs with no teams)
 - [x] Warns, per `gameOrder` entry, when the game's type + `scoringMode` cannot be scored at that gameshow's team count — the game still plays, just without scoring. See [team-count.md](team-count.md)
+- [x] Validates the player registry and every gameshow's `players` (see [players.md](players.md)): `players` is an array of `{ id, firstName, lastName }` objects with slug ids, no duplicate id, both names non-empty, no duplicate full name (case-insensitive); each gameshow's `players` lists registry ids only (a legacy name string gets a hint to run `scripts/migrate-players.ts`), none twice. Extra whitespace in a name is a warning
 - [x] The quizjagd supply check needs `questionsPerTeam × teamCount` playable questions and is a **warning**, not an error: one game file may be referenced by gameshows with different team counts, so a shortfall is a property of the pairing, not of the file
 
 ## State / data changes

@@ -12,10 +12,10 @@ Add a `sync` command that intelligently syncs NAS ↔ local-assets in both direc
 - [x] File on both sides, identical mtime → skipped (no copy)
 - [x] File was in last sync state, now only on NAS (deleted locally) → deleted from NAS
 - [x] File was in last sync state, now only on local (deleted from NAS) → deleted from local
-- [x] After every successful sync, `.sync-state.json` is written to both LOCAL_BASE and NAS_BASE
+- [x] After every successful sync, `.sync-state.json` is written to LOCAL_BASE only — the sync state is per device (see "Per-device sync state")
 - [x] `.sync-state.json` is excluded from the synced file set (never treated as an asset)
-- [x] First-ever sync (no state file on either side) treats all files as "new" — no deletions
-- [x] If both state files exist, the more recent one is used as the authoritative previous state
+- [x] First sync of a device (no local state file) treats all files as "new" — no deletions; a fresh clone pulls the whole NAS library
+- [x] The previous state is always this device's own `LOCAL_BASE/.sync-state.json`; a `.sync-state.json` on the NAS (written by older versions) is ignored
 - [x] Covers all 4 folders: audio, images, background-music, videos
 - [x] NAS not mounted → error and exit 1
 - [x] Summary line at end: "X copied, Y deleted, Z up to date"
@@ -33,15 +33,32 @@ A user action performed in the admin DAM (upload, move, rename, delete) must sur
 - [x] Folder move: all snapshot entries under the old folder prefix are rewritten to the new folder prefix when the NAS move op succeeds. When that op is dropped (NAS offline / EBUSY), the **move-intent ledger** stops the next rescan reading the old→new divergence as a mass delete+create, and drives a cheap NAS rename to finish the move — see "Move-intent override" below.
 
 ## State / data changes
-- New file: `LOCAL_BASE/.sync-state.json` and `NAS_BASE/.sync-state.json`
+- New file: `LOCAL_BASE/.sync-state.json` (per device, gitignored; never written to the NAS)
   - Shape: `{ lastSync: string (ISO), files: Record<string, string> }` (relative path → ISO mtime at last sync)
 - No changes to AppState, localStorage, or API
 
 ## Conflict resolution rules (in priority order)
-1. File missing from both state files → treat as new on whichever side it exists; if on both, mtime wins
+1. File missing from the state file → treat as new on whichever side it exists; if on both, mtime wins
 2. File in state, missing from one side → was deleted on that side; delete from the other side
 3. File in state, exists on both → mtime wins (newer overwrites older)
 4. File in state, exists on both, identical mtime → skip
+
+## Per-device sync state (2026-11-26)
+
+The sync state describes the last sync between **one** local tree and the NAS. It used to be written to both `LOCAL_BASE` and `NAS_BASE`, and the newer of the two was used as prev. With more than one device, that reads another device's snapshot as if it described this tree:
+
+- **Fresh clone** (the reported bug): no local state, so prev came from the NAS copy, which listed the whole library. Every NAS file was "in prev, missing locally", so the sync emitted a `delete-nas` for the whole library. Layer 2 vetoed it and recorded every file as a refused deletion, and the written state kept all entries, so every restart repeated the veto and nothing was ever pulled.
+- **Device B adds a file and syncs.** Device A takes B's newer state as prev, so the file reads as "in prev, missing on A", which gives a `delete-nas`. For ≤ 5 files no safety layer blocks it.
+- **Device B deletes a file.** B's state no longer lists it, so device A reads its local copy as new and pushes it back.
+
+The state is now per device:
+
+- [x] `startupSync`, `periodicRescan`, the CLI `sync` and `scripts/push-drifted-to-nas.ts` read prev only from `LOCAL_BASE/.sync-state.json`. `resolvePrevFiles` is gone.
+- [x] Every state write (`startupSync`, `periodicRescan`, `debouncedSaveSyncState`, CLI `sync`) targets `LOCAL_BASE` only. An existing NAS-side `.sync-state.json` is left in place and ignored. It is a dotfile, so no walk sees it.
+- [x] No local state means `prev = {}`. `computeSyncOps` emits a delete only for a path in prev, so the first sync of a device can only copy. Layer 2 has no denominator in that case, and it needs none.
+- [x] Deletion propagation still works between devices. Device A deletes X: X is in A's prev and still on the NAS, so the sync emits `delete-nas`. Device B still has X in its own prev and locally, and X is now gone from the NAS, so B's sync emits `delete-local`.
+
+**Recovering a device that already hit the bug:** its local `.sync-state.json` lists files it never had. Stop the server and delete `local-assets/.sync-state.json` and `local-assets/.nas-sync-conflicts.json`, then start the server. The startup sync then pulls the library. Do **not** confirm the refused deletions in the NAS-Sync-Konflikte card, because that trashes them on the NAS.
 
 ## Safety guarantees
 
@@ -230,7 +247,7 @@ The fix is a persistent **move-intent ledger** ([server/nas-sync-moves.ts](../se
 
 When `startup-sync` keeps logging the Layer 2 / Layer 3 messages on every restart, drift between `.sync-state.json` and the NAS scan is the cause. Run `npm run diagnose:sync` (read-only) to attribute the drift:
 
-- Loads both `.sync-state.json` files and picks the more recent prev via `resolvePrevFiles`.
+- Loads the local `.sync-state.json` as prev; prints the legacy NAS-side file's timestamp and entry count for forensics only.
 - Walks `local-assets/` and the NAS share via the shared `collectFileMetadata` ([server/nas-walk.ts](../server/nas-walk.ts)) — same filter the server uses.
 - Per folder, prints the four sync-op populations: `delete-local`, `delete-nas`, `push`, `pull`.
 - For every would-be `delete-local`, re-stats the NAS path directly (concurrency 8) and buckets the result: `OK` (walk missed it → SMB enumeration truncation), `ENOENT` (file truly absent), `other` (permission / EBUSY / …).

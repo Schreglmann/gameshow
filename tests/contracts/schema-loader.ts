@@ -1,6 +1,6 @@
 import { readFileSync } from 'fs';
 import path from 'path';
-import yaml from 'js-yaml';
+import { load as loadYamlText } from 'js-yaml';
 import Ajv2020, { type AnySchema, type ValidateFunction } from 'ajv/dist/2020';
 import addFormats from 'ajv-formats';
 
@@ -8,7 +8,7 @@ const REPO_ROOT = path.resolve(__dirname, '..', '..');
 
 function loadYaml(relPath: string): Record<string, unknown> {
   const full = path.join(REPO_ROOT, relPath);
-  return yaml.load(readFileSync(full, 'utf8')) as Record<string, unknown>;
+  return loadYamlText(readFileSync(full, 'utf8')) as Record<string, unknown>;
 }
 
 let cachedOpenapi: Record<string, unknown> | null = null;

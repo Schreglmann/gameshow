@@ -91,7 +91,7 @@ running show with no reload (see [live-config-reload.md](live-config-reload.md))
 - `GlobalSettings.teamColors: TeamColors` — always present after
   `normalizeTeamColors()`; `getInitialState` seeds `{}`.
 - `TeamState` is **untouched**. A config-authored colour is not live show state: it
-  must not ride the `gamemaster-team-state-v2` channel or localStorage.
+  must not ride the `gamemaster-team-state-v3` channel or localStorage.
 - No new `AppState` action — the value rides along in the existing `SET_SETTINGS`
   payload. Nothing is persisted to localStorage.
 - No new route and no new WS channel.

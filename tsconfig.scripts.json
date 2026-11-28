@@ -10,8 +10,7 @@
     "resolveJsonModule": true,
     "forceConsistentCasingInFileNames": true,
     "noEmit": true,
-    "allowImportingTsExtensions": false,
-    "baseUrl": "."
+    "allowImportingTsExtensions": false
   },
   "include": ["*.ts", "scripts/**/*.ts"],
   "exclude": ["node_modules", "dist", "src", "server", "tests"]

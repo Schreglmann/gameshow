@@ -5,6 +5,8 @@ import type { GamemasterAnswerData, GamemasterCommand, GamemasterControl } from 
 import { useQuestionOrder, type QuestionOrderHandle } from '@/hooks/useQuestionOrder';
 import { useLiveQuestionIndex } from '@/hooks/useLiveQuestionIndex';
 import { useArrowRightLongPress } from '@/hooks/useArrowRightLongPress';
+import { useAudioPlaying } from '@/hooks/useAudioPlaying';
+import { audioControlGroup, restartTrimmedAudio, toggleTrimmedAudio } from '@/utils/gmAudioControls';
 import { toMediaSrc } from '@/utils/assetUrl';
 import { safePlay } from '@/utils/safePlay';
 import { watchMediaLoad, MEDIA_SLOW_LOAD_MS } from '@/utils/mediaLoadTimeout';
@@ -102,6 +104,10 @@ function CluesInner({ questions, order, resumeAtEnd, gameTitle, answerAudioRef, 
   const [showAnswer, setShowAnswer] = useState(resumeAtEnd);
 
   const answerAudioCleanupRef = useRef<(() => void) | null>(null);
+  // The answer-audio element mirrored into state, so the GM audio controls
+  // re-render when it starts/stops. Set/cleared together with answerAudioRef.
+  const [answerAudioEl, setAnswerAudioEl] = useState<HTMLAudioElement | null>(null);
+  const answerAudioPlaying = useAudioPlaying(answerAudioEl);
 
   const q = questions[qIdx];
   const isExample = qIdx === 0;
@@ -158,6 +164,7 @@ function CluesInner({ questions, order, resumeAtEnd, gameTitle, answerAudioRef, 
     const audio = new Audio(toMediaSrc(q.answerAudio));
     audio.volume = 1;
     answerAudioRef.current = audio;
+    setAnswerAudioEl(audio);
     if (q.answerAudioStart !== undefined) {
       audio.currentTime = q.answerAudioStart;
     }
@@ -201,6 +208,7 @@ function CluesInner({ questions, order, resumeAtEnd, gameTitle, answerAudioRef, 
       answerAudioCleanupRef.current?.();
       answerAudioCleanupRef.current = null;
       if (answerAudioRef.current === audio) answerAudioRef.current = null;
+      setAnswerAudioEl(prev => (prev === audio ? null : prev));
     };
   }, [showAnswer, q?.answerAudio, q?.answerAudioStart, q?.answerAudioEnd, q?.answerAudioLoop, qKey, onPlayError, answerAudioRef]);
 
@@ -258,11 +266,26 @@ function CluesInner({ questions, order, resumeAtEnd, gameTitle, answerAudioRef, 
     onLongPress: revealAll,
   });
 
+  const answerAudioActive = showAnswer && answerAudioEl !== null;
+
+  const handleAnswerAudioPlayPause = useCallback(() => {
+    const audio = answerAudioRef.current;
+    if (!audio) return;
+    toggleTrimmedAudio(audio, { start: q?.answerAudioStart, end: q?.answerAudioEnd, onError: onPlayError });
+  }, [answerAudioRef, q?.answerAudioStart, q?.answerAudioEnd, onPlayError]);
+
+  const handleAnswerAudioRestart = useCallback(() => {
+    const audio = answerAudioRef.current;
+    if (!audio) return;
+    restartTrimmedAudio(audio, { start: q?.answerAudioStart, onError: onPlayError });
+  }, [answerAudioRef, q?.answerAudioStart, onPlayError]);
+
   // Gamemaster remote: a single "Auflösung" button jumps straight to the full
   // solution (all clues + answer), mirroring Bandle's reveal button. Marked
-  // active once the answer is shown.
+  // active once the answer is shown. Once the answer audio plays, its
+  // play/pause + restart buttons follow.
   useEffect(() => {
-    setGamemasterControls([
+    const controls: GamemasterControl[] = [
       {
         type: 'button-group',
         id: 'actions',
@@ -275,8 +298,10 @@ function CluesInner({ questions, order, resumeAtEnd, gameTitle, answerAudioRef, 
           },
         ],
       },
-    ]);
-  }, [showAnswer, setGamemasterControls]);
+    ];
+    if (answerAudioActive) controls.push(audioControlGroup(answerAudioPlaying));
+    setGamemasterControls(controls);
+  }, [showAnswer, answerAudioActive, answerAudioPlaying, setGamemasterControls]);
 
   // A long-press ArrowRight on the gamemaster arrives as `nav-forward-long`; the
   // "Auflösung" button arrives as `four-statements-reveal`. Both reveal all.
@@ -287,6 +312,10 @@ function CluesInner({ questions, order, resumeAtEnd, gameTitle, answerAudioRef, 
       revealAll();
     } else if (cmd.controlId === 'nav-forward-long' && !showAnswer) {
       revealAll();
+    } else if (cmd.controlId === 'audio-playpause') {
+      if (answerAudioActive) handleAnswerAudioPlayPause();
+    } else if (cmd.controlId === 'audio-restart') {
+      if (answerAudioActive) handleAnswerAudioRestart();
     } else {
       const m = cmd.controlId.match(/^hint-(\d+)$/);
       if (!m) return;
@@ -295,7 +324,7 @@ function CluesInner({ questions, order, resumeAtEnd, gameTitle, answerAudioRef, 
       setRevealedCount(Math.max(0, Math.min(statements.length, target)));
       setShowAnswer(false);
     }
-  }, [revealAll, showAnswer, statements.length]);
+  }, [revealAll, showAnswer, statements.length, answerAudioActive, handleAnswerAudioPlayPause, handleAnswerAudioRestart]);
 
   useEffect(() => {
     setCommandHandler(commandHandlerFn);

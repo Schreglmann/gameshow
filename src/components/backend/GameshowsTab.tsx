@@ -1,9 +1,12 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import type { Player } from '@/types/config';
+import { fetchPlayerBin } from '@/services/backendApi';
 import GameshowEditor from './GameshowEditor';
 import StatusMessage from './StatusMessage';
 import ConflictBanner from './ConflictBanner';
 import { useConfirm } from './ConfirmContext';
 import { useEditableConfig } from './useEditableConfig';
+import { createPlayer, dropOrphanedPlayers } from '@/utils/playerRegistry';
 
 function nameToId(name: string): string {
   return name
@@ -71,6 +74,15 @@ export default function GameshowsTab() {
     sessionStorage.removeItem('focus-gameshow');
     if (config.gameshows[id]) focusGameshow(id);
   }, [config]);
+
+  // Deleted players (the local bin): offered in the player combobox for a name
+  // typed in full. Refreshed when a combobox gets the focus, since a deletion
+  // elsewhere bins players on the server. See specs/players.md ("Player bin").
+  const [binned, setBinned] = useState<Player[]>([]);
+  const refreshBin = useCallback(() => {
+    fetchPlayerBin().then(setBinned).catch(() => { /* no bin: nothing to offer */ });
+  }, []);
+  useEffect(() => { refreshBin(); }, [refreshBin]);
 
   const addGameshow = () => {
     if (!config) return;
@@ -162,18 +174,68 @@ export default function GameshowsTab() {
           id={id}
           gameshow={gs}
           allGameshows={config.gameshows}
+          registry={config.players ?? []}
+          onCreatePlayer={(firstName, lastName, nickname) => {
+            // Checked against the registry as rendered; applied with a functional
+            // update, so the new player and the gameshow entry land in one write.
+            const check = createPlayer(config.players ?? [], firstName, lastName, nickname, binned.map(p => p.id));
+            if (!check.ok) return check.error;
+            setConfig(prev => {
+              if (!prev) return prev;
+              const created = createPlayer(prev.players ?? [], firstName, lastName, nickname, binned.map(p => p.id));
+              if (!created.ok) return prev;
+              const show = prev.gameshows[id];
+              if (!show) return prev;
+              return {
+                ...prev,
+                players: created.registry,
+                gameshows: { ...prev.gameshows, [id]: { ...show, players: [...(show.players ?? []), created.player.id] } },
+              };
+            });
+            return null;
+          }}
+          binnedPlayers={binned}
+          onPlayersFocus={refreshBin}
+          onRestorePlayer={player => {
+            // Back from the bin, as they were, and into this gameshow — one
+            // write; the server then takes them out of the bin.
+            setConfig(prev => {
+              if (!prev) return prev;
+              const show = prev.gameshows[id];
+              if (!show) return prev;
+              const registry = prev.players ?? [];
+              return {
+                ...prev,
+                players: registry.some(p => p.id === player.id) ? registry : [...registry, player],
+                gameshows: {
+                  ...prev.gameshows,
+                  [id]: { ...show, players: (show.players ?? []).includes(player.id) ? show.players : [...(show.players ?? []), player.id] },
+                },
+              };
+            });
+            setBinned(prev => prev.filter(p => p.id !== player.id));
+          }}
           globalShowTitle={config.showTitle}
           activeGameshow={config.activeGameshow}
           isActive={config.activeGameshow === id}
           expanded={expandedIds.has(id)}
           onToggleExpand={() => toggleExpanded(id)}
-          onSetActive={() => setConfig({ ...config, activeGameshow: id })}
+          onSetActive={() => setConfig(prev => prev && { ...prev, activeGameshow: id })}
           onChange={updated =>
-            setConfig({ ...config, gameshows: { ...config.gameshows, [id]: updated } })
+            setConfig(prev => {
+              if (!prev) return prev;
+              const gameshows = { ...prev.gameshows, [id]: updated };
+              // A player taken out of their last gameshow leaves the registry
+              // (the Spieler tab) too. See specs/players.md.
+              const before = prev.gameshows[id]?.players ?? [];
+              const removed = before.filter(pid => !(updated.players ?? []).includes(pid));
+              const registry = prev.players ?? [];
+              const pruned = removed.length > 0 ? dropOrphanedPlayers(registry, gameshows, removed) : registry;
+              return pruned === registry ? { ...prev, gameshows } : { ...prev, gameshows, players: [...pruned] };
+            })
           }
           onRename={newName => renameGameshow(id, newName)}
           onDelete={() => deleteGameshow(id)}
-          onNavigateToGameshow={focusGameshow}
         />
       ))}
       <button className="be-icon-btn" onClick={addGameshow} style={{ marginBottom: 4 }}>

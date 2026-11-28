@@ -117,6 +117,27 @@ describe('VideoGuess', () => {
     });
   });
 
+  it('cancels the pending answer scroll when unmounted', async () => {
+    const user = userEvent.setup();
+    const { unmount } = renderGame();
+    await waitFor(() => expect(screen.getByText('Film Quiz')).toBeInTheDocument());
+    await advanceToGame(user);
+
+    const div = document.createElement('div');
+    document.body.appendChild(div);
+    await user.click(div);
+    document.body.removeChild(div);
+    await waitFor(() => expect(screen.getByText('Example Film')).toBeInTheDocument());
+
+    // The reveal schedules scrollToCardBottom 100 ms out. Unmounting first
+    // must cancel it — otherwise it fires after jsdom teardown in CI.
+    unmount();
+    const querySpy = vi.spyOn(document, 'querySelector');
+    await new Promise(resolve => setTimeout(resolve, 150));
+    expect(querySpy).not.toHaveBeenCalledWith('.quiz-container');
+    querySpy.mockRestore();
+  });
+
   it('renders the optional question prompt in both question and answer phases', async () => {
     const user = userEvent.setup();
     const config = makeConfig({

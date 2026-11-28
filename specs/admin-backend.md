@@ -38,7 +38,8 @@ A full content management system accessible at `/admin` that allows the gameshow
 ### Games
 - Table of all `.json` game files from `/games/` (git-crypt-encrypted blobs are skipped)
 - When the list is empty, a **"Beispiele erstellen"** button generates example games for every type (`POST /api/backend/games/examples`) — see [example-games.md](example-games.md)
-- Each row: filename, type badge, title, instance names, Edit / Delete buttons
+- Each row: title, status badge (Neu / Ungespielt / … against the active gameshow), type badge, instance names, date, Delete button
+- One sort + filter button next to the search (Assets-tab style popover): sort by Name · Typ · Geändert · Erstellt · Status (also by clicking a column heading), filter Neu / Ungespielt / Gemischt / Gespielt (shown on the button, e.g. `Name ↓ · Neu`); kept across tab switches — see [admin-games-list.md](admin-games-list.md)
 - Edit opens `GameEditor`:
   - Base fields: title, type, rules (add/remove/reorder), randomizeQuestions toggle
   - Changing the **type** of a game that already has questions shows a confirmation ("Spieltyp ändern?" — vorhandene Fragen gehen verloren), because the existing questions are interpreted against a different schema. On confirm the content is **reset to the clean per-type template** (`GAME_TYPE_TEMPLATES`, a single empty `v1` instance), keeping only title + theme — otherwise the new type's question form would receive incompatible data and render a blank page. On cancel the type is left unchanged. No warning (and no reset) for an already-empty game. **Exception — compatible types:** when the old and new types share a question shape (currently only `simple-quiz` ↔ `bet-quiz`, both `SimpleQuizQuestion`), the switch is silent and the questions/instances are kept (`gameTypesShareQuestionShape` in `src/data/gameTypeInfo.ts`).
@@ -62,6 +63,8 @@ A full content management system accessible at `/admin` that allows the gameshow
 | fact-or-fake | statement*, isFact toggle (Fakt/Fake)*, description* |
 | quizjagd | question*, answer*, difficulty (3/5/7)*, isExample; plus questionsPerTeam setting |
 | audio-guess | Read-only info panel — questions are filesystem-derived; link to Assets tab |
+| venn | sets[2..3]* (Kategorie 1, Kategorie 2, optional Hinweis-Kategorie), answer*, answerImage; live diagram preview |
+| film-stripe | video*, answer* (prefilled from the file name), question, answerImage; "Streifen berechnen" bar + per-question stripe preview |
 All question forms support Add, Delete, Move Up, Move Down.
 
 ### Config
@@ -145,6 +148,7 @@ Note: the `local-assets/audio-guess/` directory on disk is not exposed as a DAM 
 - The "▶ YouTube" upload-zone button opens a modal with a **Suchen | URL** tab switch, defaulting to **Suchen** (the leftmost tab). The **Suchen** tab renders `<YouTubeSearchPanel>` for keyword search; the **URL** tab (second) is the existing paste-a-URL (+ playlist) flow.
 - Searching calls `POST /api/backend/assets/youtube/search` (`yt-dlp` flat search, metadata only — no API key). Results are 16:9 video cards (thumbnail, title, channel, duration); "Mehr laden" paginates.
 - Picking a result and confirming "✓ Herunterladen" downloads it into the active category / chosen subfolder via the **existing** `POST /api/backend/assets/:category/youtube-download` flow (yt-dlp → normalize → thumbnail-as-cover → SSE progress in the standard download tracker). The subfolder dropdown is shared with the URL tab. See [youtube-search.md](youtube-search.md).
+- The same search, plus link paste and an embedded preview player, is also available inside the game editor's audio/video asset picker (**DAM / ▶ YouTube** toggle): the downloaded file is set on the question directly. See [youtube-search.md](youtube-search.md) "YouTube im Asset-Picker".
 
 **Shared behavior:**
 - Drop zones show `dragover` CSS class while dragging over them (OS files, asset cards, and cross-browser URL drags) — suppressed when the current drag would be an invalid folder move

@@ -9,7 +9,7 @@ A third party who clones the repo without the git-crypt key gets a clean, workin
 - [x] Encrypted (git-crypt blob) game files are silently skipped from the admin listing — no "JSON-Fehler" badges for them
 - [x] `npm run validate` does not crash when `config.json` is encrypted; it reports "config.json is git-crypt encrypted, skipping validation" and exits 0
 - [x] `/api/settings` exposes `isCleanInstall: boolean` (true when `config.json` was missing/encrypted/unparseable)
-- [x] On server start, if `config.json` is **missing** or a **git-crypt blob**, the server writes a fresh minimal `config.json` to disk — a single empty `beispiele` gameshow — so the admin config editor and any direct readers work, not just the in-memory fallback
+- [x] On server start, if `config.json` is **missing** or a **git-crypt blob**, the server writes a fresh minimal `config.json` to disk — a single `beispiele` gameshow without games, plus the made-up example players ([server/example-players.ts](../server/example-players.ts)) — so the admin config editor and any direct readers work, not just the in-memory fallback
 - [x] When an encrypted `config.json` is replaced, its original blob is preserved as `config.json.git-crypt.bak` (never clobbering an existing backup) and the backup is gitignored
 - [x] A valid plaintext `config.json` is never overwritten; a malformed (non-encrypted) `config.json` is also left untouched (could be a half-finished hand edit — the in-memory fallback still serves it)
 - [x] The admin "Spiele" tab offers a **"Beispiele erstellen"** button when no games are present, which generates example games for every type — see [specs/example-games.md](example-games.md)
@@ -17,7 +17,7 @@ A third party who clones the repo without the git-crypt key gets a clean, workin
 ## State / data changes
 - `.gitattributes`: `config.json filter=git-crypt diff=git-crypt`; all `games/*.json` encrypted (generated `games/beispiel-*.json` are gitignored, never committed)
 - Server helper: `isGitCryptBlob(buffer): boolean` — checks for the `\x00GITCRYPT\x00` magic prefix
-- Server helper: `buildDefaultConfig(): AppConfig` — returns a minimal `AppConfig` with one empty `beispiele` gameshow (active) plus `globalRules` and `rulesPresets`. No filesystem scan
+- Server helper: `buildDefaultConfig(): AppConfig` — returns a minimal `AppConfig` with one `beispiele` gameshow (active, no games, the example players) plus `globalRules`, `rulesPresets` and the example player registry. No filesystem scan
 - `loadConfigWithFallback(configPath)` fallback chain: try `config.json` → if missing OR git-crypt blob OR JSON parse fails → return `buildDefaultConfig()`
 - `SettingsResponse` has `isCleanInstall: boolean`
 - Server helper: `ensureConfigFile(configPath): Promise<EnsureConfigResult>` — called once at startup. Materializes the default `config.json` when the file is missing or a git-crypt blob; backs up an encrypted blob to `config.json.git-crypt.bak` first; no-ops for valid or malformed plaintext. Writes atomically (tmp + rename), 2-space indent, trailing newline

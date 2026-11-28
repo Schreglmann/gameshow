@@ -141,6 +141,31 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/film-stripe/frame:
+    get:
+      operationId: frontend_getFilmStripeFrame
+      tags: [frontend]
+      summary: One time-lapse still of a film stripe (film-stripe game)
+      description: |
+        Serves still `i` of the precomputed film stripe of the video at `path`. Read
+        from the local cache only — the source video is never touched, so this works
+        with the NAS unmounted. Stripes are computed ahead of the show through the
+        admin `film-stripe/prepare` endpoint; how many stills a film has is the
+        `stripe.frames` field of its question in `GET /api/game/{index}`.
+        See [specs/games/film-stripe.md](../games/film-stripe.md).
+      parameters:
+        - { name: path, in: query, required: true, schema: { type: string }, description: "Video path relative to the videos asset root (no leading /videos/)." }
+        - { name: i, in: query, required: true, schema: { type: integer, minimum: 0 }, description: "Index of the still, 0-based, in film order." }
+      responses:
+        "200":
+          description: The JPEG still
+          content:
+            image/jpeg: { schema: { type: string, format: binary } }
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /videos-sdr/{start}/{end}/{splat}:
     get:
       operationId: frontend_getVideoSdr
@@ -201,6 +226,24 @@ paths:
                 items: { type: string }
               example: ["bg-calm.mp3", "bg-intense.mp3"]
 
+  /api/health:
+    get:
+      operationId: shared_getHealth
+      tags: [shared]
+      summary: Liveness probe
+      description: |
+        Answers whenever the server's event loop does. Touches neither the file
+        system nor the NAS. Polled by the `npm start` supervisor's hang watchdog
+        (`scripts/supervise.cjs`) and by clients that wait for the server before
+        reloading the page. Responses are `Cache-Control: no-store`.
+        See specs/crash-recovery.md.
+      responses:
+        "200":
+          description: Server is up
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HealthResponse" }
+
   /api/settings:
     get:
       operationId: shared_getSettings
@@ -232,6 +275,51 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/RunOfShowResponse" }
+
+  /api/live-players:
+    post:
+      operationId: frontend_syncLivePlayers
+      tags: [frontend]
+      summary: Write the show's player adds and removes into the active gameshow
+      description: |
+        Called by the active show tab after every add or remove on the show or the
+        gamemaster (add field, autocomplete pick, team-card slot, ✕, GM "Entfernen").
+        An add by `id` appends that registry player to the active gameshow's `players`;
+        an add by name reuses the registry player with that identity (full name, or the
+        nickname of a player without one) or creates one — with only the nickname when no
+        first name / surname is given — and appends them. A removed id leaves the gameshow,
+        and the registry too when it is then in no gameshow (the player goes to the local bin,
+        `players-bin.json`). An add by id or by name that matches a binned player restores them. Ids already listed are not added twice; moves and
+        reshuffles are never sent. Fire and forget for the show: a refusal leaves the live
+        draw as it is. See [specs/players.md](../players.md) ("Sync to the gameshow").
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LivePlayersRequest" }
+      responses:
+        "200":
+          description: The added players as the registry holds them, in request order
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LivePlayersResponse" }
+        "400":
+          description: Malformed body
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "409":
+          description: >-
+            The config can't take it: no config.json, encrypted (git-crypt) or unparseable,
+            no active gameshow, or an add names an unknown id
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "500":
+          description: Write failed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
 
   /api/theme:
     get:
@@ -577,6 +665,29 @@ paths:
   # Admin backend — config
   # ─────────────────────────────────────────────────────────────────────────
 
+  /api/backend/player-bin:
+    get:
+      operationId: admin_getPlayerBin
+      tags: [admin]
+      summary: Deleted players kept in the local bin
+      description: >-
+        Players who left the registry (`players-bin.json`, gitignored), for the gameshow
+        combobox, which offers them for a name typed in full. Every config write that removes
+        players from the registry bins them; one that brings them back takes them out. See
+        [specs/players.md](../players.md) ("Player bin").
+      responses:
+        "200":
+          description: The binned players
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [players]
+                properties:
+                  players:
+                    type: array
+                    items: { $ref: '#/components/schemas/Player' }
+
   /api/backend/config:
     get:
       operationId: admin_getConfig
@@ -592,6 +703,10 @@ paths:
       operationId: admin_saveConfig
       tags: [admin]
       summary: Atomically overwrite config.json
+      description: >-
+        Players the write removes from the registry are moved to the local player bin
+        (`players-bin.json`) first, and players it brings back are taken out of it. See
+        [specs/players.md](../players.md) ("Player bin").
       requestBody:
         required: true
         content:
@@ -1908,6 +2023,77 @@ paths:
               schema: { $ref: "#/components/schemas/WarmupSdrEvent" }
             text/event-stream:
               schema: { type: string, description: SSE lines }
+
+  /api/backend/assets/videos/film-stripe/status:
+    get:
+      operationId: admin_filmStripeStatus
+      tags: [admin]
+      summary: Whether a film stripe is computed for each given video
+      description: Backs the stripe preview, the "x/y Filme vorbereitet" count and the button label in the Filmstreifen editor.
+      parameters:
+        - { name: paths, in: query, required: false, schema: { type: string }, description: "Pipe-separated (`|`) list of video rel-paths (no leading /videos/)." }
+      responses:
+        "200":
+          description: Stripe status per video
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: object
+                    description: "Map of video rel-path → stripe status."
+                    additionalProperties:
+                      type: object
+                      required: [ready, current, sourceReachable, frames, colors]
+                      properties:
+                        ready: { type: boolean, description: "A stripe is in the cache." }
+                        current: { type: boolean, description: "The video file is unchanged since the stripe was computed. Also true when the file cannot be read right now." }
+                        sourceReachable: { type: boolean, description: "The video file can be read right now (local or NAS)." }
+                        frames: { type: integer, description: "Number of time-lapse stills." }
+                        colors:
+                          type: array
+                          items: { type: string }
+                          description: "The stripe as `#rrggbb` colours in film order; empty when not ready."
+
+  /api/backend/assets/videos/film-stripe/prepare:
+    post:
+      operationId: admin_filmStripePrepare
+      tags: [admin]
+      summary: Compute film stripes (colour stripe + time-lapse stills) for videos
+      description: |
+        Samples each film at 240 moments, reduces every frame to its average colour and
+        keeps every 5th frame as a still. Resolves each source from local or the NAS
+        mount; the result is cached locally and is the only thing the show reads. A
+        stripe that already matches its video file is kept unless `force`. Streams SSE:
+        `data: { taskId }` first (the `film-stripe` background task whose `meta.filmStripe`
+        mirrors the run on `system-status`),
+        `data: { path, percent }` while a film is sampled, `data: { path, ready: true }` or
+        `data: { path, itemError }` per film (a failure does not abort the batch),
+        `data: { percent }` for the batch, then `data: { percent: 100, done: true, failures }`.
+        See [specs/games/film-stripe.md](../games/film-stripe.md).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [paths]
+              properties:
+                paths:
+                  type: array
+                  items: { type: string }
+                  description: "Video rel-paths (no leading /videos/)."
+                force: { type: boolean, description: "Recompute stripes that are already current." }
+      responses:
+        "200":
+          description: SSE stream of progress events
+          content:
+            text/event-stream:
+              schema: { type: string, description: SSE lines }
+        "400":
+          $ref: "#/components/responses/BadRequest"
 
   /api/backend/assets/videos/random-frame/prerender-status:
     get:
@@ -3254,7 +3440,7 @@ components:
       enum: [simple-quiz, bet-quiz, guessing-game, final-quiz, audio-guess,
              video-guess, q1, four-statements, fact-or-fake, quizjagd, bandle,
              image-guess, colorguess, ranking, wer-kennt-mehr, random-frame,
-             city-compass]
+             city-compass, venn, film-stripe]
 
     SettingsResponse:
       type: object
@@ -3339,8 +3525,25 @@ components:
             param. See specs/background-music.md.
         players:
           type: array
-          items: { type: string }
-          description: Roster of the active gameshow, prefills the HomeScreen randomization textarea.
+          items: { $ref: '#/components/schemas/Player' }
+          description: >-
+            Players of the active gameshow, resolved from the registry (`GameshowConfig.players`
+            ids → `AppConfig.players`). Unknown ids are skipped. Drawn into the hidden team draw
+            when it is empty. See [specs/players.md](../players.md).
+        binned:
+          type: array
+          items: { $ref: '#/components/schemas/Player' }
+          description: >-
+            Deleted players from the local bin (`players-bin.json`) — suggested only for one of
+            their names typed in full; adding one restores them to the registry. See
+            [specs/players.md](../players.md) ("Player bin").
+        registry:
+          type: array
+          items: { $ref: '#/components/schemas/Player' }
+          description: >-
+            The whole player registry (`AppConfig.players`) — the candidates the show's and the
+            gamemaster's "Spieler hinzufügen" fields suggest while typing. See
+            [specs/players.md](../players.md).
         totalGames:
           type: integer
           minimum: 0
@@ -3431,6 +3634,13 @@ components:
             heading, gamemaster start/summary label and browser tab title. Overridable
             per gameshow via `GameshowConfig.showTitle`; blank/omitted at both levels
             means `Game Show`. See [specs/show-title.md](../show-title.md).
+        players:
+          type: array
+          items: { $ref: '#/components/schemas/Player' }
+          description: >-
+            The global player registry, edited in the admin Spieler tab. A full name
+            exists only once. Gameshows reference players by id.
+            See [specs/players.md](../players.md).
         pointSystemEnabled: { type: boolean }
         teamRandomizationEnabled: { type: boolean }
         teamColorsEnabled:
@@ -3528,7 +3738,12 @@ components:
             Blank/omitted inherits the global value (and then the `Game Show` default).
             See [specs/show-title.md](../show-title.md).
         gameOrder: { type: array, items: { type: string } }
-        players: { type: array, items: { type: string } }
+        players:
+          type: array
+          items: { type: string, pattern: '^[a-z0-9]+(-[a-z0-9]+)*$' }
+          description: >-
+            Ids of this gameshow's players in the registry `AppConfig.players`.
+            See [specs/players.md](../players.md).
         enabledJokers: { type: array, items: { type: string } }
         teamCount:
           type: integer
@@ -3540,6 +3755,63 @@ components:
             See specs/team-count.md.
         pointMode:
           $ref: '#/components/schemas/PointMode'
+
+    Player:
+      type: object
+      description: >-
+        A player in the global registry. The nickname is required; first name and surname may
+        be empty (a player added during the show has only the nickname until the admin
+        completes it). The id is a slug made when the player is created and never changes.
+        See [specs/players.md](../players.md).
+      required: [id, firstName, lastName, nickname]
+      properties:
+        id: { type: string, pattern: '^[a-z0-9]+(-[a-z0-9]+)*$' }
+        firstName: { type: string }
+        lastName: { type: string }
+        nickname:
+          type: string
+          minLength: 1
+          description: Spitzname — what the show and the gamemaster call the player.
+        disabled:
+          type: boolean
+          description: >-
+            Switched off globally: stays in the gameshows they are in, but no autocomplete offers
+            them unless one of their names is typed in full. Absent = active.
+
+    LivePlayersRequest:
+      type: object
+      description: Adds and removes to write into the active gameshow. See [specs/players.md](../players.md).
+      properties:
+        add:
+          type: array
+          maxItems: 200
+          items:
+            oneOf:
+              - type: object
+                description: A registry player.
+                required: [id]
+                properties:
+                  id: { type: string }
+              - type: object
+                description: A name typed on the show — found in the registry or created there.
+                required: [nickname]
+                properties:
+                  nickname: { type: string, minLength: 1 }
+                  firstName: { type: string }
+                  lastName: { type: string }
+        remove:
+          type: array
+          maxItems: 200
+          items: { type: string, description: A registry id. }
+
+    LivePlayersResponse:
+      type: object
+      required: [players]
+      properties:
+        players:
+          type: array
+          items: { $ref: '#/components/schemas/Player' }
+          description: The added players as stored, in request order.
 
     TeamColors:
       type: object
@@ -3622,6 +3894,16 @@ components:
             Instance keys (excluding `template`) whose instance object is
             marked `disabled`. Multi-instance games only.
         parseError: { type: string }
+        modifiedAt:
+          type: number
+          description: File mtime in epoch milliseconds.
+        createdAt:
+          type: number
+          description: |
+            When the file was first added to git (author time of the adding
+            commit, following renames), in epoch milliseconds. Files git does not
+            know yet fall back to min(birthtime, mtime). See
+            [specs/admin-games-list.md](../admin-games-list.md).
 
     BaseGameConfig:
       type: object
@@ -3670,6 +3952,8 @@ components:
         - $ref: "#/components/schemas/WerKenntMehrConfig"
         - $ref: "#/components/schemas/RandomFrameConfig"
         - $ref: "#/components/schemas/CityCompassConfig"
+        - $ref: "#/components/schemas/VennConfig"
+        - $ref: "#/components/schemas/FilmStripeConfig"
       discriminator:
         propertyName: type
 
@@ -3936,6 +4220,79 @@ components:
         info: { type: string }
         answerImage: { type: string }
         disabled: { type: boolean }
+
+    VennConfig:
+      allOf:
+        - $ref: "#/components/schemas/BaseGameConfig"
+        - type: object
+          required: [type, questions]
+          properties:
+            type: { const: venn }
+            questions:
+              type: array
+              items: { $ref: "#/components/schemas/VennQuestion" }
+
+    VennQuestion:
+      description: |
+        One "Schnittmenge" puzzle: `answer` is the term that belongs to every
+        category in `sets`. The first two sets are on screen from the start, a
+        third is the hint circle. See [specs/games/venn.md](../games/venn.md).
+      type: object
+      required: [sets, answer]
+      properties:
+        gmInfo: { type: string, description: "Gamemaster-only note, shown in the GM card under the answer and never rendered on the show. Not secret: it is part of the game config the show receives." }
+        sets:
+          type: array
+          minItems: 2
+          maxItems: 3
+          items: { type: string }
+          description: Category names, one per circle, in reveal order.
+        answer: { type: string }
+        answerImage: { type: string }
+        disabled: { type: boolean }
+
+    FilmStripeConfig:
+      allOf:
+        - $ref: "#/components/schemas/BaseGameConfig"
+        - type: object
+          required: [type, questions]
+          properties:
+            type: { const: film-stripe }
+            questions:
+              type: array
+              items: { $ref: "#/components/schemas/FilmStripeQuestion" }
+
+    FilmStripeData:
+      description: |
+        A film reduced to colours. Added to each question by the server from the
+        film-stripe cache; never present in an authored game file.
+      type: object
+      required: [colors, frames, framePositions]
+      properties:
+        colors:
+          type: array
+          items: { type: string }
+          description: "One `#rrggbb` per sampled moment, in film order."
+        frames: { type: integer, description: "Number of time-lapse stills served by `GET /api/film-stripe/frame`." }
+        framePositions:
+          type: array
+          items: { type: integer }
+          description: "For each still, the index of its moment in `colors`."
+
+    FilmStripeQuestion:
+      description: |
+        A film shown as a colour stripe. See [specs/games/film-stripe.md](../games/film-stripe.md).
+      type: object
+      required: [video, answer]
+      properties:
+        gmInfo: { type: string, description: "Gamemaster-only note, shown in the GM card under the answer and never rendered on the show. Not secret: it is part of the game config the show receives." }
+        video: { type: string, description: "DAM video path the stripe is computed from, e.g. `/videos/Dune.m4v`." }
+        answer: { type: string, description: "Film title — the answer." }
+        question: { type: string, description: "Optional prompt (default: 'Welcher Film ist das?')." }
+        answerImage: { type: string, description: "Optional reveal image, usually the poster." }
+        disabled: { type: boolean }
+        stripe:
+          $ref: "#/components/schemas/FilmStripeData"
 
     MultiInstanceGameFile:
       type: object
@@ -5052,13 +5409,21 @@ components:
 
     # ─── System status + whisper ───
 
+    HealthResponse:
+      type: object
+      required: [ok, uptimeSeconds, startedAt]
+      properties:
+        ok: { type: boolean, const: true }
+        uptimeSeconds: { type: number }
+        startedAt: { type: string, format: date-time, description: When this server process started. }
+
     SystemStatusResponse:
       type: object
       required: [server, storage, caches, processes, config, nasSync]
       properties:
         server:
           type: object
-          required: [uptimeSeconds, nodeVersion, memoryMB, cpu, network, ffmpegAvailable, ytDlpAvailable, ytDlpPath]
+          required: [uptimeSeconds, nodeVersion, memoryMB, cpu, network, ffmpegAvailable, ytDlpAvailable, ytDlpPath, lastCrash]
           properties:
             uptimeSeconds: { type: number }
             nodeVersion: { type: string }
@@ -5103,6 +5468,17 @@ components:
             ffmpegAvailable: { type: boolean }
             ytDlpAvailable: { type: boolean }
             ytDlpPath: { type: [string, "null"] }
+            lastCrash:
+              description: |
+                Last unplanned server exit, read once at boot from `logs/last-crash.json`;
+                null when there was none. See specs/crash-recovery.md.
+              oneOf:
+                - type: "null"
+                - type: object
+                  required: [at, reason]
+                  properties:
+                    at: { type: string, format: date-time }
+                    reason: { type: string, description: "One line: error message, exit code or signal." }
         storage:
           type: object
           required: [nasMount, mode, basePath, categories]
@@ -5191,6 +5567,26 @@ components:
                       end: { type: number }
                       track: { type: integer }
                       kind: { type: string, enum: [compressed, sdr] }
+                      filmStripe:
+                        type: object
+                        description: >-
+                          State of a `film-stripe` batch, so an admin form that did not start
+                          it can follow it. Films run in `paths` order: the first `done` of them
+                          are finished.
+                        required: [paths, done, failed]
+                        properties:
+                          paths: { type: array, items: { type: string } }
+                          done: { type: integer }
+                          failed:
+                            type: array
+                            items:
+                              type: object
+                              required: [path, error]
+                              properties:
+                                path: { type: string }
+                                error: { type: string }
+                          current: { type: string, description: "Film being sampled." }
+                          currentPercent: { type: integer, description: "Progress of the current film, 0–100." }
             whisperJobs:
               type: array
               items:

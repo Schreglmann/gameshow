@@ -2362,7 +2362,7 @@
 [data-theme="classical-music"] .folder-prompt-box,
 [data-theme="classical-music"] .replace-modal,
 [data-theme="classical-music"] .confirm-modal-box,
-[data-theme="classical-music"] .player-stats-box,
+[data-theme="classical-music"] .player-lightbox,
 [data-theme="classical-music"] .qr-modal-box,
 [data-theme="atlas-light"] .modal-box,
 [data-theme="atlas-light"] .picker-modal,
@@ -2375,7 +2375,7 @@
 [data-theme="atlas-light"] .folder-prompt-box,
 [data-theme="atlas-light"] .replace-modal,
 [data-theme="atlas-light"] .confirm-modal-box,
-[data-theme="atlas-light"] .player-stats-box,
+[data-theme="atlas-light"] .player-lightbox,
 [data-theme="atlas-light"] .qr-modal-box {
   background: var(--card-bg);
   border: var(--card-border);

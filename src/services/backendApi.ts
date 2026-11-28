@@ -1,4 +1,4 @@
-import type { AppConfig, GameFileSummary, AssetCategory, AssetListResponse, ColorSlice } from '../types/config';
+import type { AppConfig, GameFileSummary, AssetCategory, AssetListResponse, ColorSlice, Player } from '../types/config';
 import { isStreamActive } from './networkPriority';
 
 const BASE = '/api/backend';
@@ -134,6 +134,12 @@ export async function fetchBandleUsedSongs(): Promise<string[]> {
 
 export async function fetchConfig(): Promise<AppConfig> {
   return apiRequest<AppConfig>(`${BASE}/config`);
+}
+
+/** Deleted players kept in the local bin (`players-bin.json`). See specs/players.md ("Player bin"). */
+export async function fetchPlayerBin(): Promise<Player[]> {
+  const data = await apiRequest<{ players?: Player[] }>(`${BASE}/player-bin`);
+  return Array.isArray(data.players) ? data.players : [];
 }
 
 export async function saveConfig(config: AppConfig): Promise<void> {
@@ -800,6 +806,90 @@ export async function getRandomFramePrerenderStatus(keys: string[]): Promise<Rec
   if (!res.ok) return {};
   const data = await res.json() as { status: Record<string, RandomFramePrerenderStatus> };
   return data.status ?? {};
+}
+
+// ── Film stripes (precomputed colour stripe + time-lapse for the Filmstreifen game) ──
+
+export interface FilmStripeStatus {
+  /** A stripe is in the cache. */
+  ready: boolean;
+  /** The video file is unchanged since the stripe was computed. */
+  current: boolean;
+  /** The video file can be read right now (local or NAS). */
+  sourceReachable: boolean;
+  frames: number;
+  /** The stripe's colours, for a preview. Empty when not ready. */
+  colors: string[];
+}
+
+export interface FilmStripePrepareEvent {
+  /** First event: the background task the run is tracked under in `system-status`. */
+  taskId?: string;
+  /** Relative video path the event is about; absent on batch-level events. */
+  path?: string;
+  /** With `path`: progress of that film. Without: progress of the whole batch. */
+  percent?: number;
+  ready?: boolean;
+  /** Per-film failure (does not abort the batch). */
+  itemError?: string;
+  done?: boolean;
+  failures?: number;
+}
+
+/** A film-stripe batch as the `system-status` channel carries it (`meta.filmStripe` of a
+ *  `film-stripe` background task). Films run in `paths` order: the first `done` are finished. */
+export interface FilmStripeRunMeta {
+  paths: string[];
+  done: number;
+  failed: Array<{ path: string; error: string }>;
+  current?: string;
+  currentPercent?: number;
+}
+
+/** Stripe status per relative video path. */
+export async function getFilmStripeStatus(paths: string[]): Promise<Record<string, FilmStripeStatus>> {
+  if (paths.length === 0) return {};
+  const params = new URLSearchParams({ paths: paths.join('|') });
+  const res = await fetch(`${BASE}/assets/videos/film-stripe/status?${params}`);
+  if (!res.ok) return {};
+  const data = await res.json() as { status: Record<string, FilmStripeStatus> };
+  return data.status ?? {};
+}
+
+/**
+ * Compute the stripes of the given videos. Streams SSE progress. A stripe that is
+ * already current is kept unless `force`.
+ */
+export async function prepareFilmStripes(
+  paths: string[],
+  onEvent?: (event: FilmStripePrepareEvent) => void,
+  force?: boolean,
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await fetch(`${BASE}/assets/videos/film-stripe/prepare`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ paths, ...(force && { force: true }) }),
+    signal,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error((body as { error?: string }).error || res.statusText);
+  }
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop()!;
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      onEvent?.(JSON.parse(line.slice(6)) as FilmStripePrepareEvent);
+    }
+  }
 }
 
 export interface MissingCacheEntry {
@@ -1652,6 +1742,9 @@ export interface SystemStatusResponse {
     ffmpegAvailable: boolean;
     ytDlpAvailable: boolean;
     ytDlpPath: string | null;
+    /** Last unplanned server exit, from logs/last-crash.json; null when there was none.
+     *  See specs/crash-recovery.md. */
+    lastCrash: { at: string; reason: string } | null;
   };
   storage: {
     nasMount: { reachable: boolean };
@@ -1682,6 +1775,7 @@ export interface SystemStatusResponse {
         end?: number;
         track?: number;
         kind?: 'compressed' | 'sdr';
+        filmStripe?: FilmStripeRunMeta;
       };
     }>;
     whisperJobs?: Array<{ video: string; language: string; status: string; phase?: string; percent: number; elapsed: number; error?: string }>;

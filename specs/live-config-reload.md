@@ -42,6 +42,12 @@ one watcher covers all change sources — no need to instrument each write endpo
 - [ ] Editing a game/question in admin tab A appears in admin tab B (which has the same game open and **no unsaved edits**) within ~1s, in place, without losing B's scroll/focus or instance tab.
 - [ ] If admin tab B has **unsaved edits** to the same game, B shows a non-blocking "Dieses Spiel wurde in einem anderen Tab geändert" banner with a **Neu laden** button — B's edits are never silently overwritten, and A's change is never silently lost. **Neu laden** adopts A's version; dismiss (×) keeps B's edits.
 - [ ] The editing tab does **not** show a conflict banner for its **own** saves (own-write echoes are suppressed by content, not timing).
+- [x] Several config editors can be mounted at once (a tab plus the player lightbox over it). When a
+      save written by one of them lands, every OTHER editor without unsaved edits of its own adopts
+      the saved config as its state (not just as its baseline — a moved baseline alone made its older
+      config look like unsaved edits, and every later remote change, e.g. a player added on the show,
+      was refused until a reload). An editor with its own unsaved edits only moves its baseline.
+      See [useEditableConfig.ts](../src/components/backend/useEditableConfig.ts).
 - [ ] A `content-changed` event whose on-disk file equals the editor's **saved baseline** (i.e. the file did not actually change relative to what this tab loaded) never raises the conflict banner, even when the tab has unsaved local edits — e.g. a stray echo from the "Beispiele erstellen" write-burst on a fresh install must not interrupt editing.
 - [ ] Adopting a remote change does **not** trigger a re-save (no PUT ping-pong / cross-tab thrash).
 - [ ] Config edits (gameshows, `gameOrder`, global rules, point system) made in one admin propagate to other admins' **Config** tab with the same clean-adopt / dirty-banner behaviour.
@@ -57,8 +63,10 @@ one watcher covers all change sources — no need to instrument each write endpo
     config?: boolean; // config.json changed → re-fetch settings + current game
     theme?: boolean;  // theme-settings.json changed → re-fetch theme
     games?: boolean;  // a games/*.json changed → re-fetch current game
+    filmStripes?: boolean; // a film stripe finished computing → re-fetch current game
   }
   ```
+  `filmStripes` is not a watched file: the film-stripe build sends it when a stripe lands in the video cache, and `GameScreen` re-fetches the current game on it like on `games` (see [specs/games/film-stripe.md](games/film-stripe.md)).
 - **New server module** [server/content-watch.ts](../server/content-watch.ts): `startContentWatch(rootDir, gamesDir)` watches the two directories (not the files — survives the endpoints' atomic `tmp → rename` writes), debounces ~200 ms, coalesces flags, and calls `broadcast('content-changed', payload)`. Best-effort node `fs.watch` (try/catch-and-continue, matching the [server/whisper-jobs.ts](../server/whisper-jobs.ts) house pattern; each watcher also gets an `'error'` listener — an async FSWatcher error such as EMFILE under fd pressure warns and drops that watcher instead of crashing the process). Wired in [server/index.ts](../server/index.ts) after `setupWebSocket`.
 - No `AppState` shape change. No localStorage change. No new HTTP route.
 

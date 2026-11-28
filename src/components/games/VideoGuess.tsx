@@ -425,9 +425,9 @@ function VideoInner({ questions, order, resumeAtEnd, gameTitle, videoRef, onGame
 
   // Scroll to bottom when answer is revealed so the answer text is visible
   useEffect(() => {
-    if (showAnswer) {
-      setTimeout(scrollToCardBottom, 100);
-    }
+    if (!showAnswer) return;
+    const id = setTimeout(scrollToCardBottom, 100);
+    return () => clearTimeout(id);
   }, [showAnswer]);
 
   if (!q) return null;

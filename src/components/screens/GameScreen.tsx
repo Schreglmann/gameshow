@@ -15,6 +15,7 @@ import type { GameDataResponse, ContentChangedPayload } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterCommand, GamemasterControl } from '@/types/game';
 import { hasGlobalRulesContent } from '@/utils/globalRules';
 import GameFactory from '@/components/games/GameFactory';
+import { clearBootResume, peekBootResume, setShowPosition } from '@/utils/gamePlaythroughStore';
 
 export default function GameScreen() {
   const [searchParams] = useSearchParams();
@@ -58,6 +59,9 @@ export default function GameScreen() {
     const myReq = ++reqIdRef.current;
     setError(null);
     if (blank) setGameData(null);
+    // The reload-resume token only applies to the game the tab was reloaded on.
+    // Navigating to any other index drops it. See specs/crash-recovery.md.
+    if (peekBootResume() && peekBootResume()!.gameIndex !== gameIndex) clearBootResume();
 
     // Reflect the navigation in the header immediately. totalGames is reused
     // from the previously known game — it's the same value on success, and
@@ -73,6 +77,12 @@ export default function GameScreen() {
     fetchGameData(gameIndex)
       .then(data => {
         if (myReq !== reqIdRef.current) return;
+        // A reload resumes only if the slot still holds the same game — the
+        // gameOrder may have been edited in between. Decided before rendering,
+        // because BaseGameWrapper reads the token while initialising.
+        const resume = peekBootResume();
+        if (resume && (resume.gameIndex !== data.currentIndex || resume.gameId !== data.gameId)) clearBootResume();
+        setShowPosition(data.currentIndex, data.gameId);
         setGameData(data);
         dispatch({
           type: 'SET_CURRENT_GAME',
@@ -103,7 +113,8 @@ export default function GameScreen() {
   // changes on disk, so typo fixes / appended questions / a reordered gameOrder
   // apply to the running game without a reload.
   useWsChannel<ContentChangedPayload>('content-changed', (payload) => {
-    if (payload?.config || payload?.games) loadGame(false);
+    // `filmStripes`: a stripe was computed — the film-stripe game's questions carry it.
+    if (payload?.config || payload?.games || payload?.filmStripes) loadGame(false);
   });
 
   // Recover edits missed while the socket was down. `content-changed` is

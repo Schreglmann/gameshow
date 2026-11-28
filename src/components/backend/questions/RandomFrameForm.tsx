@@ -230,6 +230,7 @@ export default function RandomFrameForm({ questions, onChange, otherInstances, o
                     value={q.answerImage || undefined}
                     category="images"
                     onChange={v => update(i, { answerImage: v || undefined })}
+                    searchQuery={q.answer}
                   />
                 </div>
                 <div style={{ display: 'flex', gap: 12 }}>

@@ -19,7 +19,9 @@ export type GameType =
   | 'ranking'
   | 'wer-kennt-mehr'
   | 'random-frame'
-  | 'city-compass';
+  | 'city-compass'
+  | 'venn'
+  | 'film-stripe';
 
 // ── Question types per game ──
 
@@ -225,6 +227,42 @@ export interface CityCompassQuestion extends GmInfoField {
   question?: string;
   /** Optional small-font subtitle rendered above the question text. */
   info?: string;
+  answerImage?: string;
+  disabled?: boolean;
+}
+
+/** A film reduced to colours, as computed by server/film-stripe.ts. */
+export interface FilmStripeData {
+  /** One `#rrggbb` per sampled moment, in film order. */
+  colors: string[];
+  /** Number of time-lapse stills served by `GET /api/film-stripe/frame`. */
+  frames: number;
+  /** For each still, the index of its moment in `colors`. */
+  framePositions: number[];
+}
+
+export interface FilmStripeQuestion extends GmInfoField {
+  /** DAM video path, e.g. "/videos/Dune.m4v". The stripe is computed from this file. */
+  video: string;
+  /** The film title — the answer teams have to name. */
+  answer: string;
+  /** Overrides the default prompt "Welcher Film ist das?". */
+  question?: string;
+  /** Optional reveal image, usually the poster. */
+  answerImage?: string;
+  disabled?: boolean;
+  /** Populated by the server from the film-stripe cache. Never present in authored
+   *  JSON; absent when the stripe has not been computed yet. */
+  stripe?: FilmStripeData;
+}
+
+/** One "Schnittmenge" puzzle: a term that belongs to every listed category. */
+export interface VennQuestion extends GmInfoField {
+  /** 2-3 category names, one per circle. The first two are on screen from the
+   *  start; a third is the hint circle added by the next host advance. */
+  sets: string[];
+  /** The term in the overlap of all circles. Never rendered before the reveal. */
+  answer: string;
   answerImage?: string;
   disabled?: boolean;
 }
@@ -438,6 +476,16 @@ export interface CityCompassConfig extends BaseGameConfig {
   reveal?: 'all' | 'progressive';
 }
 
+export interface VennConfig extends BaseGameConfig {
+  type: 'venn';
+  questions: VennQuestion[];
+}
+
+export interface FilmStripeConfig extends BaseGameConfig {
+  type: 'film-stripe';
+  questions: FilmStripeQuestion[];
+}
+
 export type GameConfig =
   | SimpleQuizConfig
   | BetQuizConfig
@@ -455,7 +503,9 @@ export type GameConfig =
   | RankingConfig
   | WerKenntMehrConfig
   | RandomFrameConfig
-  | CityCompassConfig;
+  | CityCompassConfig
+  | VennConfig
+  | FilmStripeConfig;
 
 // ── Game file types (files in games/ directory) ──
 
@@ -485,6 +535,29 @@ export type GameFile = SingleInstanceGameFile | MultiInstanceGameFile;
 
 // ── Full app config ──
 
+/**
+ * A player in the global registry (`AppConfig.players`). The nickname is
+ * required; first name and surname may be empty (a player added during the
+ * show has only the nickname until the admin completes it). A full name
+ * (first + last) exists only once, and so does the nickname of a player
+ * without one. The show calls the player by `nickname`. The id is a slug made
+ * when the player is created and never changes, so a rename reaches every
+ * gameshow and the stats. See specs/players.md.
+ */
+export interface Player {
+  id: string;
+  firstName: string;
+  lastName: string;
+  /** Spitzname — what the show and the gamemaster call the player. */
+  nickname: string;
+  /**
+   * Switched off globally: stays in the gameshows they are in, but no
+   * autocomplete offers them unless one of their names is typed in full.
+   * Absent = active. See specs/players.md ("Disabled players").
+   */
+  disabled?: boolean;
+}
+
 export interface GameshowConfig {
   name: string;
   /**
@@ -496,6 +569,10 @@ export interface GameshowConfig {
    */
   showTitle?: string;
   gameOrder: string[];
+  /**
+   * The gameshow's players, as ids into the global registry `AppConfig.players`.
+   * See specs/players.md.
+   */
   players?: string[];
   enabledJokers?: string[];
   /**
@@ -591,6 +668,11 @@ export interface AppConfig {
    * means `DEFAULT_SHOW_TITLE` ("Game Show"). See specs/show-title.md.
    */
   showTitle?: string;
+  /**
+   * The global player registry. Gameshows reference these players by id.
+   * Absent means no players yet. See specs/players.md.
+   */
+  players?: Player[];
   pointSystemEnabled?: boolean;
   teamRandomizationEnabled?: boolean;
   /**
@@ -676,6 +758,10 @@ export interface GameFileSummary {
    */
   scoringModes?: Record<string, string>;
   parseError?: string; // set when the JSON file could not be parsed
+  /** File mtime, epoch ms. See specs/admin-games-list.md. */
+  modifiedAt?: number;
+  /** When the file was first added to git (epoch ms), else its own birthtime/mtime. See specs/admin-games-list.md. */
+  createdAt?: number;
 }
 
 // Flat format used in actual quizjagd JSON files
@@ -812,12 +898,24 @@ export interface SettingsResponse {
    */
   backgroundMusicSource?: BackgroundMusicSource;
   /**
-   * Roster of the active gameshow (`GameshowConfig.players`), configured in the
-   * admin Gameshows tab. Prefills the HomeScreen randomization textarea. Empty
-   * or omitted when the gameshow has no configured roster. Optional so existing
-   * test fixtures don't need it. See specs/team-management.md.
+   * Players of the active gameshow (`GameshowConfig.players`), resolved from
+   * the registry. Drawn into the hidden team draw when it is empty. Empty or
+   * omitted when the gameshow has no configured players. Optional so existing
+   * test fixtures don't need it. See specs/players.md.
    */
-  players?: string[];
+  players?: Player[];
+  /**
+   * The whole player registry (`AppConfig.players`) — the candidates the show's
+   * and the gamemaster's add fields suggest. Optional so existing test fixtures
+   * don't need it. See specs/players.md.
+   */
+  registry?: Player[];
+  /**
+   * Deleted players from the local bin (`players-bin.json`) — suggested only
+   * for a name typed in full; adding one restores them. Optional so existing
+   * test fixtures don't need it. See specs/players.md ("Player bin").
+   */
+  binned?: Player[];
   /**
    * How many games the active gameshow runs (`gameOrder.length`) — the "N" of
    * the header counter "Spiel x von N", which the long-name check needs to size
@@ -825,6 +923,22 @@ export interface SettingsResponse {
    * fixtures don't need it. See specs/team-management.md.
    */
   totalGames?: number;
+}
+
+/**
+ * `POST /api/live-players` — adds and removes made on the show or the GM,
+ * written to the active gameshow's `players`. An add names a registry player
+ * by id, or a new name (found or created in the registry). A remove is a
+ * registry id. See specs/players.md.
+ */
+export interface LivePlayersRequest {
+  add?: ({ id: string } | { firstName?: string; lastName?: string; nickname: string })[];
+  remove?: string[];
+}
+
+export interface LivePlayersResponse {
+  /** The added players as the registry holds them, in request order. */
+  players: Player[];
 }
 
 export interface GameDataResponse {
@@ -872,4 +986,7 @@ export interface ContentChangedPayload {
   theme?: boolean;
   /** a games/*.json changed → re-fetch the current game. */
   games?: boolean;
+  /** a film stripe finished computing → re-fetch the current game (its questions carry
+   *  the cached stripe). Sent by the build, not the file watcher. */
+  filmStripes?: boolean;
 }

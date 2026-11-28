@@ -1,4 +1,4 @@
-import { StrictMode, Suspense, type ReactNode } from 'react';
+import { StrictMode, Suspense, useEffect, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { ThemeProvider } from '@/context/ThemeContext';
@@ -7,6 +7,7 @@ import { MusicProvider, useMusicPlayer } from '@/context/MusicContext';
 import { useMusicStateSync, useMusicCommandListener } from '@/hooks/useMusicSync';
 import { useShowNavigationCommands } from '@/hooks/useShowNavigationCommands';
 import { useShowDocumentTitle } from '@/hooks/useShowDocumentTitle';
+import { useShowControlsHidden } from '@/hooks/useShowControlsHidden';
 import { AudioCoverMetaProvider } from '@/context/AudioCoverMetaContext';
 import Header from '@/components/layout/Header';
 import MusicControls from '@/components/layout/MusicControls';
@@ -16,6 +17,8 @@ import GameScreen from '@/components/screens/GameScreen';
 import SummaryScreen from '@/components/screens/SummaryScreen';
 import InactiveShowOverlay from '@/components/common/InactiveShowOverlay';
 import ShowHoldOverlay from '@/components/common/ShowHoldOverlay';
+import ConnectionDot from '@/components/common/ConnectionDot';
+import { clearBootResume } from '@/utils/gamePlaythroughStore';
 import { useShowPresence } from '@/hooks/useShowPresence';
 import { lazyWithRetry } from '@/utils/lazyWithRetry';
 import { installHpFlyers } from '@/utils/hpFlyers';
@@ -73,6 +76,17 @@ function AppContent() {
   // Browser tab title follows the operator's show title. See specs/show-title.md.
   useShowDocumentTitle();
 
+  // The GM's "Show-Buttons ausblenden" toggle. The theme showcase keeps every
+  // button. See specs/gamemaster-hide-show-controls.md.
+  useShowControlsHidden(location.pathname !== '/theme-showcase');
+
+  // A reload resumes the game it happened on (specs/crash-recovery.md). Leaving
+  // the game flow (start page, rules, summary) ends that, so a later jump back
+  // to the same game opens it at its title screen as usual.
+  useEffect(() => {
+    if (location.pathname !== '/game') clearBootResume();
+  }, [location.pathname]);
+
   return (
     <>
       <Suspense fallback={null}>
@@ -87,6 +101,8 @@ function AppContent() {
       {location.pathname !== '/theme-showcase' && <MusicControls player={musicPlayer} />}
       {!isActive && location.pathname !== '/theme-showcase' && <InactiveShowOverlay onClaim={claim} />}
       {location.pathname !== '/theme-showcase' && <ShowHoldOverlay />}
+      {/* Server unreachable for > 3 s. See specs/crash-recovery.md. */}
+      {location.pathname !== '/theme-showcase' && <ConnectionDot />}
     </>
   );
 }

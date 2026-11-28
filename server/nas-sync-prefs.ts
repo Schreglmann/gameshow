@@ -5,7 +5,7 @@
  *   - `basePath`: the NAS mount/base directory bidirectional sync targets. Consumed via
  *     `asset-paths.ts` (`NAS_BASE`), which resolves it ONCE at module load — so a path change
  *     only takes effect after a server restart. This is deliberate: the sync safety layers and
- *     `.sync-state.json` files are tied to one stable NAS identity (see specs/sync-bidirectional.md).
+ *     per-device `.sync-state.json` are tied to one stable NAS identity (see specs/sync-bidirectional.md).
  *   - `enabled`: master on/off switch for sync WRITE/propagation. Read live at each sync trigger,
  *     so toggling takes effect without a restart. It does NOT gate NAS reads.
  *

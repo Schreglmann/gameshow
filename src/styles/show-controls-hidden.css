@@ -1,0 +1,36 @@
+/* Gamemaster "Show-Buttons ausblenden": the GM drives the show, so the show
+   hides its own controls. The class is set on <html> by useShowControlsHidden.
+   See specs/gamemaster-hide-show-controls.md.
+
+   Targets `button` rather than a list of classes, so a button added later is
+   hidden too. A button the audience reads opts out with `data-show-display`;
+   the joker icons and award team cards are also exempt by class, because the
+   theme showcase renders hand-written copies of them. `!important` beats the
+   ID-level selectors some game buttons are styled with. */
+
+html.show-controls-hidden button:not([data-show-display], .header-joker, .award-team-card, .inactive-show-claim-btn),
+html.show-controls-hidden .music-controls,
+html.show-controls-hidden .audio-ctrl-divider,
+html.show-controls-hidden .name-form,
+html.show-controls-hidden .draw-add-feedback,
+html.show-controls-hidden #teamAssignmentText,
+html.show-controls-hidden .team-member-row:has(.team-member-input:placeholder-shown),
+html.show-controls-hidden #startPrompt,
+html.show-controls-hidden .cache-preflight-banner__btn,
+html.show-controls-hidden .install-button-wrapper--frontend {
+  display: none !important;
+}
+
+/* Shown to the audience, but only the GM changes them. */
+html.show-controls-hidden [data-show-display],
+html.show-controls-hidden .header-joker,
+html.show-controls-hidden .award-team-card,
+html.show-controls-hidden [role='button'],
+html.show-controls-hidden .bandle-track-hint,
+html.show-controls-hidden .bandle-track-answer,
+html.show-controls-hidden .bandle-progress,
+html.show-controls-hidden .team-card-name,
+html.show-controls-hidden input,
+html.show-controls-hidden textarea {
+  pointer-events: none;
+}

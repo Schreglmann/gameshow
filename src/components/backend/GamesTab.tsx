@@ -1,7 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { isTouchDevice } from '@/utils/isTouchDevice';
-import type { GameFileSummary, GameType, ContentChangedPayload } from '@/types/config';
-import { fetchGames, fetchGame, createGame, createExampleGames, deleteGame } from '@/services/backendApi';
+import type { AppConfig, GameFileSummary, GameType, ContentChangedPayload } from '@/types/config';
+import { fetchGames, fetchGame, fetchConfig, createGame, createExampleGames, deleteGame } from '@/services/backendApi';
+import { buildOverlapContext, classifyGameOverlap, type Overlap } from '@/utils/playerStats';
+import { OVERLAP_BADGE_GAME, OVERLAP_ORDER, gameRefs } from './overlapBadges';
 import { useWsChannel } from '@/services/useBackendSocket';
 import { gameSaveKey, discardSave, newerThanRead } from '@/services/saveQueue';
 import { GAME_TYPE_INFO, GAME_TYPE_TEMPLATES, gameTypeMatchesQuery } from '@/data/gameTypeInfo';
@@ -21,7 +23,7 @@ function NewGameModal({ onCancel, onCreate }: NewGameModalProps) {
 
   const derived = slugifyGameName(gameName);
 
-  const GAME_TYPES: GameType[] = ['simple-quiz', 'bet-quiz', 'guessing-game', 'final-quiz', 'audio-guess', 'video-guess', 'q1', 'four-statements', 'fact-or-fake', 'quizjagd', 'bandle', 'image-guess', 'colorguess', 'ranking', 'wer-kennt-mehr', 'random-frame', 'city-compass'];
+  const GAME_TYPES: GameType[] = ['simple-quiz', 'bet-quiz', 'guessing-game', 'final-quiz', 'audio-guess', 'video-guess', 'q1', 'four-statements', 'fact-or-fake', 'quizjagd', 'bandle', 'image-guess', 'colorguess', 'ranking', 'wer-kennt-mehr', 'random-frame', 'city-compass', 'venn', 'film-stripe'];
 
   const submit = () => {
     if (derived) onCreate(derived, gameName.trim(), selectedType);
@@ -75,6 +77,80 @@ function NewGameModal({ onCancel, onCreate }: NewGameModalProps) {
   );
 }
 
+// ── Sort + status filter (see specs/admin-games-list.md) ─────────────────────
+
+type SortKey = 'name' | 'type' | 'modified' | 'created' | 'status';
+/**
+ * The statuses the filter can narrow to; none selected = all games. `planned`
+ * (Eingeplant) is left out: the status is classified FOR the active gameshow,
+ * and Eingeplant only exists relative to a later one, so it never occurs here.
+ */
+type StatusKey = Exclude<Overlap, 'planned'>;
+
+const SORT_LABELS: Record<SortKey, string> = {
+  name: 'Name',
+  type: 'Typ',
+  modified: 'Geändert',
+  created: 'Erstellt',
+  status: 'Status',
+};
+
+/** In status-sort order, labels as on the per-game badges (OVERLAP_BADGE_GAME). */
+const STATUS_LABELS: Record<StatusKey, string> = {
+  fresh: OVERLAP_BADGE_GAME.fresh.label,
+  none: OVERLAP_BADGE_GAME.none.label,
+  partial: OVERLAP_BADGE_GAME.partial.label,
+  full: OVERLAP_BADGE_GAME.full.label,
+};
+
+interface ListPrefs {
+  sort: SortKey;
+  /** Flips the sort's natural direction (Name A→Z, dates newest first, Status Neu first). */
+  reverse: boolean;
+  status: StatusKey[];
+}
+
+/**
+ * Sort + status filter, kept in module scope: it survives the pane unmounting on a
+ * tab switch and resets on a page reload. See specs/admin-games-list.md.
+ */
+let listPrefs: ListPrefs = { sort: 'name', reverse: false, status: [] };
+
+function storeListPrefs(next: ListPrefs): void {
+  listPrefs = next;
+}
+
+/** Test hook: back to the defaults a page load starts with. */
+export function resetGamesListPrefs(): void {
+  storeListPrefs({ sort: 'name', reverse: false, status: [] });
+}
+
+const NO_STATUS_FILTER: readonly StatusKey[] = [];
+
+function matchesStatus(overlap: Overlap | null, filter: readonly StatusKey[]): boolean {
+  if (filter.length === 0) return true;
+  return overlap !== null && (filter as readonly Overlap[]).includes(overlap);
+}
+
+function formatDate(ms: number | undefined): string {
+  return ms ? new Date(ms).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
+}
+
+function formatDateTime(ms: number | undefined): string | undefined {
+  return ms ? new Date(ms).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' }) : undefined;
+}
+
+/** Display label of a game's type — what the Typ column shows and sorts by. */
+function typeLabel(g: GameFileSummary): string {
+  return g.parseError ? 'fehler' : (GAME_TYPE_INFO[g.type]?.label ?? g.type);
+}
+
+function matchesSearch(g: GameFileSummary, search: string): boolean {
+  if (!search) return true;
+  const q = search.toLowerCase();
+  return g.title.toLowerCase().includes(q) || g.fileName.toLowerCase().includes(q) || gameTypeMatchesQuery(g.type, search);
+}
+
 interface Props {
   onGoToAssets: () => void;
   initialFile?: string;
@@ -90,6 +166,15 @@ export default function GamesTab({ onGoToAssets, initialFile, initialInstance, i
   const [loading, setLoading] = useState(true);
   const [creatingExamples, setCreatingExamples] = useState(false);
   const [search, setSearch] = useState('');
+  const [prefs, setPrefsState] = useState<ListPrefs>(listPrefs);
+  const setPrefs = (update: (p: ListPrefs) => ListPrefs) => {
+    const next = update(prefs);
+    storeListPrefs(next);
+    setPrefsState(next);
+  };
+  const [showSort, setShowSort] = useState(false);
+  // Gameshows + active gameshow, for the Neu/Ungespielt status (specs/admin-games-list.md).
+  const [config, setConfig] = useState<Pick<AppConfig, 'gameshows' | 'activeGameshow'> | null>(null);
   // Capture initialQuestion in a ref so it survives onNavigate clearing the parent state
   const questionRef = useRef(initialQuestion);
   const [editingFile, setEditingFile] = useState<string | null>(null);
@@ -107,6 +192,13 @@ export default function GamesTab({ onGoToAssets, initialFile, initialInstance, i
   };
 
   useEffect(load, []);
+
+  const loadConfig = () => {
+    fetchConfig()
+      .then(c => setConfig({ gameshows: c.gameshows, activeGameshow: c.activeGameshow }))
+      .catch(() => { /* status column stays hidden */ });
+  };
+  useEffect(loadConfig, []);
 
   // Restore editor state on mount
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -138,7 +230,74 @@ export default function GamesTab({ onGoToAssets, initialFile, initialInstance, i
     if (payload?.games) {
       fetchGames().then(setGames).catch(() => { /* keep current list on transient error */ });
     }
+    if (payload?.config) loadConfig();
   });
+
+  // Status of every game against the active gameshow — the same per-game badge the
+  // gameshow's "Spiel hinzufügen…" picker shows. `null` from classifyGameOverlap
+  // (no roster, played before) counts as Ungespielt. See specs/admin-games-list.md.
+  const activeShow = config?.gameshows?.[config.activeGameshow];
+  const statusByFile = useMemo(() => {
+    const map = new Map<string, Overlap | null>();
+    if (!config || !activeShow) return map;
+    const ctx = buildOverlapContext(config.gameshows, config.activeGameshow, activeShow.players ?? [], config.activeGameshow);
+    for (const g of games) {
+      map.set(g.fileName, g.parseError ? null : (classifyGameOverlap(gameRefs(g), ctx) ?? 'none'));
+    }
+    return map;
+  }, [games, config, activeShow]);
+  const hasStatus = !!activeShow;
+  const effectiveSort: SortKey = !hasStatus && prefs.sort === 'status' ? 'name' : prefs.sort;
+  const effectiveFilter: readonly StatusKey[] = hasStatus ? prefs.status : NO_STATUS_FILTER;
+  const sortReverse = prefs.reverse;
+
+  const visibleGames = useMemo(() => {
+    const byTitle = (a: GameFileSummary, b: GameFileSummary) =>
+      a.title.localeCompare(b.title, 'de') || a.fileName.localeCompare(b.fileName, 'de');
+    const list = games.filter(g =>
+      matchesSearch(g, search) && matchesStatus(statusByFile.get(g.fileName) ?? null, effectiveFilter),
+    );
+    const statusRank = (g: GameFileSummary) => {
+      const o = statusByFile.get(g.fileName);
+      return o ? OVERLAP_ORDER[o] : Number.MAX_SAFE_INTEGER;
+    };
+    const dir = sortReverse ? -1 : 1;
+    return list.sort((a, b) => {
+      switch (effectiveSort) {
+        case 'modified': return dir * ((b.modifiedAt ?? 0) - (a.modifiedAt ?? 0)) || byTitle(a, b);
+        case 'created': return dir * ((b.createdAt ?? 0) - (a.createdAt ?? 0)) || byTitle(a, b);
+        case 'status': return dir * (statusRank(a) - statusRank(b)) || byTitle(a, b);
+        case 'type': return dir * typeLabel(a).localeCompare(typeLabel(b), 'de') || byTitle(a, b);
+        default: return dir * byTitle(a, b);
+      }
+    });
+  }, [games, search, statusByFile, effectiveFilter, effectiveSort, sortReverse]);
+  // The date column only appears under a date sort, showing that sort's date.
+  const dateField: 'modifiedAt' | 'createdAt' | null =
+    effectiveSort === 'created' ? 'createdAt' : effectiveSort === 'modified' ? 'modifiedAt' : null;
+  const dateLabel = dateField === 'createdAt' ? 'Erstellt' : 'Geändert';
+
+  /** Pick a sort; picking the active one again reverses it (menu + column headings). */
+  const chooseSort = (k: SortKey) => setPrefs(p => (
+    effectiveSort === k ? { ...p, reverse: !p.reverse } : { ...p, sort: k, reverse: false }
+  ));
+
+  /** A clickable column heading that sorts by `k`. */
+  const sortHeading = (k: SortKey, label: string) => {
+    const active = effectiveSort === k;
+    return (
+      <button
+        type="button"
+        className={`games-sort-heading${active ? ' is-sorted' : ''}`}
+        onClick={() => chooseSort(k)}
+        title={active ? 'Sortierung umkehren' : `Nach ${SORT_LABELS[k]} sortieren`}
+        aria-sort={active ? (sortReverse ? 'descending' : 'ascending') : undefined}
+      >
+        {label}
+        {active && <span aria-hidden="true">{sortReverse ? ' ↑' : ' ↓'}</span>}
+      </button>
+    );
+  };
 
   const openEditor = async (fileName: string, instance?: string) => {
     try {
@@ -231,21 +390,83 @@ export default function GamesTab({ onGoToAssets, initialFile, initialInstance, i
 
       <div className="tab-toolbar" style={{ marginBottom: 10 }}>
         <h2 className="tab-title">Spiele</h2>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="games-toolbar">
           <input
-            className="be-input"
-            style={{ width: 200 }}
+            className="be-input games-toolbar-search"
             placeholder="Suchen..."
             value={search}
             onChange={e => setSearch(e.target.value)}
             onKeyDown={e => {
-              if (e.key === 'Enter') {
-                const filtered = games.filter(g => !search || g.title.toLowerCase().includes(search.toLowerCase()) || g.fileName.toLowerCase().includes(search.toLowerCase()) || gameTypeMatchesQuery(g.type, search));
-                if (filtered.length === 1) openEditor(filtered[0]!.fileName);
+              if (e.key === 'Enter' && visibleGames.length === 1 && !visibleGames[0]!.parseError) {
+                openEditor(visibleGames[0]!.fileName);
               }
             }}
             autoFocus={!isTouchDevice()}
           />
+          {/* One sort + filter control, same as the Assets tab's. */}
+          <div className="asset-sort-wrapper games-toolbar-sort">
+            <button
+              className={`be-icon-btn${showSort ? ' asset-select-toggle-active' : ''}`}
+              onClick={() => setShowSort(v => !v)}
+              title="Sortierung und Filter"
+              aria-label="Sortierung und Filter"
+              aria-expanded={showSort}
+            >
+              {SORT_LABELS[effectiveSort]}
+              {sortReverse ? ' ↑' : ' ↓'}
+              {effectiveFilter.length > 0 && (
+                <span className="games-sort-filter-label">
+                  {` · ${(Object.keys(STATUS_LABELS) as StatusKey[]).filter(k => effectiveFilter.includes(k)).map(k => STATUS_LABELS[k]).join(' + ')}`}
+                </span>
+              )}
+            </button>
+            {showSort && (
+              <>
+                <div className="asset-sort-backdrop" onClick={() => setShowSort(false)} />
+                <div className="asset-sort-popover" role="menu">
+                  <div className="asset-sort-section-label">Sortierung</div>
+                  {(Object.keys(SORT_LABELS) as SortKey[])
+                    .filter(k => k !== 'status' || hasStatus)
+                    .map(k => (
+                      <button
+                        key={k}
+                        role="menuitemradio"
+                        aria-checked={effectiveSort === k}
+                        className={`asset-sort-btn${effectiveSort === k ? ' active' : ''}`}
+                        onClick={() => chooseSort(k)}
+                      >
+                        {SORT_LABELS[k]}
+                        {effectiveSort === k && <span className="asset-sort-arrow">{sortReverse ? ' ↑' : ' ↓'}</span>}
+                      </button>
+                    ))}
+                  {hasStatus && (
+                    <>
+                      <div className="asset-sort-divider" />
+                      <div className="asset-sort-section-label" title={`Status bezogen auf die aktive Gameshow „${activeShow!.name}“`}>Filter</div>
+                      {(Object.keys(STATUS_LABELS) as StatusKey[]).map(k => {
+                        const on = effectiveFilter.includes(k);
+                        return (
+                          <button
+                            key={k}
+                            role="menuitemcheckbox"
+                            aria-checked={on}
+                            className={`asset-sort-btn${on ? ' active' : ''}`}
+                            onClick={() => setPrefs(p => ({
+                              ...p,
+                              status: on ? p.status.filter(x => x !== k) : [...p.status, k],
+                            }))}
+                          >
+                            {STATUS_LABELS[k]}
+                            {on && <span className="asset-sort-arrow">✓</span>}
+                          </button>
+                        );
+                      })}
+                    </>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
           <button className="admin-button primary" style={{ marginTop: 0 }} onClick={() => setShowNewModal(true)}>
             + Neues Spiel
           </button>
@@ -271,12 +492,20 @@ export default function GamesTab({ onGoToAssets, initialFile, initialInstance, i
       ) : (
         <div className="games-list">
           <div className="games-list-header">
-            <span style={{ flex: 1 }}>Titel</span>
-            <span style={{ width: 240 }}>Typ</span>
-            <span style={{ width: 120 }}>Instanzen</span>
+            <span style={{ flex: 1 }}>{sortHeading('name', 'Titel')}</span>
+            {hasStatus && <span className="games-col-status">{sortHeading('status', 'Status')}</span>}
+            <span className="games-col-type">{sortHeading('type', 'Typ')}</span>
+            <span className="games-col-instances">Instanzen</span>
+            {dateField && <span className="games-col-date">{sortHeading(dateField === 'createdAt' ? 'created' : 'modified', dateLabel)}</span>}
             <span style={{ width: 32 }}></span>
           </div>
-          {games.filter(g => !search || g.title.toLowerCase().includes(search.toLowerCase()) || g.fileName.toLowerCase().includes(search.toLowerCase()) || gameTypeMatchesQuery(g.type, search)).map(game => (
+          {visibleGames.length === 0 && (
+            <div className="be-empty" style={{ padding: '12px 0' }}>Keine Spiele gefunden</div>
+          )}
+          {visibleGames.map(game => {
+            const overlap = statusByFile.get(game.fileName) ?? null;
+            const badge = overlap ? OVERLAP_BADGE_GAME[overlap] : null;
+            return (
             <div
               key={game.fileName}
               className={`games-list-row${game.parseError ? ' games-list-row--error' : ''}`}
@@ -287,15 +516,24 @@ export default function GamesTab({ onGoToAssets, initialFile, initialInstance, i
                 {game.title}
                 {game.parseError && <span className="parse-error-badge">JSON-Fehler</span>}
               </span>
-              <span style={{ width: 240, flexShrink: 0, minWidth: 0, overflow: 'hidden' }}><span className="type-badge" title={GAME_TYPE_INFO[game.type]?.label ?? game.type}>{game.parseError ? 'fehler' : (GAME_TYPE_INFO[game.type]?.label ?? game.type)}</span></span>
-              <span className="games-list-instances">
+              {hasStatus && (
+                <span className="games-col-status">
+                  {badge && <span className={`overlap-badge ${badge.className}`} title={badge.title}>{badge.label}</span>}
+                </span>
+              )}
+              <span className="games-col-type"><span className="type-badge" title={typeLabel(game)}>{typeLabel(game)}</span></span>
+              <span className="games-col-instances games-list-instances">
                 {game.isSingleInstance ? '—' : game.instances.filter(i => i !== 'template').join(', ')}
               </span>
+              {dateField && (
+                <span className="games-col-date games-list-date" title={formatDateTime(game[dateField])}>{formatDate(game[dateField])}</span>
+              )}
               <span onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, flexShrink: 0 }}>
                 <button className="be-delete-btn" onClick={() => handleDelete(game.fileName)} title="Löschen">🗑</button>
               </span>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

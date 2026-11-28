@@ -4,7 +4,7 @@
 
 ## 🚀 Get Started in 3 Minutes
 
-> **Fresh clone without the git-crypt key?** The server detects that `config.json` is encrypted (or missing) and writes a minimal default config (an empty "Beispiele" gameshow). Open the admin's **Spiele** tab and click **"Beispiele erstellen"** (or run `npm run fixtures`) to generate one real example game per type — with self-synthesized, copyright-free images and music. `npm run validate` is git-crypt-aware and exits 0 with a friendly message. See [specs/clean-install.md](specs/clean-install.md) and [specs/example-games.md](specs/example-games.md).
+> **Fresh clone without the git-crypt key?** The server detects that `config.json` is encrypted (or missing) and writes a minimal default config (a "Beispiele" gameshow with nine made-up example players, but no games yet). Open the admin's **Spiele** tab and click **"Beispiele erstellen"** (or run `npm run fixtures`) to generate one real example game per type — with self-synthesized, copyright-free images and music. `npm run validate` is git-crypt-aware and exits 0 with a friendly message. See [specs/clean-install.md](specs/clean-install.md) and [specs/example-games.md](specs/example-games.md).
 
 ### Step 1: Install Dependencies
 ```bash
@@ -21,6 +21,7 @@ npm run build
 ```bash
 npm start
 ```
+`npm start` runs the server under a small supervisor (`scripts/supervise.cjs`): if the server process dies, it is restarted within about a second, and the crash is written to `logs/crash.log`. Server output is also kept in `logs/server-YYYY-MM-DD.log`. `npm run start:unsupervised` runs the server without it.
 
 ### Step 4: Open the Admin Panel
 ```
@@ -94,6 +95,8 @@ The admin's "Neues Spiel" dialog lists all 16 types:
 | `wer-kennt-mehr` | Final game — both teams name as many of a thing as possible; the team that named more scores that count |
 | `random-frame` | Guess the movie/show from a single random still frame pulled from a video (GM can re-roll) |
 | `city-compass` | Name the hidden city at the center of a compass rose, from the cities around it at their true bearing |
+| `venn` | Name the term that belongs to both categories of two overlapping circles; a third circle is the hint |
+| `film-stripe` | Name the film from a stripe of its average colours over time; a time-lapse is the hint |
 
 See [GAME_TYPES.md](GAME_TYPES.md) for the per-type field reference.
 
@@ -191,7 +194,7 @@ References in `gameOrder`:
 
 ## 🎮 Running the Gameshow
 
-1. **Setup teams**: players enter their names on the home page
+1. **Setup teams**: the gameshow's players (admin **Spieler** tab + the gameshow's player list) are drawn into teams on the home page; add more there
 2. **View rules**: global rules screen
 3. **Start**: begin with the first game
 4. **Navigate**: click or press arrow keys to advance

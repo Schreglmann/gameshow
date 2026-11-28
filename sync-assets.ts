@@ -18,7 +18,6 @@ import {
   computeSyncOps,
   makeRunId,
   parseSyncState,
-  resolvePrevFiles,
   SAFETY_FOLDERS,
   shouldSkipDirent,
   type FileMeta,
@@ -394,7 +393,9 @@ async function pull(): Promise<void> {
 /**
  * Sync: bidirectional NAS ↔ local-assets.
  *
- * Uses .sync-state.json on both sides to detect additions, updates, and deletions.
+ * Uses this device's `local-assets/.sync-state.json` (per device — never the NAS
+ * copy another device wrote) to detect additions, updates, and deletions. With no
+ * local state every file is new: the first sync of a device only copies.
  * Newer file wins for updates. If a file was present at last sync but is now
  * missing from one side, it is moved to the other side's `.trash/<runId>/`
  * (Layer 1 soft-delete) instead of being unlinked.
@@ -412,9 +413,8 @@ async function sync(): Promise<void> {
 
   console.log(`Syncing ${LOCAL_BASE} ↔ NAS\n`);
 
-  const localState = readSyncState(LOCAL_BASE);
-  const nasState = readSyncState(NAS_BASE);
-  const prevFiles = resolvePrevFiles(localState, nasState);
+  // Per-device prev — see specs/sync-bidirectional.md "Per-device sync state".
+  const prevFiles = readSyncState(LOCAL_BASE).files;
 
   const localFiles = collectFileMeta(LOCAL_BASE);
   const nasFiles = collectFileMeta(NAS_BASE);
@@ -493,7 +493,6 @@ async function sync(): Promise<void> {
 
   const newState = buildNewSyncState(localFiles, nasFiles, ops, failedOps);
   writeSyncStateFile(LOCAL_BASE, newState);
-  writeSyncStateFile(NAS_BASE, newState);
 
   console.log('\nSync complete:');
   for (const folder of FOLDERS) {

@@ -9,6 +9,7 @@ import {
 } from 'react';
 import type {
   GlobalSettings,
+  RosterPlayer,
   TeamState,
   CurrentGame,
   ScoreLogEntry,
@@ -34,6 +35,8 @@ import {
   type TeamKey,
 } from '@/utils/teams';
 import { DEFAULT_POINT_MODE, normalizePointMode } from '@/utils/pointMode';
+import { applyPlayerRenames, drawTeams, reconcileDraw } from '@/utils/teamDraw';
+import { normalizeRoster, normalizeSettingsPlayers, rosterTuples } from '@/utils/playerNames';
 
 type JokerTeam = TeamKey;
 
@@ -66,12 +69,36 @@ function readJokerArray(key: string): string[] {
  * tree — a white screen on all three PWAs, unrecoverable mid-show without
  * manually clearing site data.
  */
-function readRoster(key: string): string[] {
+/** localStorage key of `TeamState.teamsRevealed`. */
+const TEAMS_REVEALED_KEY = 'teamsRevealed';
+
+/** Whether any team has players — the legacy stand-in for `teamsRevealed`. */
+function anyRoster(teams: Partial<Record<TeamKey, unknown>>): boolean {
+  return ALL_TEAM_KEYS.some(k => Array.isArray(teams[k]) && (teams[k] as unknown[]).length > 0);
+}
+
+/**
+ * Restore `teamsRevealed`. State written before the hidden draw existed has no
+ * key; there, rosters were only ever filled by a visible assignment, so "any
+ * roster non-empty" keeps a running show visible after the update.
+ */
+function readTeamsRevealed(teams: TeamState): boolean {
+  const raw = localStorage.getItem(TEAMS_REVEALED_KEY);
+  if (raw === 'true') return true;
+  if (raw === 'false') return false;
+  return anyRoster(teams);
+}
+
+/**
+ * A roster from localStorage. Rosters written before players had two names
+ * hold plain strings; those are converted (first word → first name), never
+ * dropped. See specs/players.md.
+ */
+function readRoster(key: string): RosterPlayer[] {
   try {
     const raw = localStorage.getItem(key);
     if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter(x => typeof x === 'string') : [];
+    return normalizeRoster(JSON.parse(raw));
   } catch {
     return [];
   }
@@ -232,7 +259,7 @@ function withTallyRev(map: CorrectAnswersMap, rev: number): Record<string, unkno
 // ── Score history (audit log for scoring-undo) ──
 // Every team-points mutation funnels through applyPointDelta, which appends an
 // entry here so the gamemaster can undo a mis-award. The list is capped (oldest
-// dropped) to bound localStorage growth and rides the cached gamemaster-team-state-v2
+// dropped) to bound localStorage growth and rides the cached gamemaster-team-state-v3
 // channel as part of TeamState. See specs/gamemaster-cockpit.md.
 
 const SCORE_HISTORY_KEY = 'scoreHistory';
@@ -310,7 +337,7 @@ function writeScoreHistory(history: ScoreLogEntry[]): void {
 // ── Comeback-joker armed multiplier ──
 // `doubleNextGame` is the team whose next awarded game doubles its points (the
 // Aufholjoker). Transient pending state — persisted so it survives a reload and
-// rides the cached gamemaster-team-state-v2 channel. See specs/comeback-joker.md.
+// rides the cached gamemaster-team-state-v3 channel. See specs/comeback-joker.md.
 
 const DOUBLE_NEXT_GAME_KEY = 'doubleNextGame';
 
@@ -382,7 +409,7 @@ export function nextTeamStateRev(
 }
 
 /**
- * Canonical serialization of the fields that ride the `gamemaster-team-state-v2`
+ * Canonical serialization of the fields that ride the `gamemaster-team-state-v3`
  * channel, used for the value-based echo guard in GameProvider.
  *
  * An ARRAY, not the raw object: `JSON.stringify(teams)` compares key ORDER too,
@@ -399,13 +426,14 @@ export function nextTeamStateRev(
  */
 function serializeTeams(t: TeamState): string {
   return JSON.stringify([
-    ...ALL_TEAM_KEYS.map(k => t[k] ?? []),
+    ...ALL_TEAM_KEYS.map(k => rosterTuples(t[k] ?? [])),
     ...ALL_TEAM_KEYS.map(k => t[`${k}Name`] ?? null),
     ...ALL_TEAM_KEYS.map(k => t[`${k}Points`] ?? 0),
     ...ALL_TEAM_KEYS.map(k => t[`${k}JokersUsed`] ?? []),
     t.scoreHistory ?? [],
     t.doubleNextGame ?? null,
     t.orderSwapped === true,
+    t.teamsRevealed === true,
     t.rev ?? 0,
   ]);
 }
@@ -541,6 +569,7 @@ function readTeams(): TeamState {
     teams[`${key}Points`] = readPoints(`${key}Points`);
     teams[`${key}JokersUsed`] = readJokerArray(`${key}JokersUsed`);
   }
+  teams.teamsRevealed = readTeamsRevealed(teams);
   return teams;
 }
 
@@ -577,7 +606,7 @@ function getInitialState(): AppState {
 // ── Actions ──
 
 /** Rosters for some or all teams; an omitted team keeps its current roster. */
-export type TeamRosterPatch = Partial<Record<TeamKey, string[]>>;
+export type TeamRosterPatch = Partial<Record<TeamKey, RosterPlayer[]>>;
 /** Names for some or all teams; an omitted team keeps its current name. */
 export type TeamNamePatch = Partial<Record<`${TeamKey}Name`, string | undefined>>;
 
@@ -586,6 +615,7 @@ type Action =
   | { type: 'SET_TEAMS'; payload: TeamRosterPatch }
   | { type: 'SET_TEAM_NAMES'; payload: TeamNamePatch }
   | { type: 'SET_TEAM_ORDER'; payload: { swapped: boolean } }
+  | { type: 'SET_TEAMS_REVEALED'; payload: { revealed: boolean } }
   | { type: 'AWARD_POINTS'; payload: { team: TeamKey; points: number } }
   | { type: 'UNDO_LAST_SCORE' }
   | { type: 'UNDO_SCORE_ENTRY'; payload: { id: string } }
@@ -640,6 +670,10 @@ function baseReducer(state: AppState, action: Action): AppState {
         teams[key] = roster;
         localStorage.setItem(key, JSON.stringify(roster));
       }
+      // Persist the reveal flag with every roster write: from here on the rosters
+      // can hold a hidden draw, and an absent key would be re-derived as
+      // "revealed" on the next reload (see readTeamsRevealed).
+      localStorage.setItem(TEAMS_REVEALED_KEY, String(teams.teamsRevealed === true));
       return { ...state, teams };
     }
     case 'SET_TEAM_NAMES': {
@@ -662,6 +696,15 @@ function baseReducer(state: AppState, action: Action): AppState {
       const { swapped } = action.payload;
       localStorage.setItem('teamOrderSwapped', String(swapped));
       return { ...state, teams: { ...state.teams, orderSwapped: swapped } };
+    }
+    case 'SET_TEAMS_REVEALED': {
+      // Random mode: lets the show display the background draw. Only the flag
+      // moves — the rosters the gamemaster previewed are exactly what appears.
+      // See specs/team-management.md ("Verdeckte Auslosung").
+      const { revealed } = action.payload;
+      if (state.teams.teamsRevealed === revealed) return state;
+      localStorage.setItem(TEAMS_REVEALED_KEY, String(revealed));
+      return { ...state, teams: { ...state.teams, teamsRevealed: revealed } };
     }
     case 'AWARD_POINTS': {
       // Sole producer of point deltas — funnels through applyPointDelta so the
@@ -733,6 +776,10 @@ function baseReducer(state: AppState, action: Action): AppState {
       // it, so a remote `false` still clears a local swap.
       const orderSwapped = ts.orderSwapped ?? state.teams.orderSwapped ?? false;
       localStorage.setItem('teamOrderSwapped', String(orderSwapped));
+      // Same for the reveal flag: SessionTab spreads the current state, but a
+      // payload that omits it must not hide (or show) the teams.
+      const teamsRevealed = ts.teamsRevealed ?? state.teams.teamsRevealed ?? false;
+      localStorage.setItem(TEAMS_REVEALED_KEY, String(teamsRevealed));
       // Adopt an inbound rev when it is ahead of ours (that is how the Lamport
       // clock advances); otherwise bump, so a LOCAL edit built on top of what we
       // already know — the admin Session tab saving, say — still outranks the
@@ -746,8 +793,8 @@ function baseReducer(state: AppState, action: Action): AppState {
       // canonical positional projection, `serializeTeams`, so this no longer has
       // to preserve each optional field's insertion position to hold.)
       const teams: TeamState = ts.scoreHistory !== undefined
-        ? { ...ts, orderSwapped, rev }
-        : { ...ts, orderSwapped, rev, scoreHistory: state.teams.scoreHistory ?? [], doubleNextGame: state.teams.doubleNextGame ?? null };
+        ? { ...ts, orderSwapped, teamsRevealed, rev }
+        : { ...ts, orderSwapped, teamsRevealed, rev, scoreHistory: state.teams.scoreHistory ?? [], doubleNextGame: state.teams.doubleNextGame ?? null };
       writeScoreHistory(normalizeScoreHistory(teams.scoreHistory));
       writeDoubleNextGame(normalizeDoubleNextGame(teams.doubleNextGame));
       return { ...state, teams };
@@ -912,7 +959,7 @@ function baseReducer(state: AppState, action: Action): AppState {
     }
     case 'CLEAR_ALL': {
       localStorage.clear();
-      const teams: TeamState = { ...emptyTeams(), scoreHistory: [], doubleNextGame: null, orderSwapped: false };
+      const teams: TeamState = { ...emptyTeams(), scoreHistory: [], doubleNextGame: null, orderSwapped: false, teamsRevealed: false };
       return { ...state, teams, correctAnswersByGame: {} };
     }
     default:
@@ -927,7 +974,12 @@ interface GameContextValue {
   dispatch: React.Dispatch<Action>;
   loadSettings: () => Promise<void>;
   awardPoints: (team: TeamKey, points: number) => void;
-  assignTeams: (names: string[]) => void;
+  /** Full reshuffle of `players` into the active teams. Leaves `teamsRevealed` alone. */
+  assignTeams: (players: RosterPlayer[]) => void;
+  /** Bring the draw in line with `players` without reshuffling (add/remove only). */
+  reconcileTeamDraw: (players: RosterPlayer[]) => void;
+  /** Let the show display the draw ("Teams zuweisen" in random mode). */
+  revealTeams: () => void;
 }
 
 const GameContext = createContext<GameContextValue | null>(null);
@@ -998,7 +1050,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
           jokersInLastGame: data.jokersInLastGame === true,
           jokerUsageScope: data.jokerUsageScope === 'per-game' ? 'per-game' : 'per-gameshow',
           backgroundMusicSource: data.backgroundMusicSource === 'default' ? 'default' : 'theme',
-          players: data.players || [],
+          players: normalizeSettingsPlayers(data.players),
+          registry: normalizeSettingsPlayers(data.registry),
+          binned: normalizeSettingsPlayers(data.binned),
           totalGames: typeof data.totalGames === 'number' && data.totalGames > 0 ? data.totalGames : 0,
         },
       });
@@ -1020,34 +1074,45 @@ export function GameProvider({ children }: { children: ReactNode }) {
   const teamCountRef = useRef(state.settings.teamCount);
   teamCountRef.current = state.settings.teamCount;
 
-  const assignTeams = useCallback((names: string[]) => {
-    // Capitalize EVERY word (e.g. "john smith" → "John Smith"), not just the
-    // first — multi-word names must have each part upper-cased.
-    const capitalizeWords = (n: string) =>
-      n.split(/\s+/).map(w => (w ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w)).join(' ');
-    const normalized = names.map(capitalizeWords);
-    // Fisher-Yates. `sort(() => Math.random() - 0.5)` is not a uniform shuffle —
-    // the comparator is inconsistent, so the result is biased by the engine's
-    // sort implementation and players near their original position stay there
-    // more often than chance. Teams are drawn in front of an audience, so the
-    // draw has to actually be fair.
-    const shuffled = [...normalized];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j]!, shuffled[i]!];
-    }
-    // Round-robin over however many teams the gameshow runs with (0-4): player 1
-    // to team 1, player 2 to team 2, … wrapping around. With two teams this is
-    // the historic alternation. A count of 0 has no teams to deal into.
+  // The rosters, read at call time so `reconcileTeamDraw` stays stable too.
+  const teamsRef = useRef(state.teams);
+  teamsRef.current = state.teams;
+
+  const assignTeams = useCallback((players: RosterPlayer[]) => {
+    // Shuffle + round-robin over however many teams the gameshow runs with
+    // (0-4). A count of 0 has no teams to deal into. See src/utils/teamDraw.ts.
     const keys = teamKeys(teamCountRef.current);
     if (keys.length === 0) return;
-    const rosters: TeamRosterPatch = {};
-    for (const key of keys) rosters[key] = [];
-    shuffled.forEach((name, i) => {
-      rosters[keys[i % keys.length]!]!.push(name);
-    });
-    dispatch({ type: 'SET_TEAMS', payload: rosters });
+    dispatch({ type: 'SET_TEAMS', payload: drawTeams(players, keys) });
   }, []);
+
+  const reconcileTeamDraw = useCallback((players: RosterPlayer[]) => {
+    const patch = reconcileDraw(teamsRef.current, players, teamKeys(teamCountRef.current));
+    if (patch) {
+      // Keep the ref current so a second call before the re-render (debounce
+      // flush + submit) reconciles against the patched rosters.
+      teamsRef.current = { ...teamsRef.current, ...patch };
+      dispatch({ type: 'SET_TEAMS', payload: patch });
+    }
+  }, []);
+
+  const revealTeams = useCallback(() => {
+    dispatch({ type: 'SET_TEAMS_REVEALED', payload: { revealed: true } });
+  }, []);
+
+  // A registry rename while the show runs (admin Spieler tab → content-changed →
+  // settings reload) reaches the drawn players, before and after the reveal —
+  // and a player added live by name gets their new registry id here once the
+  // show's write reached the gameshow. Only the active show tab writes it, so
+  // the GM and admin don't race it. See specs/players.md.
+  useEffect(() => {
+    if (!isShowTab() || isInactiveShowTab()) return;
+    const patch = applyPlayerRenames(teamsRef.current, state.settings.players, teamKeys(teamCountRef.current));
+    if (patch) {
+      teamsRef.current = { ...teamsRef.current, ...patch };
+      dispatch({ type: 'SET_TEAMS', payload: patch });
+    }
+  }, [state.settings.players]);
 
   // Broadcast team state on local mutations. Skip when the serialized value is
   // unchanged from what we last sent OR just received (value-based echo guard,
@@ -1059,7 +1124,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     // Record only what actually went out: sendWs is a no-op while the socket is
     // reconnecting, and marking a dropped payload as "sent" left the peers on
     // the old value until something else changed. Re-sent on the next open.
-    if (!sendWs('gamemaster-team-state-v2', state.teams)) {
+    if (!sendWs('gamemaster-team-state-v3', state.teams)) {
       pendingTeamsRef.current = state.teams;
       return;
     }
@@ -1073,7 +1138,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   useEffect(() => onWsOpen(() => {
     const pending = pendingTeamsRef.current;
     if (!pending || isInactiveShowTab()) return;
-    if (sendWs('gamemaster-team-state-v2', pending)) {
+    if (sendWs('gamemaster-team-state-v3', pending)) {
       pendingTeamsRef.current = null;
       lastSentTeamsJsonRef.current = serializeTeams(pending);
     }
@@ -1113,7 +1178,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   }), []);
 
   // Apply remote team-state updates.
-  useWsChannel<TeamState | null>('gamemaster-team-state-v2', (payload) => {
+  useWsChannel<TeamState | null>('gamemaster-team-state-v3', (payload) => {
     if (!payload) return;
     const next: TeamState = {
       scoreHistory: normalizeScoreHistory(payload.scoreHistory),
@@ -1125,6 +1190,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
       // Always set it explicitly: `undefined` would be treated as "omitted" by
       // SET_TEAM_STATE and resurrect the local value instead of clearing it.
       orderSwapped: payload.orderSwapped === true,
+      // A legacy peer / server cache has no flag: derive it like a cold read.
+      teamsRevealed: typeof payload.teamsRevealed === 'boolean' ? payload.teamsRevealed : anyRoster(payload),
       rev: typeof payload.rev === 'number' ? payload.rev : 0,
       ...emptyTeams(),
     };
@@ -1137,7 +1204,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
       const name = payload[`${key}Name`];
       const points = payload[`${key}Points`];
       const jokers = payload[`${key}JokersUsed`];
-      next[key] = Array.isArray(roster) ? roster : [];
+      // Converted, not filtered: a legacy peer or cache sends name strings.
+      next[key] = normalizeRoster(roster);
       next[`${key}Name`] = typeof name === 'string' && name.trim() ? name : undefined;
       next[`${key}Points`] = typeof points === 'number' ? points : 0;
       next[`${key}JokersUsed`] = Array.isArray(jokers) ? jokers : [];
@@ -1147,7 +1215,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     // session — must not roll our score back. Re-assert ours so the sender
     // converges on the newer value instead of the two of us diverging.
     if ((next.rev ?? 0) < (state.teams.rev ?? 0)) {
-      sendWs('gamemaster-team-state-v2', state.teams);
+      sendWs('gamemaster-team-state-v3', state.teams);
       return;
     }
     if (teamsColdGateRef.current) {
@@ -1245,7 +1313,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     if (!isShowTab()) return;
     return onWsOpen(() => {
       if (isInactiveShowTab()) return;
-      sendWs('gamemaster-team-state-v2', latestTeamsRef.current);
+      sendWs('gamemaster-team-state-v3', latestTeamsRef.current);
       sendWs('gamemaster-question-tally', withTallyRev(latestCorrectRef.current, tallyRevRef.current));
     });
   }, []);
@@ -1256,7 +1324,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!isShowTab()) return;
     return onBecameActive(() => {
-      sendWs('gamemaster-team-state-v2', latestTeamsRef.current);
+      sendWs('gamemaster-team-state-v3', latestTeamsRef.current);
       sendWs('gamemaster-question-tally', withTallyRev(latestCorrectRef.current, tallyRevRef.current));
     });
   }, []);
@@ -1266,7 +1334,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
     if (!isShowTab()) return;
     return onReemitRequest(() => {
       if (isInactiveShowTab()) return;
-      sendWs('gamemaster-team-state-v2', latestTeamsRef.current);
+      sendWs('gamemaster-team-state-v3', latestTeamsRef.current);
       sendWs('gamemaster-question-tally', withTallyRev(latestCorrectRef.current, tallyRevRef.current));
     });
   }, []);
@@ -1301,6 +1369,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
         loadSettings: loadSettingsAction,
         awardPoints,
         assignTeams,
+        reconcileTeamDraw,
+        revealTeams,
       }}
     >
       {children}

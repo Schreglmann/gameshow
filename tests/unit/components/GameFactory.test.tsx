@@ -19,6 +19,12 @@ vi.mock('@/components/games/AudioGuess', () => ({
 vi.mock('@/components/games/Q1', () => ({
   default: () => <div data-testid="q1">Q1</div>,
 }));
+vi.mock('@/components/games/Venn', () => ({
+  default: () => <div data-testid="venn">Venn</div>,
+}));
+vi.mock('@/components/games/FilmStripe', () => ({
+  default: () => <div data-testid="film-stripe">FilmStripe</div>,
+}));
 vi.mock('@/components/games/FourStatements', () => ({
   default: () => <div data-testid="four-statements">FourStatements</div>,
 }));
@@ -73,6 +79,18 @@ describe('GameFactory', () => {
     const config = { type: 'four-statements', title: 'Test', questions: [] } as GameConfig;
     render(<GameFactory {...baseProps} config={config} />);
     expect(await screen.findByTestId('four-statements')).toBeInTheDocument();
+  });
+
+  it('renders Venn for venn type', async () => {
+    const config = { type: 'venn', title: 'Test', questions: [] } as GameConfig;
+    render(<GameFactory {...baseProps} config={config} />);
+    expect(await screen.findByTestId('venn')).toBeInTheDocument();
+  });
+
+  it('renders FilmStripe for film-stripe type', async () => {
+    const config = { type: 'film-stripe', title: 'Test', questions: [] } as GameConfig;
+    render(<GameFactory {...baseProps} config={config} />);
+    expect(await screen.findByTestId('film-stripe')).toBeInTheDocument();
   });
 
   it('renders FactOrFake for fact-or-fake type', async () => {

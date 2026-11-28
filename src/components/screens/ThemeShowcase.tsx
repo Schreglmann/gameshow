@@ -13,6 +13,8 @@ import ColorPickerField from '@/components/backend/ColorPickerField';
 import DeadlineTimer from '@/components/common/DeadlineTimer';
 import { ColorPie } from '@/components/games/ColorGuess';
 import CompassRose from '@/components/common/CompassRose';
+import VennDiagram from '@/components/common/VennDiagram';
+import FilmStripeBar from '@/components/common/FilmStripeBar';
 import { QRCodeSVG } from 'qrcode.react';
 import RulesEditor from '@/components/backend/RulesEditor';
 import SpellCheckPanel, { type SpellGroup } from '@/components/backend/SpellCheckPanel';
@@ -26,6 +28,8 @@ import ConflictBanner from '@/components/backend/ConflictBanner';
 import SaveStatusToast from '@/components/backend/SaveStatusToast';
 import RetryImage from '@/components/common/RetryImage';
 import AssetReloadButton from '@/components/common/AssetReloadButton';
+import ConnectionDot from '@/components/common/ConnectionDot';
+import GmConnectionBanner from '@/components/common/GmConnectionBanner';
 import type { RulesPreset } from '@/types/config';
 import '@/admin.css';
 import '@/backend.css';
@@ -33,6 +37,7 @@ import '@/styles/gamemaster.css';
 import '@/styles/header-jokers.css';
 import '@/styles/install-button.css';
 import '@/styles/inactive-show-overlay.css';
+import '@/styles/suggest-input.css';
 
 /** Four jokers — the count a real show usually runs, and the one that makes the
  *  header joker grid two rows deep. Used by the multi-team header preview. */
@@ -122,6 +127,16 @@ const SPELL_DEMO_CTX: SpellCheckCtxValue = {
   allowWord: () => {},
   ignore: () => {},
 };
+
+/** A made-up film for the stripe showcase: a cold blue opening, a warm middle, a dark
+ *  finale — with the scene-to-scene flicker a real stripe has. */
+const SHOWCASE_FILM_STRIPE: string[] = Array.from({ length: 160 }, (_, i) => {
+  const t = i / 159;
+  const hue = t < 0.35 ? 212 - t * 60 : t < 0.7 ? 34 + (t - 0.35) * 40 : 268 - (t - 0.7) * 120;
+  const flicker = ((i * 37) % 11) - 5;
+  const lightness = Math.max(8, Math.min(62, (t < 0.7 ? 42 : 24) + flicker * 2.4));
+  return `hsl(${Math.round(hue)} ${t < 0.7 ? 46 : 30}% ${Math.round(lightness)}%)`;
+});
 
 // Admin row passes `themes={ADMIN_THEMES}` (curated subset); frontend row uses all THEMES.
 function ThemeRow({ value, onChange, themes = THEMES }: { value: ThemeId; onChange: (id: ThemeId) => void; themes?: typeof THEMES }) {
@@ -357,6 +372,15 @@ function FrontendShowcase() {
         </div>
       </Section>
 
+      {/* Real component, forced visible and rendered in-flow instead of pinned
+          to the viewport corner. See specs/crash-recovery.md. */}
+      <Section title="Server getrennt (Punkt auf der Show)">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <ConnectionDot forceVisible inline />
+          <span>Erscheint oben links, wenn der Server länger als 3 s nicht erreichbar ist.</span>
+        </div>
+      </Section>
+
       <Section title="Quiz — Question & Answer">
         <GlassCard>
           <div className="quiz-question-number">Frage 3 von 10</div>
@@ -511,6 +535,14 @@ function FrontendShowcase() {
             >
               Antworten verstecken
             </button>
+            <button
+              type="button"
+              className="gm-show-controls-toggle"
+              aria-pressed={false}
+              title="Buttons auf der Show ausblenden (Weiter, Richtig/Falsch, Musik-Player, …), weil die Show von hier gesteuert wird."
+            >
+              Show-Buttons ausblenden
+            </button>
             <div className="gm-deadline-group" role="group" aria-label="Deadline-Timer (Demo)">
               <div className="gm-deadline-durations" role="group" aria-label="Countdown-Dauer wählen (Demo)">
                 <div className="gm-deadline-durations-label">Countdown</div>
@@ -547,6 +579,14 @@ function FrontendShowcase() {
               title="Antworten sind versteckt — nur die Frage ist zu sehen. Klicken zum Anzeigen."
             >
               Antworten zeigen
+            </button>
+            <button
+              type="button"
+              className="gm-show-controls-toggle gm-show-controls-toggle--active"
+              aria-pressed={true}
+              title="Die Buttons der Show sind ausgeblendet — gesteuert wird nur hier. Klicken zum Einblenden."
+            >
+              Show-Buttons einblenden
             </button>
             <div className="gm-deadline-group" role="group" aria-label="Deadline-Timer aktiv (Demo)">
               <div className="gm-deadline-durations" role="group" aria-label="Countdown-Dauer wählen aktiv (Demo)">
@@ -646,6 +686,87 @@ function FrontendShowcase() {
         </div>
       </Section>
 
+      {/* The popover a GM button with a `menu` opens next to itself (a player on
+          the start screen). Shown in place here; live it is portalled to <body>
+          and positioned from the tapped button. See GmButtonMenu.tsx. */}
+      <Section title="Gamemaster Spieler-Menü (Auslosung)">
+        <div className="gamemaster-card" style={{ textAlign: 'center' }}>
+          <div className="gm-info">Vorschau – auf der Show noch verborgen. Spieler antippen zum Verschieben oder Entfernen.</div>
+          <div className="gm-button-group gm-button-group--team" data-team="team1">
+            <div className="gm-group-label"><TeamDot team="team1" />Team 1 (6)</div>
+            <div className="gm-button-row gm-button-row--grid">
+              {['Bartholomäus-Maximilian', 'Jo', 'Kathi', 'Michi H.', 'Péter', 'Steffi'].map(name => (
+                <button key={name} className={`gm-btn${name === 'Kathi' ? ' gm-btn--menu-open' : ''}`}>{name}</button>
+              ))}
+            </div>
+          </div>
+          <div className="gm-menu-popover" role="menu" aria-label="Katharina „Kathi“ Berger" style={{ position: 'static', margin: '10px auto 0', width: 'fit-content' }}>
+            <div className="gm-menu-title">Katharina „Kathi“ Berger</div>
+            <button type="button" role="menuitem" className="gm-btn gm-menu-item">→ Team 2</button>
+            <button type="button" role="menuitem" className="gm-btn gm-menu-item">→ Team 3</button>
+            <button type="button" role="menuitem" className="gm-btn gm-menu-item gm-btn--danger">Entfernen</button>
+          </div>
+        </div>
+      </Section>
+
+      {/* After the reveal the team name on a GM team card is tapped to rename the
+          team: the resting header (pencil) and the open editor with the long-name
+          hint. Static copies of GroupLabelRename in GamemasterView.tsx. */}
+      <Section title="Gamemaster Teamname auf der Teamkarte">
+        <div className="gamemaster-controls-panel">
+          <div className="gm-button-group gm-button-group--team" data-team="team1">
+            <button type="button" className="gm-group-label gm-group-label--editable" aria-label="Name Team 1 ändern">
+              <TeamDot team="team1" />
+              <span className="gm-group-label-text">Die Donaudampfschifffahrtskapitäne (3)</span>
+              <svg className="gm-group-label-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M12 20h9" />
+                <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+              </svg>
+            </button>
+            <div className="gm-button-row gm-button-row--grid">
+              {['Anna', 'Jo', 'Kathi'].map(name => <button key={name} className="gm-btn">{name}</button>)}
+            </div>
+          </div>
+          <div className="gm-button-group gm-button-group--team" data-team="team2">
+            <form className="gm-group-rename" onSubmit={e => e.preventDefault()}>
+              <div className="gm-group-rename-row">
+                <TeamDot team="team2" />
+                <input className="gm-input gm-group-rename-input" aria-label="Name Team 2" defaultValue="Die unglaublich schnellen Füchse" />
+                <button type="submit" className="gm-btn gm-btn--primary gm-group-rename-btn" aria-label="Speichern">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+                </button>
+                <button type="button" className="gm-btn gm-group-rename-btn" aria-label="Abbrechen">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                </button>
+              </div>
+              <div className="gm-group-rename-hint" role="status">{teamNameLongHint(2)}</div>
+            </form>
+            <div className="gm-button-row gm-button-row--grid">
+              {['Ben', 'Carla', 'Dora'].map(name => <button key={name} className="gm-btn">{name}</button>)}
+            </div>
+          </div>
+        </div>
+      </Section>
+
+      {/* A GM "Spieler hinzufügen" field with the registry autocomplete open. */}
+      <Section title="Gamemaster Spieler hinzufügen (Autocomplete)">
+        <div className="gamemaster-card" style={{ textAlign: 'center', paddingBottom: 120 }}>
+          <form className="gm-input-group" onSubmit={e => e.preventDefault()}>
+            <div className="gm-input-field">
+              <label className="gm-input-label">Spieler hinzufügen</label>
+              <span className="suggest-wrap">
+                <input className="gm-input" placeholder="Name (mehrere mit Komma)" defaultValue="jo" readOnly />
+                <span className="suggest-list" role="listbox">
+                  <button type="button" role="option" aria-selected="false" className="suggest-item">Johanna Berger</button>
+                  <button type="button" role="option" aria-selected="true" className="suggest-item is-active">Johannes „Jo“ Kaiser</button>
+                </span>
+              </span>
+            </div>
+            <button type="submit" className="gm-btn gm-btn--primary">Hinzufügen</button>
+          </form>
+        </div>
+      </Section>
+
       <Section title="Gamemaster mit versteckten Antworten">
         <div className="gamemaster-card" style={{ textAlign: 'center' }}>
           <div className="gamemaster-meta">Frage 3 / 10</div>
@@ -680,6 +801,13 @@ function FrontendShowcase() {
           <button type="button" className="gm-btn gm-btn--primary gm-desync-btn">
             Jetzt synchronisieren
           </button>
+        </div>
+      </Section>
+
+      <Section title="Gamemaster Server getrennt">
+        <div style={{ display: 'grid', gap: 12 }}>
+          <GmConnectionBanner forceState="offline" inline />
+          <GmConnectionBanner forceState="dropped" inline />
         </div>
       </Section>
 
@@ -1225,11 +1353,110 @@ function FrontendShowcase() {
         </GlassCard>
       </Section>
 
-      <Section title="Form / Name Entry">
-        <div className="name-form" style={{ marginBottom: 0 }}>
-          <h2 style={{ fontSize: '1.4em' }}>Namen zuweisen</h2>
-          <textarea placeholder="Name 1, Name 2, ..." style={{ height: 80, margin: 0 }} readOnly />
-          <button>Teams zuweisen</button>
+      {/* Film stripe ("Filmstreifen"): the stripe alone, as a film opens, and as the
+          timeline it becomes under the time-lapse, with the position marker. The
+          colours are the stripe's own content, so the theme only shows in the frame
+          around it and in the notice for a film without a stripe.
+          See specs/games/film-stripe.md. */}
+      <Section title="Filmstreifen (Farbstreifen)">
+        <GlassCard>
+          <div className="film-stripe-stage">
+            <FilmStripeBar colors={SHOWCASE_FILM_STRIPE} />
+          </div>
+        </GlassCard>
+        <GlassCard>
+          <div className="film-stripe-stage film-stripe-stage--timelapse">
+            <FilmStripeBar colors={SHOWCASE_FILM_STRIPE} markerIndex={74} />
+          </div>
+          <div className="film-stripe-stage">
+            <div className="film-stripe-missing">Für diesen Film wurde noch kein Farbstreifen berechnet.</div>
+          </div>
+        </GlassCard>
+      </Section>
+
+      {/* Venn ("Schnittmenge"): the open puzzle with a long category name, and the
+          solved three-circle state — the hint circle carries the gold token, the
+          answer pill the success token. See specs/games/venn.md. */}
+      <Section title="Schnittmenge (Venn-Diagramm)">
+        <GlassCard>
+          <div className="venn-stage">
+            <VennDiagram sets={['Programmiersprache', 'Stadt im Burgenland']} />
+          </div>
+        </GlassCard>
+        <GlassCard>
+          <div className="venn-stage">
+            <VennDiagram sets={['Planet', 'Schokoriegel', 'Römischer Gott']} solved answer="Mars" />
+          </div>
+        </GlassCard>
+      </Section>
+
+      {/* The hidden draw before "Teams zuweisen": alphabetical name grid (the ✕
+          shows on hover), add field, reveal button. See specs/team-management.md
+          ("Verdeckte Auslosung"). */}
+      <Section title="Verdeckte Auslosung (vor „Teams zuweisen“)">
+        <div className="draw-setup">
+          {/* Nicknames; a surname prefix only where a nickname occurs twice
+              ("Michi H." / "Michi P."). See specs/players.md. */}
+          <p className="draw-pool-count">8 Spieler · die Teams werden gleich ausgelost</p>
+          {/* Few players → large chips (HomeScreen: DRAW_POOL_LARGE_MAX). */}
+          <ul className="draw-pool" aria-label="Spieler" data-size="large">
+            {['Alex', 'Andi', 'Bianca', 'Isabella', 'Johannes Ka.', 'Johannes Ko.', 'Michi H.', 'Michi P.'].map(name => (
+              <li key={name} className="draw-pool-name">
+                <span className="draw-pool-label">{name}</span>
+                <button type="button" className="draw-pool-remove" aria-label={`${name} entfernen`}><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 2.5l7 7M9.5 2.5l-7 7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" fill="none" /></svg></button>
+              </li>
+            ))}
+          </ul>
+          {/* The add field's autocomplete, open: registry players not in the draw
+              yet, with full name and nickname. See specs/players.md. */}
+          <form className="name-form draw-add-form" onSubmit={e => e.preventDefault()} style={{ marginBottom: 96 }}>
+            <span className="suggest-wrap">
+              <input placeholder="Name" aria-label="Name hinzufügen" defaultValue="mi" readOnly />
+              <span className="suggest-list" role="listbox">
+                <button type="button" role="option" aria-selected="true" className="suggest-item is-active">Michael „Michi“ Huber</button>
+                <button type="button" role="option" aria-selected="false" className="suggest-item">Michaela „Michi“ Pichler</button>
+              </span>
+            </span>
+            <button type="submit">Hinzufügen</button>
+          </form>
+          <p className="draw-add-feedback" role="status">„Anna Müller“ ist schon dabei.</p>
+          <button type="button" className="draw-reveal-button">Teams zuweisen</button>
+        </div>
+      </Section>
+
+      {/* More than DRAW_POOL_LARGE_MAX players: the grid keeps the compact chips. */}
+      <Section title="Verdeckte Auslosung mit vielen Spielern">
+        <div className="draw-setup">
+          <p className="draw-pool-count">19 Spieler · die Teams werden gleich ausgelost</p>
+          <ul className="draw-pool" aria-label="Spieler">
+            {['Andi', 'Anita', 'Conzi', 'Fabi', 'Flo', 'Ines', 'Jo', 'Kerstin', 'Luki', 'Maxi', 'Péter', 'Phillip', 'Raphi', 'Ricky', 'Seifi', 'Steffi', 'Theresa', 'Thomas', 'Vroni'].map(name => (
+              <li key={name} className="draw-pool-name">
+                <span className="draw-pool-label">{name}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </Section>
+
+      {/* A long roster after the reveal: the members share a column grid
+          (measured by rosterFit.ts → data-columns) so the card stays on a 1080p screen. */}
+      <Section title="Zwei Teams mit vielen Spielern">
+        <div id="teams" data-team-count={2} style={{ marginTop: 0 }}>
+          {[
+            ['Jo', 'Kathi', 'Michi H.', 'David', 'Phillip L.', 'Kerstin', 'Steffi', 'Julia', 'Péter', 'Mike', 'Manuel', 'Tom'],
+            ['Obi', 'Gerhard', 'Ines', 'Andi', 'Maxi', 'Rainer', 'Theresa', 'Ricky', 'Thomas', 'Martin', 'Sebi', 'Michael M.'],
+          ].map((members, i) => (
+            <div className="team" data-team={`team${i + 1}`} key={i}>
+              <TeamCardName team={`team${i + 1}` as TeamKey} name={`Team ${i + 1}`} />
+              <ul className="team-members team-members-editable" data-columns={2}>
+                {members.map(m => (
+                  <li className="team-member-row" key={m}>
+                    <input className="team-member-input" defaultValue={m} readOnly />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </div>
       </Section>
 
@@ -1253,8 +1480,8 @@ function FrontendShowcase() {
           {[
             { name: 'Die absolut unbesiegbaren Adler vom Nordhang', members: ['Maxi', 'Mitch', 'Thomas'] },
             { name: 'Donaudampfschifffahrtsgesellschaftskapitäne', members: ['Péter', 'Gerhard', 'Kathi'] },
-            { name: 'Isi allein zu Haus', members: ['Maus', 'Fabian Sp.', 'Carina'] },
-            { name: 'Team 4', members: ['Michael M.', 'Isabella', 'Bianca'] },
+            { name: 'Isi allein zu Haus', members: ['Maus', 'Anna Huber', 'Carina'] },
+            { name: 'Team 4', members: ['Anna Hubert.', 'Isabella', 'Bianca'] },
           ].map(({ name, members }, i) => (
             <div className="team" data-team={`team${i + 1}`} key={name}>
               <TeamCardName team={`team${i + 1}` as TeamKey} name={name} />
@@ -2099,6 +2326,42 @@ function AdminShowcase() {
         </div>
       </Section>
 
+      <Section title="YouTube im Asset-Picker (Audio/Video-Feld → ▶ YouTube)">
+        <div style={{ display: 'flex', flexDirection: 'column', maxWidth: 720 }}>
+          <div className="picker-mode-toggle" style={{ marginBottom: 8 }}>
+            <button type="button" className="be-icon-btn">DAM</button>
+            <button type="button" className="be-icon-btn asset-select-toggle-active">▶ YouTube</button>
+          </div>
+          <form className="picker-yt-url" onSubmit={e => e.preventDefault()}>
+            <label htmlFor="showcase-yt-url">URL einfügen:</label>
+            <input id="showcase-yt-url" type="url" className="replace-search-input" defaultValue="youtu.be/kein-video" />
+            <button type="submit" className="be-btn-secondary">Vorschau</button>
+            <span className="picker-yt-url-error">Keine gültige YouTube-URL</span>
+          </form>
+          {/* Static placeholder instead of the real iframe, so the showcase makes no network calls. */}
+          <div className="replace-compare replace-compare--single yt-preview">
+            <div className="replace-compare-pane">
+              <div className="yt-preview-head">
+                <div className="replace-compare-label">Vorschau</div>
+                <button type="button" className="be-icon-btn yt-preview-close" aria-label="Vorschau schließen">✕</button>
+              </div>
+              <div className="yt-preview-frame">
+                <div className="yt-preview-placeholder" style={{ background: 'linear-gradient(135deg, #8b5cf6, #ec4899)' }} />
+              </div>
+              <div className="replace-compare-meta yt-preview-meta">
+                <span className="yt-preview-title">Never Gonna Give You Up — Official Video</span>
+                <span>Rick Astley · 3:33</span>
+                <a href="#" onClick={e => e.preventDefault()}>Auf YouTube öffnen ↗</a>
+              </div>
+            </div>
+          </div>
+          <div className="replace-error">Download abgebrochen</div>
+          <div className="picker-footer">
+            <button type="button" className="be-btn-primary">✓ Herunterladen</button>
+          </div>
+        </div>
+      </Section>
+
       <Section title="Progress overlays">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16, alignItems: 'flex-start' }}>
           {/* One job — the row opens expanded, no group header */}
@@ -2455,13 +2718,144 @@ function AdminShowcase() {
         </div>
       </Section>
 
-      <Section title="Spieler-Statistik (Klick auf Spieler-Chip in Gameshows-Tab)">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div className="player-stats-box" style={{ position: 'relative', margin: 0, animation: 'none' }}>
-            <div className="player-stats-header">
-              <h3 className="player-stats-name">Ju</h3>
-              <button className="be-icon-btn" aria-label="Schließen">✕</button>
+      {/* Game-editor image lightbox header: the file name renames on click.
+          See specs/dam-image-replace.md "Ersetzen aus dem Frage-Editor". */}
+      <Section title="Bild-Lightbox im Spiel-Editor: Dateiname umbenennen">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {(['idle', 'editing', 'error'] as const).map(state => (
+            <div key={state} className="image-lightbox" style={{ position: 'static', maxWidth: '100%', width: 'auto' }}>
+              <div className="image-lightbox-header">
+                <span className="image-lightbox-name image-lightbox-name--media">
+                  <span className="image-lightbox-icon">🖼</span>
+                  {state === 'idle'
+                    ? <span className="image-lightbox-filename"><span className="asset-file-name-text" role="button" tabIndex={0}>711cUTN0+gL._AC_UF894,1000_QL80_.jpg</span></span>
+                    : <input className="be-input asset-folder-rename-input" defaultValue={state === 'error' ? 'Kim Possible' : 'Monopoly Man'} aria-label="Dateiname" aria-invalid={state === 'error' || undefined} />}
+                </span>
+                {state === 'error' && <span className="image-lightbox-rename-error" role="alert" title='Der Name "Kim Possible.jpg" ist bereits vergeben'>Der Name "Kim Possible.jpg" ist bereits vergeben</span>}
+                <span className="image-lightbox-dims">673 × 1000px</span>
+                <button className="be-icon-btn" style={{ fontSize: 'var(--admin-sz-11, 11px)' }}>↻ Ersetzen</button>
+                <button className="be-icon-btn" aria-label="Schließen">✕</button>
+              </div>
             </div>
+          ))}
+        </div>
+      </Section>
+
+      {/* Gameshow player combobox: registry players as chips, an unknown id in
+          red, and "neu anlegen" with its first/last-name form. See specs/players.md. */}
+      <Section title="Spieler-Auswahl (Gameshow)">
+        <div className="gs-roster-group" style={{ minWidth: 0 }}>
+          <label className="gs-players-label">Spieler</label>
+          <div className="players-combobox-wrap">
+            <div className="players-combobox">
+              {['Michael „Michi“ Huber', 'Michaela „Michi“ Pichler', 'Anna Müller'].map(name => (
+                <span key={name} className="player-tag">
+                  <button type="button" className="player-tag-name">{name}</button>
+                  <button type="button" className="player-tag-remove">×</button>
+                </span>
+              ))}
+              <span className="player-tag unknown">
+                <button type="button" className="player-tag-name">raphi-w (unbekannt)</button>
+                <button type="button" className="player-tag-remove">×</button>
+              </span>
+              <div className="players-input-wrap" style={{ position: 'relative' }}>
+                <input className="players-combobox-input" defaultValue="Jo" readOnly />
+                <div className="players-combobox-dropdown" style={{ position: 'static', marginTop: 4 }}>
+                  <button type="button" className="players-combobox-item highlighted">Johanna Berger</button>
+                  <button type="button" className="players-combobox-item">Johannes „Jo“ Kaiser</button>
+                  <button type="button" className="players-combobox-item">Jo Wagner<span className="players-combobox-binned"> · aus dem Papierkorb</span></button>
+                  <button type="button" className="players-combobox-item players-combobox-create">+ „Jo“ neu anlegen</button>
+                </div>
+              </div>
+            </div>
+            <form className="player-create-form" onSubmit={e => e.preventDefault()}>
+              <input className="be-input" placeholder="Vorname" defaultValue="Jo" readOnly />
+              <input className="be-input" placeholder="Nachname" readOnly />
+              <input className="be-input" placeholder="Spitzname (Jo)" readOnly />
+              <button type="submit" className="admin-button">Anlegen</button>
+              <button type="button" className="admin-button secondary">Abbrechen</button>
+              <p className="be-field-hint be-field-error" role="alert">Vorname oder Spitzname angeben.</p>
+            </form>
+          </div>
+        </div>
+      </Section>
+
+      {/* The Spieler tab: whole names, read-only; editing happens in the popup below. */}
+      <Section title="Spieler-Tab (Registry)">
+        <div className="backend-card" style={{ margin: 0 }}>
+          <div className="players-table-toolbar">
+            <h3>6 Spieler</h3>
+            <div className="players-table-actions">
+              <input className="be-input players-table-search" type="search" placeholder="Suchen…" readOnly />
+              <button type="button" className="admin-button">+ Spieler</button>
+            </div>
+          </div>
+          <ul className="players-list" aria-label="Spieler">
+            {([['Alexander', 'Kaufmann', 'Alex', 1], ['Anna', 'Müller', null, 2], ['Michael', 'Huber', 'Michi', 5], ['Karin', 'Kainhofer-Rohrmoser', null, 0]] as const).map(([first, last, nick, count]) => (
+              <li className="players-list-row" key={`${first} ${last}`}>
+                <button type="button" className="players-list-name">
+                  {first}{nick && <span className="players-list-nick"> „{nick}“</span>} {last}
+                </button>
+                <span className="players-list-count">{count}</span>
+                <button type="button" className="be-icon-btn danger" aria-label="Löschen">✕</button>
+              </li>
+            ))}
+            {/* Disabled: dimmed, no longer suggested. */}
+            <li className="players-list-row is-disabled">
+              <button type="button" className="players-list-name">
+                Johanna Berger<span className="players-list-missing">Deaktiviert</span>
+              </button>
+              <span className="players-list-count">3</span>
+              <button type="button" className="be-icon-btn danger" aria-label="Löschen">✕</button>
+            </li>
+            {/* Added during the show: only the nickname until someone completes it. */}
+            <li className="players-list-row">
+              <button type="button" className="players-list-name">
+                Maus<span className="players-list-missing">Name fehlt</span>
+              </button>
+              <span className="players-list-count">1</span>
+              <button type="button" className="be-icon-btn danger" aria-label="Löschen">✕</button>
+            </li>
+          </ul>
+        </div>
+      </Section>
+
+      {/* The player lightbox: names (editable) + statistics, opened by any player
+          name in the admin, over the open tab. See specs/players.md. */}
+      <Section title="Spieler-Lightbox (Name + Statistik)">
+        <div className="player-lightbox" role="dialog" aria-label="Spieler" style={{ animation: 'none', maxHeight: 'none' }}>
+          <div className="player-lightbox-header">
+            <h2 className="player-lightbox-name">Julia „Ju“ Brandner</h2>
+            <button type="button" className="be-icon-btn" aria-label="Schließen">✕</button>
+          </div>
+          <form className="player-lightbox-names" onSubmit={e => e.preventDefault()}>
+            <label className="player-edit-field">
+              <span className="be-label">Vorname</span>
+              <input className="be-input" defaultValue="Julia" readOnly />
+            </label>
+            <label className="player-edit-field">
+              <span className="be-label">Nachname</span>
+              <input className="be-input" defaultValue="Brandner" readOnly />
+            </label>
+            <label className="player-edit-field">
+              <span className="be-label">Spitzname</span>
+              <input className="be-input" defaultValue="Ju" placeholder="Julia" readOnly />
+            </label>
+            <div className="player-lightbox-actions">
+              <label className="be-toggle player-lightbox-active">
+                <input type="checkbox" checked={false} readOnly />
+                <span className="be-toggle-track" />
+                <span className="be-toggle-label">Aktiv</span>
+              </label>
+              <button type="button" className="be-icon-btn danger">Löschen</button>
+            </div>
+            <p className="be-field-hint player-lightbox-disabled-hint">
+              Deaktiviert: bleibt in seinen Gameshows, wird aber nicht mehr vorgeschlagen – nur, wenn ein Name vollständig eingetippt wird.
+            </p>
+          </form>
+          <p className="be-field-hint be-field-error" role="alert">„Anna Müller“ gibt es schon.</p>
+          <h3 className="player-lightbox-section">Statistik</h3>
+          <div className="player-stats">
             <p className="player-stats-summary">4 gespielte Spiele in 3 verschiedenen Spielen · 2 Gameshows · 1 eingeplant</p>
             <div className="player-stats-breakdown">
               <button type="button" className="player-stats-type-row is-active">
@@ -2515,15 +2909,42 @@ function AdminShowcase() {
               </div>
             </div>
           </div>
-          <div className="player-stats-box" style={{ position: 'relative', margin: 0, animation: 'none' }}>
-            <div className="player-stats-header">
-              <h3 className="player-stats-name">Neuer Spieler</h3>
-              <button className="be-icon-btn" aria-label="Schließen">✕</button>
-            </div>
+        </div>
+        <div className="player-lightbox" style={{ animation: 'none', marginTop: 16 }}>
+          <div className="player-lightbox-header">
+            <h2 className="player-lightbox-name">Neuer Spieler</h2>
+            <button type="button" className="be-icon-btn" aria-label="Schließen">✕</button>
+          </div>
+          <h3 className="player-lightbox-section">Statistik</h3>
+          <div className="player-stats">
             <p className="player-stats-empty">Noch keine Gameshow mit Neuer Spieler.</p>
           </div>
         </div>
       </Section>
+
+      <Section title="Spieler hinzufügen (Popup)">
+        <form className="folder-prompt-box player-edit-dialog" style={{ animation: 'none' }} onSubmit={e => e.preventDefault()}>
+          <h3 className="folder-prompt-title">Spieler hinzufügen</h3>
+          <label className="player-edit-field">
+            <span className="be-label">Vorname</span>
+            <input className="be-input" defaultValue="Constanze" readOnly />
+          </label>
+          <label className="player-edit-field">
+            <span className="be-label">Nachname</span>
+            <input className="be-input" readOnly />
+          </label>
+          <label className="player-edit-field">
+            <span className="be-label">Spitzname</span>
+            <input className="be-input" defaultValue="Conzi" placeholder="Constanze" readOnly />
+          </label>
+          <p className="be-field-hint be-field-error" role="alert">Vorname oder Spitzname angeben.</p>
+          <div className="folder-prompt-actions">
+            <button type="button" className="be-icon-btn">Abbrechen</button>
+            <button type="submit" className="be-icon-btn folder-prompt-confirm">Hinzufügen</button>
+          </div>
+        </form>
+      </Section>
+
 
       <Section title="Delete Confirmation">
         <div className="modal-box delete-confirm-box" style={{ position: 'relative', margin: 0 }}>

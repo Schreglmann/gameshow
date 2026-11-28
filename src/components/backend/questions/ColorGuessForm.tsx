@@ -206,6 +206,7 @@ export default function ColorGuessForm({ questions, onChange, otherInstances, on
                 value={q.image || undefined}
                 category="images"
                 onChange={v => update(i, { image: v ?? '' })}
+                searchQuery={q.answer}
               />
             </div>
             {!isVirtual && <GmInfoField segKey={`q${i}.gmInfo`} value={q.gmInfo} onChange={v => update(i, { gmInfo: v })} />}

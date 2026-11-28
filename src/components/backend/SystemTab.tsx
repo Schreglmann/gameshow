@@ -5,6 +5,7 @@ import InstallButton from '@/components/common/InstallButton';
 import { useConfirm } from './ConfirmContext';
 import NasSyncConflictsCard from './NasSyncConflictsCard';
 import NasPathBrowser from './NasPathBrowser';
+import { formatDuration } from '@/utils/formatDuration';
 
 function formatUptime(seconds: number): string {
   const d = Math.floor(seconds / 86400);
@@ -17,6 +18,16 @@ function formatUptime(seconds: number): string {
   if (m > 0) parts.push(`${m}m`);
   parts.push(`${s}s`);
   return parts.join(' ');
+}
+
+/** "26.11., 21:43 – Exit-Code 1" — the date only when it wasn't today. See specs/crash-recovery.md. */
+export function formatLastCrash(crash: { at: string; reason: string }, now: Date = new Date()): string {
+  const at = new Date(crash.at);
+  if (Number.isNaN(at.getTime())) return crash.reason;
+  const time = at.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+  const sameDay = at.toDateString() === now.toDateString();
+  const when = sameDay ? time : `${at.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}, ${time}`;
+  return `${when} – ${crash.reason}`;
 }
 
 function formatBytes(bytes: number): string {
@@ -100,6 +111,7 @@ function prefixForBgTask(type: string): string {
     case 'hdr-probe':         return '📊 HDR-Probe:';
     case 'faststart':         return '⚡ Faststart:';
     case 'whisper-asr':       return '🎙️ Whisper:';
+    case 'film-stripe':       return '🎞️ Filmstreifen:';
     default:                   return '⚙️';
   }
 }
@@ -114,29 +126,13 @@ function parseDetailPercent(detail: string | undefined): number | null {
   return n >= 0 && n <= 100 ? n : null;
 }
 
-/** Format seconds as a compact ETA string (e.g. `3m 20s`, `45s`, `1h 12m`).
- *  Returns null when seconds is ≤0 or not finite. */
-function formatEta(seconds: number): string | null {
-  if (!Number.isFinite(seconds) || seconds <= 0) return null;
-  const s = Math.round(seconds);
-  if (s < 60) return `${s}s`;
-  if (s < 3600) {
-    const m = Math.floor(s / 60);
-    const rem = s % 60;
-    return rem > 0 ? `${m}m ${rem}s` : `${m}m`;
-  }
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  return m > 0 ? `${h}h ${m}m` : `${h}h`;
-}
-
 /** ETA from linear extrapolation: elapsed seconds at `percent` →
  *  remaining = elapsed × (100 / percent − 1). Only meaningful once percent
  *  is well above zero, otherwise the estimate is wildly unreliable. */
 function computeEta(elapsed: number, percent: number): string | null {
   if (percent <= 2 || percent >= 100 || elapsed <= 0) return null;
   const remaining = elapsed * (100 / percent - 1);
-  return formatEta(remaining);
+  return formatDuration(remaining);
 }
 
 /** Strip the `{label}: …` prefix from a bgTask label so the row can prepend a
@@ -484,6 +480,9 @@ export default function SystemTab() {
         <StatRow label="Heap" value={`${server.memoryMB.heapUsed} / ${server.memoryMB.heapTotal} MB`} />
         <StatRow label="ffmpeg" value={<><StatusDot ok={server.ffmpegAvailable} />{server.ffmpegAvailable ? 'Verfügbar' : 'Nicht gefunden'}</>} />
         <StatRow label="yt-dlp" value={<><StatusDot ok={server.ytDlpAvailable} />{server.ytDlpAvailable ? 'Verfügbar' : 'Nicht installiert'}</>} />
+        {server.lastCrash && (
+          <StatRow label="Letzter Absturz" value={formatLastCrash(server.lastCrash)} />
+        )}
       </div>
 
       {/* ── CPU ── */}

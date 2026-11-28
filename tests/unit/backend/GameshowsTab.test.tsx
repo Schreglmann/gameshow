@@ -13,12 +13,14 @@ function renderGameshowsTab() {
 const mockFetchConfig = vi.fn();
 const mockSaveConfig = vi.fn();
 const mockFetchGames = vi.fn();
+const mockFetchPlayerBin = vi.fn();
 
 vi.mock('@/services/backendApi', () => ({
   fetchConfig: (...args: unknown[]) => mockFetchConfig(...args),
   saveConfig: (...args: unknown[]) => mockSaveConfig(...args),
   saveConfigBeacon: vi.fn(),
   fetchGames: (...args: unknown[]) => mockFetchGames(...args),
+  fetchPlayerBin: (...args: unknown[]) => mockFetchPlayerBin(...args),
 }));
 
 const sampleConfig: AppConfig = {
@@ -47,6 +49,7 @@ describe('GameshowsTab', () => {
     mockFetchConfig.mockResolvedValue(sampleConfig);
     mockSaveConfig.mockResolvedValue(undefined);
     mockFetchGames.mockResolvedValue([]);
+    mockFetchPlayerBin.mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -187,5 +190,62 @@ describe('GameshowsTab', () => {
       expect(screen.getByText('Neue Gameshow')).toBeInTheDocument();
     });
     expect(within(cardFor('Neue Gameshow')).getByRole('button', { name: 'Gameshow einklappen' })).toBeInTheDocument();
+  });
+
+  it('removes a player taken out of their last gameshow from the registry too', async () => {
+    const anna = { id: 'anna', firstName: 'Anna', lastName: 'Müller', nickname: 'Anna' };
+    const ben = { id: 'ben', firstName: 'Ben', lastName: 'Bauer', nickname: 'Ben' };
+    const carla = { id: 'carla', firstName: 'Carla', lastName: 'Conrad', nickname: 'Carla' };
+    mockFetchConfig.mockResolvedValue({
+      ...sampleConfig,
+      players: [anna, ben, carla],
+      gameshows: {
+        gs1: { name: 'Gameshow 1', gameOrder: [], players: ['anna', 'ben'] },
+        gs2: { name: 'Gameshow 2', gameOrder: [], players: ['ben'] },
+      },
+    });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderGameshowsTab();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Anna Müller' })).toBeInTheDocument());
+    const card = cardFor('Gameshow 1');
+    const chipRemove = (name: string) =>
+      within(card).getByRole('button', { name }).closest('.player-tag')!.querySelector('.player-tag-remove')!;
+    await user.click(chipRemove('Anna Müller'));
+    await user.click(chipRemove('Ben Bauer'));
+    act(() => { vi.advanceTimersByTime(800); });
+    await waitFor(() => expect(mockSaveConfig).toHaveBeenCalled());
+    const saved = mockSaveConfig.mock.calls.at(-1)![0] as AppConfig;
+    expect(saved.gameshows.gs1!.players).toEqual([]);
+    // Anna was only in Gameshow 1: gone. Ben is still in Gameshow 2, and Carla
+    // was never in a gameshow (nobody removed her): both stay.
+    expect(saved.players).toEqual([ben, carla]);
+  });
+
+  it('offers a deleted player from the bin for a full name and restores them into the gameshow', async () => {
+    const anna = { id: 'anna', firstName: 'Anna', lastName: 'Müller', nickname: 'Anna' };
+    const gerd = { id: 'gerd', firstName: 'Gerd', lastName: 'Gone', nickname: 'Gerdi', disabled: true };
+    mockFetchConfig.mockResolvedValue({
+      ...sampleConfig,
+      players: [anna],
+      gameshows: { gs1: { name: 'Gameshow 1', gameOrder: [], players: ['anna'] }, gs2: { name: 'Gameshow 2', gameOrder: [] } },
+    });
+    mockFetchPlayerBin.mockResolvedValue([gerd]);
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderGameshowsTab();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Anna Müller' })).toBeInTheDocument());
+    const input = within(cardFor('Gameshow 1')).getByPlaceholderText('Spieler hinzufügen…');
+    await user.type(input, 'ger');
+    expect(screen.queryByText(/aus dem Papierkorb/)).not.toBeInTheDocument();
+    await user.type(input, 'd');
+    const item = await screen.findByText(/aus dem Papierkorb/);
+    await user.click(item.closest('button')!);
+    act(() => { vi.advanceTimersByTime(800); });
+    await waitFor(() => expect(mockSaveConfig).toHaveBeenCalled());
+    const saved = mockSaveConfig.mock.calls.at(-1)![0] as AppConfig;
+    // Back as they were — id, nickname, flag — and in this gameshow.
+    expect(saved.players).toEqual([anna, gerd]);
+    expect(saved.gameshows.gs1!.players).toEqual(['anna', 'gerd']);
+    // Focusing the field refreshes the bin.
+    expect(mockFetchPlayerBin.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 });

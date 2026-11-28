@@ -5,7 +5,11 @@ import SimpleQuizForm from '@/components/backend/questions/SimpleQuizForm';
 import type { SimpleQuizQuestion } from '@/types/config';
 
 vi.mock('@/services/backendApi', () => ({
-  fetchAssets: vi.fn().mockResolvedValue({ files: [], subfolders: [] }),
+  fetchAssets: vi.fn().mockResolvedValue({ files: ['Kim Possible.png'], subfolders: [] }),
+}));
+
+vi.mock('@/components/backend/ReplaceImageModal', () => ({
+  default: ({ target }: { target: string }) => <div data-testid="replace-modal">{target}</div>,
 }));
 
 const q1: SimpleQuizQuestion = { question: 'What is 2+2?', answer: '4' };
@@ -285,5 +289,41 @@ describe('SimpleQuizForm', () => {
       const badges = document.querySelectorAll('[title="#ff0000"], [title="#00ff00"]');
       expect(badges.length).toBeGreaterThanOrEqual(2);
     });
+  });
+
+  it('row thumbnail lightbox: Ersetzen picks a DAM image and sets it on that row', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const questions: SimpleQuizQuestion[] = [
+      { question: 'Q1', answer: 'A1' },
+      { question: 'Q2', answer: 'A2', answerImage: '/images/Logos/Kim Possible.svg' },
+    ];
+    render(<SimpleQuizForm questions={questions} onChange={onChange} />);
+    await user.click(screen.getByTitle('A-Bild: /images/Logos/Kim Possible.svg'));
+    // The lightbox header shows the file name (clickable to rename it).
+    expect(screen.getByRole('button', { name: 'Kim Possible.svg' })).toBeInTheDocument();
+    // SVGs can't be AI-upscaled.
+    expect(screen.queryByRole('button', { name: 'Hochskalieren' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Ersetzen' }));
+    await user.click(await screen.findByTitle('Kim Possible.png'));
+    expect(onChange).toHaveBeenLastCalledWith([
+      { question: 'Q1', answer: 'A1' },
+      { question: 'Q2', answer: 'A2', answerImage: '/images/Kim Possible.png' },
+    ]);
+    // The lightbox now shows the picked image.
+    expect(screen.getByRole('button', { name: 'Kim Possible.png' })).toBeInTheDocument();
+  });
+
+  it('row thumbnail lightbox offers Hochskalieren for a low-resolution raster image', async () => {
+    const user = userEvent.setup();
+    render(<SimpleQuizForm questions={[{ question: 'Q', answer: 'A', questionImage: '/images/foo.jpg' }]} onChange={vi.fn()} />);
+    await user.click(screen.getByTitle('Q-Bild: /images/foo.jpg'));
+    const img = document.querySelector('.image-lightbox-body img') as HTMLImageElement;
+    Object.defineProperty(img, 'naturalWidth', { value: 640 });
+    Object.defineProperty(img, 'naturalHeight', { value: 360 });
+    fireEvent.load(img);
+    await user.click(screen.getByRole('button', { name: 'Hochskalieren' }));
+    expect(screen.getByTestId('replace-modal')).toHaveTextContent('foo.jpg');
   });
 });

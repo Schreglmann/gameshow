@@ -33,6 +33,7 @@ Source files (line numbers link to the declaration):
 | `GET` | `/videos-compressed/:start/:end/*splat` | [1776](../../server/index.ts#L1776) | Serves pre-transcoded H.264 SDR video segment for a given range. | Range-GET; used by `<video>` tags in `simple-quiz`/`video-guess`/etc. |
 | `GET` | `/videos-sdr/:start/:end/*splat` | [1854](../../server/index.ts#L1854) | Serves pre-transcoded HDR→SDR tone-mapped video segment. | Range-GET; video-guess + any HDR source. |
 | `GET` | `/api/random-frame` | [2848](../../server/index.ts#L2848) | Extracts a single random still frame from a video (random-frame game), auto-skipping near-black frames, cached by `(path, seed+variant)`. Falls back to per-question prerendered frames when the source is unreachable; `prerendered=1` forces the downloaded frame (stopgap while live loads). | Query: `path`, `seed?`, `variant?`, `qindex?`, `prerendered?`, `start?`, `end?` → `image/jpeg`. |
+| `GET` | `/api/film-stripe/frame` | — | One time-lapse still of a precomputed film stripe (film-stripe game). Cache only: never touches the source video. | Query: `path`, `i`. Responds `image/jpeg`; 404 when the stripe was never computed. |
 | `GET` | `/*splat` | [5434](../../server/index.ts#L5434) | SPA fallback — returns `index.html` for any path not matched above. | Prod only. Mirrors `/show/`, `/admin/`, `/gamemaster/`. |
 
 ### 1.2 Frontend / shared public API (consumed by show + gamemaster PWAs)
@@ -40,8 +41,10 @@ Source files (line numbers link to the declaration):
 | Method | Path | Zone | Line | Purpose | Request shape | Response shape |
 |--------|------|------|------|---------|---------------|----------------|
 | `GET` | `/api/background-music` | `frontend` | [2059](../../server/index.ts#L2059) | List `.mp3` filenames in `local-assets/background-music/`. Optional `?theme=` filters to a theme subfolder. | Query: `theme?: string` | `string[]` (bare array of filenames) |
-| `GET` | `/api/settings` | `shared` | [2073](../../server/index.ts#L2073) | Returns active gameshow's global settings (resolved `showTitle` — landing-page heading / gamemaster label / tab title, active key, team sizes, point system, teamRandomizationEnabled — forced false below 2 teams, joker config incl. `jokersInLastGame` + operator-editable `jokerRules` explanation text, `backgroundMusicSource` — theme soundtrack vs. default playlist, activeGameshowTitle, isCleanInstall, `totalGames` — the show's game count, sizing the header counter in the team-name length check, `players` roster for the HomeScreen randomization prefill, `teamCount` 0-4, `pointMode` — how the gameshow scores (`positional` / `flat` / `per-correct-answer`), `incompatibleGames` — the gameOrder entries that cannot be scored at that count, and `teamColors` — the operator's per-team accent colours with the master switch already applied). | — | `SettingsResponse` |
+| `GET` | `/api/settings` | `shared` | [2073](../../server/index.ts#L2073) | Returns active gameshow's global settings (resolved `showTitle` — landing-page heading / gamemaster label / tab title, active key, team sizes, point system, teamRandomizationEnabled — forced false below 2 teams, joker config incl. `jokersInLastGame` + operator-editable `jokerRules` explanation text, `backgroundMusicSource` — theme soundtrack vs. default playlist, activeGameshowTitle, isCleanInstall, `totalGames` — the show's game count, sizing the header counter in the team-name length check, `players` — the active gameshow's players resolved from the registry to `{ id, firstName, lastName, nickname }`, drawn into the hidden team draw, `teamCount` 0-4, `pointMode` — how the gameshow scores (`positional` / `flat` / `per-correct-answer`), `incompatibleGames` — the gameOrder entries that cannot be scored at that count, and `teamColors` — the operator's per-team accent colours with the master switch already applied). | — | `SettingsResponse` |
+| `GET` | `/api/health` | `shared` | [server/index.ts](../../server/index.ts) | Liveness probe `{ ok, uptimeSeconds, startedAt }`. No file system or NAS access. Polled by the `npm start` supervisor's hang watchdog and by clients before an automatic reload. See [specs/crash-recovery.md](../crash-recovery.md). | — | `HealthResponse` |
 | `GET` | `/api/run-of-show` | `shared` | [server/index.ts](../../server/index.ts) | The active gameshow's running order with resolved titles — backs the gamemaster's "Ablauf" panel, which otherwise only ever mirrors the CURRENT game. One entry per `gameOrder` slot; an unresolvable ref is returned as a `missing` entry rather than dropped, so every `index` still matches its `gameOrder` position. See [specs/gamemaster-run-of-show.md](../gamemaster-run-of-show.md). | — | `RunOfShowResponse` |
+| `POST` | `/api/live-players` | `frontend` | [server/index.ts](../../server/index.ts) | The show's player adds and removes (show field, autocomplete, team-card slots, ✕, GM "Entfernen"), written into the active gameshow's `players`; a new name becomes a registry player with only the nickname. Sent by the active show tab only. See [specs/players.md](../players.md). | Body: `LivePlayersRequest` `{ add?: ({ id } \| { nickname, firstName?, lastName? })[], remove?: string[] }` | `LivePlayersResponse` `{ players: Player[] }`; 409 when the config can't take it |
 | `GET` | `/api/theme` | `shared` | [2124](../../server/index.ts#L2124) | Current theme selection for frontend and admin PWAs. | — | `{ frontend: string; admin: string }` |
 | `PUT` | `/api/theme` | `shared` | [2128](../../server/index.ts#L2128) | Update one or both theme names. Persisted to `theme-settings.json`. | Body: `Partial<{ frontend: string; admin: string }>` | `{ frontend: string; admin: string }` |
 | `GET` | `/api/video-hdr` | `frontend` | [2145](../../server/index.ts#L2145) | Probe an asset path and return whether the video is HDR. Used by the player to choose between `/videos-compressed` and `/videos-sdr`. | Query: `path: string` (asset-relative) | `{ isHdr: boolean }` |
@@ -51,7 +54,7 @@ Source files (line numbers link to the declaration):
 
 | Method | Path | Zone | Line | Purpose | Request shape | Response shape |
 |--------|------|------|------|---------|---------------|----------------|
-| `GET` | `/api/backend/games` | `admin` | [2219](../../server/index.ts#L2219) | List every game file with metadata (file, type, title, instances[], whether it's a template). | — | `{ games: GameFileSummary[] }` |
+| `GET` | `/api/backend/games` | `admin` | [2219](../../server/index.ts#L2219) | List every game file with metadata (file, type, title, instances[], whether it's a template, `modifiedAt` + `createdAt` — see [admin-games-list.md](../admin-games-list.md)). | — | `{ games: GameFileSummary[] }` |
 | `GET` | `/api/backend/games/:fileName` | `admin` | [2269](../../server/index.ts#L2269) | Read a single game file verbatim. | Path: `fileName: string` | Raw game JSON (`GameConfig` or `MultiInstanceGameFile`) |
 | `PUT` | `/api/backend/games/:fileName` | `admin` | [2281](../../server/index.ts#L2281) | Write a game file atomically (tmp+rename). Validates against game-type schemas. | Path: `fileName`. Body: raw game JSON. | `{ ok: true }` or `{ error: string }` |
 | `POST` | `/api/backend/games/:fileName/instances/:instance/unlock-precheck` | `admin` | [2381](../../server/index.ts#L2381) | Pre-flight for video-guess instance-lock: lists missing segment caches and offline references that would break the game. | Path: `fileName`, `instance` | `{ missing: string[]; offlineReferences: string[] }` |
@@ -67,7 +70,8 @@ Source files (line numbers link to the declaration):
 | Method | Path | Zone | Line | Purpose | Request shape | Response shape |
 |--------|------|------|------|---------|---------------|----------------|
 | `GET` | `/api/backend/config` | `admin` | [2563](../../server/index.ts#L2563) | Full `config.json` including active gameshow key, gameshows map, global rules, joker catalog enablement. | — | `AppConfig` |
-| `PUT` | `/api/backend/config` | `admin` | [2573](../../server/index.ts#L2573) | Atomic write of `config.json`. Validates structure; rejects old `{ games: ... }` shape. | Body: `AppConfig` | `{ ok: true }` or `{ error: string }` |
+| `PUT` | `/api/backend/config` | `admin` | [2573](../../server/index.ts#L2573) | Atomic write of `config.json`. Validates structure; rejects old `{ games: ... }` shape. Players it removes from the registry go to the local bin `players-bin.json`; restored ones come out (see [specs/players.md](../players.md)). | Body: `AppConfig` | `{ ok: true }` or `{ error: string }` |
+| `GET` | `/api/backend/player-bin` | `admin` | [server/index.ts](../../server/index.ts) | Deleted players kept in the local bin (`players-bin.json`, gitignored), for the gameshow combobox: offered for a name typed in full, restored on add. See [specs/players.md](../players.md). | — | `{ players: Player[] }` |
 
 ### 1.5 Admin backend — bandle (audio-guess helper)
 
@@ -129,6 +133,8 @@ All asset mutations broadcast `assets-changed` on the WebSocket. All writes are 
 | `GET` | `/api/backend/assets/videos/random-frame/source-reachable` | `admin` | — | Whether a random-frame source video can be read now (local or NAS). | Query: `path` | `{ reachable: boolean }` |
 | `POST` | `/api/backend/assets/videos/random-frame/prerender-select` | `admin` | — | Mark which downloaded variant of a question shows first (sets the `first` marker; no reorder). | Body: `{ path; index; first }` | `{ success; first }` |
 | `POST` | `/api/backend/assets/videos/random-frame/prerender-reload` | `admin` | — | Re-extract a single downloaded variant (raw slot) from the source (requires reachable source). | Body: `{ path; index; slot; frameStart?; frameEnd? }` | `{ success }` / 409 |
+| `GET` | `/api/backend/assets/videos/film-stripe/status` | `admin` | — | Whether a film stripe is computed for each video, whether it still matches the video file, and its colours for a preview. | Query: `paths` (pipe-separated rel-paths) | `{ status: { [path]: { ready; current; sourceReachable; frames; colors } } }` |
+| `POST` | `/api/backend/assets/videos/film-stripe/prepare` | `admin` | — | Compute film stripes (240 colours + 48 time-lapse stills per video) into the local cache. Skips stripes that are current unless `force`. | Body: `{ paths; force? }` | SSE: `{ taskId }`, `{ path, percent }`, `{ path, ready }` / `{ path, itemError }`, `{ percent }`, `{ percent: 100, done, failures }`. The run is mirrored as `meta.filmStripe` of its `system-status` background task |
 | `GET` | `/api/backend/assets/videos/warm-preview` | `admin` | [4563](../../server/index.ts#L4563) | Preview which videos the active gameshow would warm, with HDR-probe flags. | — | `{ videos: WarmPreviewVideo[] }` |
 | `POST` | `/api/backend/assets/videos/warm-all` | `admin` | [4587](../../server/index.ts#L4587) | Queue warmup for every selected video. | Body: `{ selected?: Array<{ path; hdrProbe }> }` | `{ queued: number }` |
 
@@ -222,7 +228,7 @@ All channels multiplex on a single WebSocket endpoint. The wire format is `{ cha
 
 | Channel | Direction | Cached? | Emitter(s) | Zone | Purpose |
 |---------|-----------|---------|------------|------|---------|
-| `system-status` | S→C (periodic 2s) | no | [server/index.ts:522](../../server/index.ts#L522) | `admin` | Server metrics, processes, caches, NAS sync status (incl. `nasSync.conflictCount`). Payload shape: `SystemStatusResponse`. |
+| `system-status` | S→C (periodic 2s) | no | [server/index.ts:522](../../server/index.ts#L522) | `admin` | Server metrics, processes, caches, NAS sync status (incl. `nasSync.conflictCount`), last crash (`server.lastCrash`). Payload shape: `SystemStatusResponse`. |
 | `asset-storage` | S→C (periodic 5s) | no | [server/ws.ts:138](../../server/ws.ts#L138) | `admin` | Storage mode + NAS mount reachable flag. |
 | `asset-duration` | S→C (batch) | no | [server/index.ts:747](../../server/index.ts#L747) | `admin` | `{ category; durations: Record<fileName, seconds> }`. Pushed while the admin enumerates a category. |
 | `assets-changed` | S→C | no | [server/index.ts:870](../../server/index.ts#L870) | `admin`, `show` | Any DAM mutation. Payload: `{ category: AssetCategory }`. Admin invalidates its asset list cache; the show re-fetches the background-music playlist on `category === 'background-music'` (live DAM reload). |
@@ -234,7 +240,7 @@ All channels multiplex on a single WebSocket endpoint. The wire format is `{ cha
 | `gamemaster-answer` | C→S→C | **yes** | any PWA | `shared` (show writes, gamemaster reads) | Current answer card state. Show-PWA emits; only the *active* show's emits are kept. |
 | `gamemaster-controls` | C→S→C | **yes** | any PWA | `shared` (show writes, gamemaster reads) | Current controls / phase / gameIndex, plus `pointsDisabled` (the playing game awards no points — see specs/team-count.md). Show-PWA emits; gamemaster reads. |
 | `gamemaster-command` | C→S→C | **no** (ephemeral) | gamemaster PWA | `shared` (gamemaster writes, show reads) | One-shot command from gamemaster to show (`next`, `award`, `use-joker`, ...), including the non-linear jumps `goto:home` / `goto:rules` / `goto:game-<index>` / `goto:summary` — see [specs/gamemaster-run-of-show.md](../gamemaster-run-of-show.md). |
-| `gamemaster-team-state-v2` | C→S→C | **yes** | any PWA | `shared` | Team members, points, joker usage, and `scoreHistory` (bounded scoring-undo audit log), for teams 1-4 (`team3`/`team4` present only in a 3-4 team show). Renamed from `gamemaster-team-state` when teams 3/4 were added, so a stale cached PWA fails to sync rather than silently dropping them. Any PWA may emit; all others reconcile. **Version-guarded:** the server relays a snapshot only if its `rev` beats the cached one, and returns the cached value to a rejected writer (equal rev → first write wins). `null` resets the cache. |
+| `gamemaster-team-state-v3` | C→S→C | **yes** | any PWA | `shared` | Team members, points, joker usage, and `scoreHistory` (bounded scoring-undo audit log), for teams 1-4 (`team3`/`team4` present only in a 3-4 team show). Renamed from `gamemaster-team-state` when teams 3/4 were added, and from `-v2` when rosters changed from name strings to `RosterPlayer` objects (`{ firstName, lastName, nickname?, id? }`, see [players.md](../players.md)), so a stale cached PWA fails to sync rather than misreading them. Any PWA may emit; all others reconcile. **Version-guarded:** the server relays a snapshot only if its `rev` beats the cached one, and returns the cached value to a rejected writer (equal rev → first write wins). `null` resets the cache. |
 | `gamemaster-question-tally` | C→S→C | **yes** | any PWA | `shared` | `{ [gameIndex]: { [questionKey]: { team1, team2 } } }` correct-answer tally, nested per question (`"0"` = example, `"none"` = no question attributable). Per-game totals are derived, not transmitted. See [specs/gamemaster-question-scores.md](../gamemaster-question-scores.md). |
 | `music-state` | C→S→C | **yes** | active show PWA | `shared` (show writes, gamemaster reads) | `{ isPlaying, currentSong, currentTime, duration, volume }` background-music snapshot. Active show emits (~1 Hz while playing); gamemaster reads it for its docked remote-control player. See [specs/gamemaster-music-control.md](../gamemaster-music-control.md). |
 | `music-command` | C→S→C | **no** (ephemeral) | gamemaster PWA | `shared` (gamemaster writes, show reads) | Background-music command (`toggle` / `skip` / `volume` / `seek`). GM emits; the active show applies it to its player. Timestamp-deduped. See [specs/gamemaster-music-control.md](../gamemaster-music-control.md). |
@@ -242,7 +248,8 @@ All channels multiplex on a single WebSocket endpoint. The wire format is `{ cha
 | `show-reemit-request` | S→C (targeted) | no | [server/ws.ts:273](../../server/ws.ts#L273) | `frontend` | Server asks the active show to re-emit its cached state. Fired on any new WS connection, and when a gamemaster sends `gm-request-reemit`. |
 | `gm-presence` | S→C (broadcast) | **yes** | [server/ws.ts](../../server/ws.ts) | `shared` | `{ connected: boolean }` indicating whether any gamemaster PWA is currently registered. Emitted on every 0↔1+ transition; cached for late-joining clients. Show reads it to decide whether to render the inline "Asset neu laden" fallback button. |
 | `show-hold` | C→S→C | **yes** | gamemaster PWA | `shared` (gamemaster writes, show reads) | `{ active, message? }` panic/pause hold overlay. GM toggles it; the show drops a full-screen "Gleich geht's weiter" hold over the projector. Cached so a projector reload mid-hold re-receives it. See [specs/gamemaster-cockpit.md](../gamemaster-cockpit.md). |
-| `content-changed` | S→C (broadcast) | no | [server/content-watch.ts](../../server/content-watch.ts) | `shared` | `{ config?; theme?; games? }`. File watcher fired when config.json / theme-settings.json / a games/*.json changed on disk (any source). Clients re-fetch the flagged data so edits apply without a reload. See [specs/live-config-reload.md](../live-config-reload.md). |
+| `show-controls-hidden` | C→S→C | **yes** | gamemaster PWA | `shared` (gamemaster writes, show reads) | `{ hidden }`. While `hidden`, the show hides its own control buttons because the GM drives the show; audience-facing displays (jokers, award cards, mirrored inputs) stay visible but not clickable. Cached so a show reload re-receives it; a reconnecting GM re-sends its value when the server has none. See [specs/gamemaster-hide-show-controls.md](../gamemaster-hide-show-controls.md). |
+| `content-changed` | S→C (broadcast) | no | [server/content-watch.ts](../../server/content-watch.ts) | `shared` | `{ config?; theme?; games?; filmStripes? }`. File watcher fired when config.json / theme-settings.json / a games/*.json changed on disk (any source); `filmStripes` is sent when a film-stripe build finishes. Clients re-fetch the flagged data so edits apply without a reload. See [specs/live-config-reload.md](../live-config-reload.md). |
 
 ### 2.1 Client→server meta messages
 
@@ -275,12 +282,14 @@ This is the raw material for the three `docs/replace-*.md` guides. For each zone
 - `GET /videos-compressed/:start/:end/*splat`
 - `GET /videos-sdr/:start/:end/*splat`
 - `GET /api/random-frame` (random-frame game: random still extraction; offline prerendered fallback)
+- `GET /api/film-stripe/frame` (film-stripe game: time-lapse stills from the precomputed cache)
 - `GET /local-assets/**` (asset serving)
+- `GET /api/health` (optional — waited on before an automatic reload)
 
 **WebSocket channels (subscribe):**
 - `gamemaster-controls` — receive phase/gameIndex changes pushed by gamemaster
 - `gamemaster-command` — receive one-shot commands from gamemaster
-- `gamemaster-team-state-v2` — receive team/joker state changes
+- `gamemaster-team-state-v3` — receive team/joker state changes
 - `gamemaster-question-tally` — receive per-question correct-answer tallies
 - `music-command` — receive background-music commands from gamemaster (active show applies them)
 - `show-presence` — receive active-show status
@@ -291,7 +300,7 @@ This is the raw material for the three `docs/replace-*.md` guides. For each zone
 **WebSocket channels (publish):**
 - `gamemaster-answer` — publish current answer state for gamemaster to see
 - `gamemaster-controls` — publish current controls/phase/gameIndex
-- `gamemaster-team-state-v2` — publish local mutations (team points, joker used)
+- `gamemaster-team-state-v3` — publish local mutations (team points, joker used)
 - `gamemaster-question-tally` — publish local mutations
 - `music-state` — publish the active show's background-music snapshot for the gamemaster
 
@@ -311,14 +320,14 @@ This is the raw material for the three `docs/replace-*.md` guides. For each zone
 - `yt-download-status`, `audio-cover-status`
 - `caches-cleared`, `cache-started`, `cache-ready`
 - `content-changed` — re-fetch the theme live when theme-settings.json changes on disk
-- `gamemaster-team-state-v2` — keep the Session tab's team/points fields on the LIVE
+- `gamemaster-team-state-v3` — keep the Session tab's team/points fields on the LIVE
   score while games run (it mounts the shared `GameProvider`). A replacement admin
   that only polls on mount will display a stale score, and any full-snapshot write
   it then makes reverts points on every other device.
 - `gamemaster-question-tally` — same provider, same reason
 
 **WebSocket channels (publish):**
-- `gamemaster-team-state-v2` — operator edits to team members / names / points. Must
+- `gamemaster-team-state-v3` — operator edits to team members / names / points. Must
   carry a `rev` above the highest seen, and must merge onto the latest received
   state rather than a snapshot captured when the tab opened.
 
@@ -327,18 +336,19 @@ This is the raw material for the three `docs/replace-*.md` guides. For each zone
 **REST:**
 - `GET /api/settings`
 - `GET /api/game/:index`
+- `GET /api/health` (optional)
 
 **WebSocket channels (subscribe):**
 - `gamemaster-answer` — read current answer state from active show
 - `gamemaster-controls` — read current controls/phase/gameIndex
-- `gamemaster-team-state-v2` — read current team/joker state
+- `gamemaster-team-state-v3` — read current team/joker state
 - `gamemaster-question-tally` — read current per-question tallies
 - `music-state` — read the active show's background-music snapshot (docked remote-control player)
 - `gm-presence` — receive own presence echo (broadcast to all)
 
 **WebSocket channels (publish):**
 - `gamemaster-command` — emit commands to the show
-- `gamemaster-team-state-v2` — mutate team/joker state from gamemaster
+- `gamemaster-team-state-v3` — mutate team/joker state from gamemaster
 - `gamemaster-question-tally` — mutate tallies from gamemaster
 - `music-command` — emit background-music commands (`toggle`/`skip`/`volume`/`seek`) to the active show
 
@@ -357,6 +367,7 @@ Types marked with `🆕` have no TS definition today and will be introduced as J
 |------|-----------|---------|
 | `SettingsResponse` | ✅ [src/types/config.ts](../../src/types/config.ts) | `GET /api/settings` |
 | `GameDataResponse` | ✅ [src/types/config.ts](../../src/types/config.ts) | `GET /api/game/:index` |
+| `HealthResponse` | 🆕 | `GET /api/health` |
 | `AppConfig` | ✅ [src/types/config.ts](../../src/types/config.ts) | `GET/PUT /api/backend/config` |
 | `GameConfig` (union) | ✅ [src/types/config.ts](../../src/types/config.ts) | `GET/PUT /api/backend/games/:fileName` |
 | `GameFileSummary` | ✅ [src/types/config.ts](../../src/types/config.ts) | `GET /api/backend/games` |
@@ -382,7 +393,7 @@ Types marked with `🆕` have no TS definition today and will be introduced as J
 | `GamemasterControlsData` | ✅ [src/hooks/useGamemasterSync.ts](../../src/hooks/useGamemasterSync.ts) | `gamemaster-controls` channel |
 | `GamemasterCommand` | ✅ [src/hooks/useGamemasterSync.ts](../../src/hooks/useGamemasterSync.ts) | `gamemaster-command` channel |
 | `MusicPlayerState`, `MusicCommand` | ✅ [src/types/game.ts](../../src/types/game.ts) | `music-state` + `music-command` channels (via [src/hooks/useMusicSync.ts](../../src/hooks/useMusicSync.ts)) |
-| `TeamState`, `GlobalSettings`, `CurrentGame` | ✅ [src/types/game.ts](../../src/types/game.ts) | `gamemaster-team-state-v2` channel + client state |
+| `TeamState`, `GlobalSettings`, `CurrentGame` | ✅ [src/types/game.ts](../../src/types/game.ts) | `gamemaster-team-state-v3` channel + client state |
 
 No 🆕 types required — everything is already typed in the TypeScript codebase.
 

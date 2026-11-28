@@ -1798,7 +1798,8 @@ html.gamemaster-embedded::after {
 .gm-images-toggle,
 .gm-answers-toggle,
 .gm-fullscreen-toggle,
-.gm-hold-toggle {
+.gm-hold-toggle,
+.gm-show-controls-toggle {
   min-height: clamp(36px, 4vw, 44px);
   padding: clamp(6px, 1vw, 10px) clamp(12px, 1.6vw, 18px);
   display: inline-flex;
@@ -1825,7 +1826,8 @@ html.gamemaster-embedded::after {
   .gm-images-toggle:hover,
   .gm-answers-toggle:hover,
   .gm-fullscreen-toggle:hover,
-  .gm-hold-toggle:hover {
+  .gm-hold-toggle:hover,
+  .gm-show-controls-toggle:hover {
     background: rgba(var(--glass-rgb), 0.22);
     border-color: rgba(var(--glass-rgb), 0.4);
     color: rgba(var(--text-rgb), 0.95);
@@ -1851,7 +1853,8 @@ html.gamemaster-embedded::after {
 .gm-lock-toggle:active,
 .gm-images-toggle:active,
 .gm-answers-toggle:active,
-.gm-fullscreen-toggle:active {
+.gm-fullscreen-toggle:active,
+.gm-show-controls-toggle:active {
   transform: scale(0.96);
 }
 
@@ -1859,7 +1862,8 @@ html.gamemaster-embedded::after {
 .gm-lock-toggle:focus-visible,
 .gm-images-toggle:focus-visible,
 .gm-answers-toggle:focus-visible,
-.gm-fullscreen-toggle:focus-visible {
+.gm-fullscreen-toggle:focus-visible,
+.gm-show-controls-toggle:focus-visible {
   outline: 2px solid rgba(var(--glass-rgb), 0.6);
   outline-offset: 2px;
 }
@@ -1868,7 +1872,8 @@ html.gamemaster-embedded::after {
 .gm-lock-toggle--locked,
 .gm-images-toggle--showing,
 .gm-answers-toggle--hidden,
-.gm-fullscreen-toggle--active {
+.gm-fullscreen-toggle--active,
+.gm-show-controls-toggle--active {
   background: rgba(var(--success-rgb), 0.18);
   border-color: rgba(var(--success-rgb), 0.5);
   color: var(--success);
@@ -1879,7 +1884,8 @@ html.gamemaster-embedded::after {
   .gm-lock-toggle--locked:hover,
   .gm-images-toggle--showing:hover,
   .gm-answers-toggle--hidden:hover,
-  .gm-fullscreen-toggle--active:hover {
+  .gm-fullscreen-toggle--active:hover,
+  .gm-show-controls-toggle--active:hover {
     background: rgba(var(--success-rgb), 0.28);
     border-color: rgba(var(--success-rgb), 0.7);
     color: var(--success);
@@ -2935,4 +2941,211 @@ body.gamemaster-embedded .gm-toolbar {
   min-height: 44px;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* ── Button menu popover ──
+   A GM button with a `menu` (e.g. a player on the start screen) opens this next
+   to itself: "Zu Team 2" / "Entfernen". Portalled to <body> (see
+   GmButtonMenu.tsx); the backdrop only dims lightly so the tapped button stays
+   readable. Above the run-of-show drawer (40), like the confirm dialog. See
+   specs/team-management.md ("GM button menu"). */
+.gm-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.25);
+  z-index: 50;
+}
+
+.gm-menu-popover {
+  position: fixed;
+  z-index: 51;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: min(200px, calc(100vw - 16px));
+  max-width: calc(100vw - 16px);
+  padding: 10px;
+  border-radius: var(--radius-md, 10px);
+  background: var(--card-bg, rgba(var(--glass-rgb), calc(var(--glass-opacity) + 0.12)));
+  backdrop-filter: blur(var(--card-backdrop-blur, var(--glass-blur-heavy, 16px)));
+  border: var(--card-border, 1px solid rgba(var(--glass-rgb), var(--glass-border-opacity)));
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  color: var(--card-text, var(--text-primary));
+}
+
+.gm-menu-title {
+  padding: 2px 4px 4px;
+  font-weight: 700;
+  font-size: clamp(0.85rem, 1.6vw, 1rem);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.gm-menu-popover .gm-menu-item {
+  width: 100%;
+  white-space: normal;
+  text-align: center;
+}
+
+/* The button whose menu is open stays marked while the popover is up. */
+.gm-btn--menu-open {
+  outline: 2px solid rgba(var(--text-rgb), 0.7);
+  outline-offset: 2px;
+}
+
+/* ── Team card + grid button groups ──
+   The start screen lists every player as a button, grouped per team. With 30+
+   names the default centred, content-sized rows turned into a ragged wall, so
+   these groups (`team` + `layout: 'grid'` on the control) become one card per
+   team, marked with the team's accent edge, holding equal-width cells. Names
+   wrap inside their cell rather than widen it. See specs/team-management.md. */
+.gm-button-group--team {
+  gap: 8px;
+  padding: 10px;
+  border-radius: var(--radius-md, 10px);
+  background: rgba(var(--glass-rgb), 0.06);
+  border: 1px solid rgba(var(--glass-rgb), 0.15);
+  box-shadow: var(--team-edge-left) var(--team-color);
+}
+
+/* The label of a team card is the team name: written as entered, like on the
+   show — not upper-cased like the other group labels. */
+.gm-button-group--team .gm-group-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+/* The team name on a card after the reveal: tap it to rename the team. Reset
+   the global button styles so it still reads as the card's label, with a pencil
+   saying it can be edited. Larger than the other group labels — it is the team
+   name — and at least 44px tall, so it is an easy tap target on the iPad. A
+   long name wraps (mid-word if it has to). */
+.gm-group-label.gm-group-label--editable {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px dashed transparent;
+  border-radius: 6px;
+  background: none;
+  box-shadow: none;
+  font-family: inherit;
+  font-size: clamp(1rem, 2.2vw, 1.25rem);
+  font-weight: 600;
+  line-height: 1.25;
+  color: rgba(var(--text-rgb), 0.85);
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.gm-group-label-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.gm-group-label-icon {
+  flex: none;
+  width: 0.9em;
+  height: 0.9em;
+  opacity: 0.7;
+}
+
+.gm-group-label--editable:focus-visible,
+.gm-group-label--editable:active {
+  border-color: rgba(var(--glass-rgb), 0.35);
+  color: rgba(var(--text-rgb), 0.95);
+  transform: none;
+}
+
+/* Hover only where there is a real pointer — on the iPad a tapped label would
+   otherwise keep its hover frame after the editor closes. */
+@media (hover: hover) {
+  .gm-group-label--editable:hover {
+    border-color: rgba(var(--glass-rgb), 0.35);
+    color: rgba(var(--text-rgb), 0.95);
+    transform: none;
+  }
+}
+
+.gm-group-rename {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  margin: 0;
+}
+
+.gm-group-rename-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* Same size as the name it replaces. Never below 16px: iOS Safari zooms the
+   page into any focused input with a smaller font. */
+.gm-group-rename-row > .gm-group-rename-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+  min-height: 44px;
+  font-size: clamp(1rem, 2.2vw, 1.25rem);
+  font-weight: 600;
+}
+
+.gm-group-rename-row > .gm-group-rename-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  touch-action: manipulation;
+}
+
+.gm-group-rename-hint {
+  font-size: clamp(0.75rem, 1.4vw, 0.85rem);
+  color: rgba(var(--text-rgb), 0.75);
+  text-align: center;
+}
+
+.gm-button-row.gm-button-row--grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 96px), 1fr));
+  gap: 6px;
+}
+
+.gm-button-row--grid .gm-btn {
+  min-width: 0;
+  min-height: 40px;
+  padding: 8px 6px;
+  font-size: clamp(0.8rem, 1.4vw, 0.95rem);
+  line-height: 1.2;
+}
+
+/* From tablet width the team cards sit two per row instead of stretching over
+   the whole panel (eight thin columns, with one name orphaned on a second row).
+   Everything else in the panel keeps its full-width line. */
+@media (min-width: 768px) {
+  .gamemaster-controls-panel:has(> .gm-button-group--team) {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .gamemaster-controls-panel:has(> .gm-button-group--team) > * {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .gamemaster-controls-panel:has(> .gm-button-group--team) > .gm-button-group--team {
+    flex: 1 1 calc(50% - 8px);
+  }
 }

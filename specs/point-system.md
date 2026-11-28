@@ -89,7 +89,7 @@ read-only:
 - [x] Points can never go below 0 (enforced in reducer)
 - [x] Points are persisted to `localStorage` under the team's key (`team1Points` … `team4Points`)
 - [x] On reload, points are restored from `localStorage`
-- [x] Points propagate to every connected device on the cached `gamemaster-team-state-v2`
+- [x] Points propagate to every connected device on the cached `gamemaster-team-state-v3`
       channel, version-guarded so no client can publish a total older than one already
       in circulation. Points are **never stored server-side** — the server only relays
       and caches the last snapshot. See [cross-device-gamemaster.md](cross-device-gamemaster.md).

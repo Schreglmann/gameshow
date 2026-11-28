@@ -1,0 +1,141 @@
+import type { VennQuestion } from '@/types/config';
+import { useDragReorder } from '../useDragReorder';
+import SpellField from '../SpellField';
+import GmInfoField from './GmInfoField';
+import { AssetField } from '../AssetPicker';
+import MoveQuestionButton from './MoveQuestionButton';
+import { stripTrailingEmpty } from './ghostRow';
+import { useConfirm } from '../ConfirmContext';
+import VennDiagram from '@/components/common/VennDiagram';
+import { VENN_MAX_SETS } from '@/utils/vennLayout';
+
+interface Props {
+  questions: VennQuestion[];
+  onChange: (questions: VennQuestion[]) => void;
+  otherInstances?: string[];
+  onMoveQuestion?: (questionIndex: number, targetInstance: string) => void;
+}
+
+const SLOT_LABELS = ['Kategorie 1', 'Kategorie 2', 'Hinweis-Kategorie'];
+const SLOT_PLACEHOLDERS = ['z. B. Planet', 'z. B. Schokoriegel', 'Dritter Kreis als Hinweis (optional)'];
+
+const empty = (): VennQuestion => ({ sets: ['', ''], answer: '' });
+const isEmpty = (q: VennQuestion) =>
+  q.sets.every(s => !s.trim()) &&
+  !q.answer.trim() &&
+  !q.answerImage &&
+  !q.gmInfo?.trim();
+
+/** Pad to three slots for editing, so typed content stays in its slot. */
+function padSlots(sets: string[]): string[] {
+  const next = [...sets];
+  while (next.length < VENN_MAX_SETS) next.push('');
+  return next.slice(0, VENN_MAX_SETS);
+}
+
+/**
+ * What gets stored: the two puzzle categories always (even while one is still
+ * empty, so a half-typed question keeps its slots), the hint only when filled in.
+ */
+function storedSets(slots: string[]): string[] {
+  const [first = '', second = '', hint = ''] = slots;
+  return hint.trim() ? [first, second, hint] : [first, second];
+}
+
+export default function VennForm({ questions, onChange, otherInstances, onMoveQuestion }: Props) {
+  const confirmDialog = useConfirm();
+  const drag = useDragReorder(questions, onChange);
+  const displayQuestions = [...questions, empty()];
+
+  const update = (i: number, patch: Partial<VennQuestion>) => {
+    let next: VennQuestion[];
+    if (i >= questions.length) {
+      next = [...questions, { ...empty(), ...patch }];
+    } else {
+      next = [...questions];
+      next[i] = { ...next[i]!, ...patch };
+    }
+    onChange(stripTrailingEmpty(next, isEmpty));
+  };
+  const remove = async (i: number) => { if (await confirmDialog({ title: 'Frage löschen?' })) onChange(questions.filter((_, idx) => idx !== i)); };
+  const duplicate = (i: number) => { const next = [...questions]; next.splice(i + 1, 0, { ...questions[i]!, sets: [...questions[i]!.sets] }); onChange(next); };
+
+  const updateSet = (qi: number, si: number, value: string) => {
+    const base = qi >= questions.length ? empty() : questions[qi]!;
+    const padded = padSlots(base.sets);
+    padded[si] = value;
+    update(qi, { sets: storedSets(padded) });
+  };
+
+  return (
+    <div>
+      {displayQuestions.map((q, i) => {
+        const isVirtual = i >= questions.length;
+        const slots = padSlots(q.sets);
+        const previewSets = q.sets.map(s => s.trim()).filter(Boolean);
+        return (
+          <div
+            key={i}
+            className={`question-block ${!isVirtual && drag.overIdx === i ? 'be-dragging' : ''} ${q.disabled ? 'question-disabled' : ''} ${isVirtual ? 'question-block--ghost' : ''}`}
+            data-question-index={i}
+            onDragOver={isVirtual ? undefined : drag.onDragOver(i)}
+            onDragEnd={isVirtual ? undefined : drag.onDragEnd}
+          >
+            <div className="question-block-row">
+              <span className="drag-handle" draggable={!isVirtual} onDragStart={isVirtual ? undefined : drag.onDragStart(i)} style={isVirtual ? { visibility: 'hidden' } : undefined}>⠿</span>
+              <span className="question-num">{isVirtual ? 'Neu' : i === 0 ? 'Beispiel' : `#${i}`}</span>
+              <div style={{ flex: 1 }} />
+              {!isVirtual && <>
+              <button className="be-delete-btn" onClick={() => update(i, { disabled: !q.disabled || undefined })} title={q.disabled ? 'Aktivieren' : 'Deaktivieren'} style={{ width: 30, height: 30, borderRadius: 5, fontSize: 'var(--admin-sz-17, 17px)', border: '1px solid rgba(var(--glass-rgb), 0.12)', background: q.disabled ? 'rgba(239,68,68,0.12)' : 'rgba(255,255,255,0.06)', color: q.disabled ? 'rgba(239,68,68,0.7)' : 'rgba(255,255,255,0.6)' }}>{q.disabled ? (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" /><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" /><line x1="1" y1="1" x2="23" y2="23" /></svg>) : (<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>)}</button>
+              <button className="be-delete-btn" onClick={() => duplicate(i)} title="Duplizieren" style={{ width: 30, height: 30, borderRadius: 5, border: '1px solid rgba(var(--glass-rgb), 0.12)', background: 'rgba(var(--glass-rgb), 0.06)', color: 'rgba(var(--text-rgb), max(0.6, var(--text-fade-floor, 0)))' }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg></button>
+              {otherInstances && otherInstances.length > 0 && onMoveQuestion && <MoveQuestionButton otherInstances={otherInstances} onMove={target => onMoveQuestion(i, target)} />}
+              <button className="be-delete-btn" onClick={() => remove(i)} title="Löschen" style={{ width: 30, height: 30, borderRadius: 5, border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.07)', color: 'rgba(239,68,68,0.7)' }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg></button>
+              </>}
+            </div>
+            <div className="question-fields">
+              {slots.map((value, si) => (
+                <div key={si}>
+                  <label className="be-label">{SLOT_LABELS[si]} {si === 2 && !value.trim() ? <span style={{ opacity: 0.5, fontWeight: 400 }}>(leer)</span> : ''}</label>
+                  <SpellField
+                    segKey={`q${i}.sets.${si}`}
+                    className="be-input"
+                    value={value}
+                    placeholder={isVirtual && si === 0 ? 'Neue Frage – einfach hier tippen…' : SLOT_PLACEHOLDERS[si]}
+                    onChange={e => updateSet(i, si, e.target.value)}
+                  />
+                </div>
+              ))}
+              {!isVirtual && <>
+                <div>
+                  <label className="be-label">Antwort</label>
+                  <SpellField segKey={`q${i}.answer`} className="be-input" value={q.answer} placeholder="Begriff, der in alle Kategorien passt…" onChange={e => update(i, { answer: e.target.value })} />
+                </div>
+                <div>
+                  <AssetField
+                    label="Antwort-Bild"
+                    value={q.answerImage}
+                    category="images"
+                    onChange={v => update(i, { answerImage: v || undefined })}
+                    searchQuery={q.answer}
+                  />
+                </div>
+                {previewSets.length >= 2 && (
+                  <div className="full-width">
+                    <label className="be-label">Vorschau</label>
+                    <VennDiagram
+                      sets={previewSets}
+                      solved={Boolean(q.answer.trim())}
+                      answer={q.answer}
+                      className="venn-diagram--fit"
+                    />
+                  </div>
+                )}
+                <GmInfoField segKey={`q${i}.gmInfo`} value={q.gmInfo} onChange={v => update(i, { gmInfo: v })} />
+              </>}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}

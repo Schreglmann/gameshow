@@ -6,17 +6,20 @@ import RunOfShowPanel from '@/components/common/RunOfShowPanel';
 import GamemasterMusicControls from '@/components/screens/GamemasterMusicControls';
 import DeadlineTimer from '@/components/common/DeadlineTimer';
 import InstallButton from '@/components/common/InstallButton';
-import type { ShowHoldState } from '@/types/game';
+import GmConnectionBanner from '@/components/common/GmConnectionBanner';
+import type { ShowControlsHiddenState, ShowHoldState } from '@/types/game';
 
 const LOCK_STORAGE_KEY = 'gm-input-locked';
 const SHOW_ANSWER_IMAGES_STORAGE_KEY = 'gm-show-answer-images';
 const HIDE_ANSWERS_STORAGE_KEY = 'gm-hide-answers';
 
+// Default ON: a stray click or key press on the GM device must not advance the
+// show. Only an explicitly stored 'false' (the host unlocked) starts unlocked.
 function readStoredLock(): boolean {
   try {
-    return localStorage.getItem(LOCK_STORAGE_KEY) === 'true';
+    return localStorage.getItem(LOCK_STORAGE_KEY) !== 'false';
   } catch {
-    return false;
+    return true;
   }
 }
 
@@ -244,6 +247,8 @@ export default function GamemasterScreen() {
 
   return (
     <div className="gamemaster-screen">
+      {/* Server unreachable / command dropped. See specs/crash-recovery.md. */}
+      <GmConnectionBanner />
       {/* The sidebar is `display: contents` below 1280px, so the toolbar keeps
           its existing inline layout unchanged; at ≥1280px this wrapper owns the
           272px left gutter that the toolbar alone used to occupy. */}
@@ -255,6 +260,7 @@ export default function GamemasterScreen() {
             <AnswerImagesToggleButton showing={showAnswerImages} onToggle={toggleShowAnswerImages} />
             <HideAnswersToggleButton hidden={hideAnswers} onToggle={toggleHideAnswers} />
             <HoldToggleButton />
+            <ShowControlsToggleButton />
           </div>
           <FullscreenToggleButton />
           <DeadlineButtons />
@@ -267,7 +273,7 @@ export default function GamemasterScreen() {
           onOverlayActiveChange={setOverlayActive}
         />
       </div>
-      <GamemasterView showAnswerImages={showAnswerImages} hideAnswers={hideAnswers} />
+      <GamemasterView showAnswerImages={showAnswerImages} hideAnswers={hideAnswers} onOverlayActiveChange={setOverlayActive} />
       {!gameActive && <InstallButton variant="gamemaster" label="Gamemaster installieren" />}
     </div>
   );
@@ -293,6 +299,69 @@ function HoldToggleButton() {
       title={active ? 'Pausen-Bildschirm auf der Show ausblenden.' : 'Pausen-Bildschirm über die Show legen (für Pausen / Klärungen).'}
     >
       {active ? 'Pause beenden' : 'Pause-Bildschirm'}
+    </button>
+  );
+}
+
+// How long to wait after a (re)connect for the server's cached value before
+// re-sending our own. The initial-state burst arrives right after the open.
+const RESEND_AFTER_OPEN_MS = 1500;
+
+// Hides the show's own control buttons, because the GM drives the show. Reflects
+// and drives the cached `show-controls-hidden` channel, so every GM and the show
+// agree on one value. See specs/gamemaster-hide-show-controls.md.
+function ShowControlsToggleButton() {
+  // null until the server's cached value arrives or the host clicks: a GM that
+  // knows nothing must not overwrite the setting on reconnect.
+  const [hidden, setHidden] = useState<boolean | null>(null);
+  const hiddenRef = useRef(hidden);
+  hiddenRef.current = hidden;
+  const receivedSinceOpenRef = useRef(false);
+  useWsChannel<ShowControlsHiddenState | null>('show-controls-hidden', (next) => {
+    if (!next) return;
+    receivedSinceOpenRef.current = true;
+    setHidden(next.hidden);
+  });
+  // The server cache is in memory only. After a server restart, re-send the
+  // value this GM knows so the show does not fall back to showing its buttons.
+  // Only when the server's initial burst brought no value: if it did, another
+  // GM may have changed it while this one was offline, and that value wins.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const unsubscribe = onWsOpen(() => {
+      receivedSinceOpenRef.current = false;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        timer = null;
+        if (!receivedSinceOpenRef.current && hiddenRef.current !== null) {
+          sendWs('show-controls-hidden', { hidden: hiddenRef.current });
+        }
+      }, RESEND_AFTER_OPEN_MS);
+    });
+    return () => {
+      unsubscribe();
+      if (timer) clearTimeout(timer);
+    };
+  }, []);
+  const active = hidden ?? false;
+  const toggle = () => {
+    const next = !active;
+    setHidden(next);
+    sendWs('show-controls-hidden', { hidden: next });
+  };
+  return (
+    <button
+      type="button"
+      className={`gm-show-controls-toggle${active ? ' gm-show-controls-toggle--active' : ''}`}
+      onClick={toggle}
+      aria-pressed={active}
+      title={
+        active
+          ? 'Die Buttons der Show sind ausgeblendet — gesteuert wird nur hier. Klicken zum Einblenden.'
+          : 'Buttons auf der Show ausblenden (Weiter, Richtig/Falsch, Musik-Player, …), weil die Show von hier gesteuert wird.'
+      }
+    >
+      {active ? 'Show-Buttons einblenden' : 'Show-Buttons ausblenden'}
     </button>
   );
 }

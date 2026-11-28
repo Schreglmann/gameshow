@@ -14,7 +14,7 @@ import { readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import sharp from 'sharp';
+import sharp, { type Sharp } from 'sharp';
 import { LOCAL_ASSETS_BASE } from './asset-paths.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -221,7 +221,7 @@ export async function upscaleImage(input: Buffer, opts: UpscaleOpts): Promise<Up
         ? sharp(rawUpscaled).rotate()
         : sharp(rawUpscaled).resize({ width: targetW, height: targetH, fit: 'fill' }).rotate();
 
-      let pipeline: sharp.Sharp;
+      let pipeline: Sharp;
       let contentType: string;
       if (ext === '.png') {
         pipeline = post.png({ compressionLevel: 9 });

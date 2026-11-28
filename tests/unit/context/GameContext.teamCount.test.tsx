@@ -4,6 +4,8 @@ import userEvent from '@testing-library/user-event';
 import { GameProvider, useGameContext } from '@/context/GameContext';
 import { ALL_TEAM_KEYS, teamPoints, teamRoster } from '@/utils/teams';
 import type { TeamState } from '@/types/game';
+import { fullName } from '@/utils/playerNames';
+import { names, rp } from '../../_helpers/players';
 import type { ReactNode } from 'react';
 
 const fetchSettings = vi.fn();
@@ -40,15 +42,15 @@ function Consumer() {
       <div data-testid="pse">{String(state.settings.pointSystemEnabled)}</div>
       <div data-testid="incompatible">{JSON.stringify(state.settings.incompatibleGames)}</div>
       <div data-testid="teams">{JSON.stringify(
-        ALL_TEAM_KEYS.map(k => [teamRoster(state.teams, k), teamPoints(state.teams, k)]),
+        ALL_TEAM_KEYS.map(k => [teamRoster(state.teams, k).map(fullName), teamPoints(state.teams, k)]),
       )}</div>
       <div data-testid="names">{JSON.stringify(ALL_TEAM_KEYS.map(k => state.teams[`${k}Name`] ?? null))}</div>
       <div data-testid="jokers">{JSON.stringify(ALL_TEAM_KEYS.map(k => state.teams[`${k}JokersUsed`] ?? []))}</div>
       <div data-testid="history">{JSON.stringify(state.teams.scoreHistory ?? [])}</div>
-      <button data-testid="assign" onClick={() => assignTeams(['a', 'b', 'c', 'd', 'e', 'f', 'g'])} />
+      <button data-testid="assign" onClick={() => assignTeams(names('A', 'B', 'C', 'D', 'E', 'F', 'G'))} />
       <button data-testid="award3" onClick={() => awardPoints('team3', 4)} />
       <button data-testid="award4" onClick={() => awardPoints('team4', 9)} />
-      <button data-testid="patch-one" onClick={() => dispatch({ type: 'SET_TEAMS', payload: { team2: ['Zoe'] } })} />
+      <button data-testid="patch-one" onClick={() => dispatch({ type: 'SET_TEAMS', payload: { team2: [rp('Zoe')] } })} />
       <button data-testid="clear-name" onClick={() => dispatch({ type: 'SET_TEAM_NAMES', payload: { team3Name: '  ' } })} />
       <button data-testid="name3" onClick={() => dispatch({ type: 'SET_TEAM_NAMES', payload: { team3Name: 'Gamma' } })} />
       <button data-testid="joker3" onClick={() => dispatch({ type: 'SET_JOKER_USED', payload: { team: 'team3', jokerId: 'comeback', used: true } })} />
@@ -193,7 +195,7 @@ describe('awarding and persisting teams 3 and 4', () => {
   });
 
   it('restores teams 3 and 4 from localStorage on a reload', async () => {
-    localStorage.setItem('team3', JSON.stringify(['Ida', 'Jon']));
+    localStorage.setItem('team3', JSON.stringify([rp('Ida', 'Iversen'), rp('Jon')]));
     localStorage.setItem('team3Points', '6');
     localStorage.setItem('team3Name', 'Gamma');
     localStorage.setItem('team4JokersUsed', JSON.stringify(['comeback']));
@@ -201,7 +203,7 @@ describe('awarding and persisting teams 3 and 4', () => {
     renderApp();
     await waitFor(() => expect(screen.getByTestId('count').textContent).toBe('4'));
     const teams = JSON.parse(screen.getByTestId('teams').textContent!);
-    expect(teams[2]).toEqual([['Ida', 'Jon'], 6]);
+    expect(teams[2]).toEqual([['Ida Iversen', 'Jon'], 6]);
     expect(JSON.parse(screen.getByTestId('names').textContent!)[2]).toBe('Gamma');
     expect(JSON.parse(screen.getByTestId('jokers').textContent!)[3]).toEqual(['comeback']);
   });
@@ -273,13 +275,13 @@ describe('WS sync of teams 3 and 4', () => {
     renderApp();
     await waitFor(() => expect(screen.getByTestId('count').textContent).toBe('4'));
     const remote: TeamState = {
-      team1: ['A'], team2: ['B'], team3: ['C'], team4: ['D'],
+      team1: [rp('A')], team2: [rp('B')], team3: [rp('C')], team4: [rp('D')],
       team1Points: 1, team2Points: 2, team3Points: 3, team4Points: 4,
       team1JokersUsed: [], team2JokersUsed: [], team3JokersUsed: ['comeback'], team4JokersUsed: [],
       team3Name: 'Gamma',
       rev: 50,
     };
-    act(() => { emit('gamemaster-team-state-v2', remote); });
+    act(() => { emit('gamemaster-team-state-v3', remote); });
     await waitFor(() =>
       expect(JSON.parse(screen.getByTestId('teams').textContent!)[3]).toEqual([['D'], 4]));
     expect(JSON.parse(screen.getByTestId('names').textContent!)[2]).toBe('Gamma');
@@ -287,11 +289,12 @@ describe('WS sync of teams 3 and 4', () => {
   });
 
   it('reads a 2-team payload from an older peer as empty teams 3/4, not undefined', async () => {
+    // An older peer also sends plain name strings — converted, not dropped.
     fetchSettings.mockResolvedValue(settings({ teamCount: 4 }));
     renderApp();
     await waitFor(() => expect(screen.getByTestId('count').textContent).toBe('4'));
     act(() => {
-      emit('gamemaster-team-state-v2', {
+      emit('gamemaster-team-state-v3', {
         team1: ['A'], team2: ['B'],
         team1Points: 1, team2Points: 2,
         team1JokersUsed: [], team2JokersUsed: [],
@@ -304,7 +307,7 @@ describe('WS sync of teams 3 and 4', () => {
     expect(JSON.parse(screen.getByTestId('teams').textContent!)[3]).toEqual([[], 0]);
   });
 
-  it('broadcasts on the v2 channel, never the old name', async () => {
+  it('broadcasts on the v3 channel, never an old name', async () => {
     fetchSettings.mockResolvedValue(settings({ teamCount: 3 }));
     const user = userEvent.setup();
     renderApp();
@@ -312,8 +315,9 @@ describe('WS sync of teams 3 and 4', () => {
     sendWs.mockClear();
     await user.click(screen.getByTestId('award3'));
     const channels = sendWs.mock.calls.map(c => (c as unknown as [string])[0]);
-    expect(channels).toContain('gamemaster-team-state-v2');
+    expect(channels).toContain('gamemaster-team-state-v3');
     expect(channels).not.toContain('gamemaster-team-state');
+    expect(channels).not.toContain('gamemaster-team-state-v2');
   });
 
   it('does not echo a snapshot it just applied (the value guard covers teams 3-4)', async () => {
@@ -321,17 +325,17 @@ describe('WS sync of teams 3 and 4', () => {
     renderApp();
     await waitFor(() => expect(screen.getByTestId('count').textContent).toBe('4'));
     const remote: TeamState = {
-      team1: [], team2: [], team3: ['C'], team4: [],
+      team1: [], team2: [], team3: [rp('C')], team4: [],
       team1Points: 0, team2Points: 0, team3Points: 3, team4Points: 0,
       team1JokersUsed: [], team2JokersUsed: [], team3JokersUsed: [], team4JokersUsed: [],
       rev: 99,
     };
     sendWs.mockClear();
-    act(() => { emit('gamemaster-team-state-v2', remote); });
+    act(() => { emit('gamemaster-team-state-v3', remote); });
     await waitFor(() =>
       expect(JSON.parse(screen.getByTestId('teams').textContent!)[2]).toEqual([['C'], 3]));
     const teamStateSends = sendWs.mock.calls
-      .filter(c => (c as unknown as [string])[0] === 'gamemaster-team-state-v2');
+      .filter(c => (c as unknown as [string])[0] === 'gamemaster-team-state-v3');
     expect(teamStateSends).toHaveLength(0);
   });
 });

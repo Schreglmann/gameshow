@@ -940,6 +940,96 @@ The gamemaster card shows the center city as the answer plus the full neighbor l
 
 ---
 
+## 15. Venn (`venn`) — "Schnittmenge"
+
+Two overlapping circles each carry a category; the teams name the term that belongs to both. An optional third category is a hint: it appears as a third circle on the next host advance. The diagram is inline SVG, so it needs no assets.
+
+### Configuration Example
+
+```json
+{
+  "type": "venn",
+  "title": "Schnittmenge",
+  "rules": [
+    "Gesucht ist ein Begriff, der in alle gezeigten Kategorien passt; als Hinweis kann eine dritte Kategorie dazukommen."
+  ],
+  "rulesPreset": "simultaneous-race",
+  "questions": [
+    { "sets": ["Planet", "Schokoriegel", "Römischer Gott"], "answer": "Mars" },
+    { "sets": ["Raubkatze", "Sportmarke"], "answer": "Puma" }
+  ]
+}
+```
+
+### Question Fields
+
+- **`sets`** (required): 2 or 3 category names, one per circle. The first two are on screen from the start; a third is the hint circle
+- **`answer`** (required): The term in the overlap of all circles. Never rendered before the reveal
+- **`answerImage`** (optional): Image shown below the answer on reveal
+- **`gmInfo`** (optional): Host-only note
+- **`disabled`** (optional): Hide the question from playback
+
+Write the first two sets so that they already have one clear answer; the third only narrows it. Every set has to really contain the answer.
+
+### How to Play
+
+1. Question 0 is the **Beispiel** round; real rounds are labelled `Frage N von M`
+2. Two circles with their categories appear, with a `?` in the overlap
+3. If the question has a third set, the host's next advance adds it as a dashed hint circle
+4. The next advance reveals the answer in the overlap
+5. Holding the forward key, or the gamemaster's **Auflösung** button, jumps straight to the answer
+6. The host awards the round's points via the standard point screen
+
+The gamemaster card lists the categories and marks which are on screen; a tap on one shows exactly that many circles.
+
+---
+
+## 16. Film Stripe (`film-stripe`) — "Filmstreifen"
+
+A whole film as one stripe of colours: the film is sampled at 240 evenly spaced moments, each reduced to its average colour, drawn left to right in film order. *Findet Nemo* is blue, *Dune* is sand. The hint is the film as an 8-second time-lapse of 48 stills.
+
+The stripe is **precomputed**. It takes between a few seconds and a few minutes per film (about three minutes for a 15 GB 4K film on a local disk, longer from the NAS), so the admin computes it ahead of the show ("Streifen berechnen") and the show only reads the cache — it works with the NAS unmounted.
+
+### Configuration Example
+
+```json
+{
+  "type": "film-stripe",
+  "title": "Filmstreifen",
+  "rules": [
+    "Gesucht ist ein Film, zu sehen als Farbstreifen: von links nach rechts der ganze Film, jede Linie die Durchschnittsfarbe eines Moments; als Hinweis folgt der Film im Zeitraffer."
+  ],
+  "rulesPreset": "simultaneous-race",
+  "questions": [
+    { "video": "/videos/Finding Nemo.m4v", "answer": "Findet Nemo", "answerImage": "/images/Movie Posters/finding-nemo.jpg" }
+  ]
+}
+```
+
+### Question Fields
+
+- **`video`** (required): DAM video path. The stripe is computed from this file
+- **`answer`** (required): The film title
+- **`question`** (optional): Prompt above the stripe. Defaults to *"Welcher Film ist das?"*
+- **`answerImage`** (optional): Image shown with the answer, usually the poster
+- **`gmInfo`** (optional): Host-only note
+- **`disabled`** (optional): Hide the question from playback
+
+The server adds `stripe: { colors, frames, framePositions }` to each question when it serves the game. Never write that field into a game file.
+
+### How to Play
+
+1. Question 0 is the **Beispiel** round; real rounds are labelled `Film N von M`
+2. The stripe wipes in from the left
+3. The host's next advance plays the time-lapse above the stripe; a marker shows where in the film the current still sits
+4. The next advance reveals the title and the poster
+5. Holding the forward key, or the gamemaster's **Auflösung** button, jumps straight to the answer
+6. The host awards the round's points via the standard point screen
+
+A film whose stripe was never computed shows a notice instead of the stripe and can still be revealed.
+
+---
+
 ## Common Configuration Options
 
 ### Available for All Game Types:

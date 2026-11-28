@@ -15,19 +15,22 @@ info:
     **Zone tags** mirror the OpenAPI tags: `frontend`, `admin`, `gamemaster`, `shared`.
 
     **Cached channels.** The server holds the last value of select channels
-    (`gamemaster-answer`, `gamemaster-controls`, `gamemaster-team-state-v2`,
-    `gamemaster-question-tally`, `music-state`) and sends the cached value to
-    every newly connected client in the initial-state burst.
+    (`gamemaster-answer`, `gamemaster-controls`, `gamemaster-team-state-v3`,
+    `gamemaster-question-tally`, `music-state`, `gm-presence`, `show-hold`,
+    `show-controls-hidden`) and sends the cached value to every newly connected
+    client in the initial-state burst.
 
     **Client-writable channels** (server re-broadcasts to all OTHER clients,
     skipping the origin):
       - `gamemaster-answer`
       - `gamemaster-controls`
       - `gamemaster-command`
-      - `gamemaster-team-state-v2`
+      - `gamemaster-team-state-v3`
       - `gamemaster-question-tally`
       - `music-state`
       - `music-command`
+      - `show-hold`
+      - `show-controls-hidden`
 
     All other channels are server-push only.
 
@@ -199,6 +202,25 @@ channels:
       immediately re-receives it. Zone: shared (gamemaster writes, show
       renders). See specs/gamemaster-cockpit.md.
 
+  show-controls-hidden:
+    address: show-controls-hidden
+    messages:
+      showControlsHidden:
+        $ref: "#/components/messages/ShowControlsHiddenMessage"
+    description: |
+      Gamemaster→show. `{ hidden }`. While `hidden`, the show hides its own
+      control buttons (Weiter, Richtig/Falsch, music player, …) because the
+      gamemaster drives the show; displays the audience reads (joker icons,
+      award team cards, mirrored inputs) stay visible but not clickable.
+      The show applies it only while `gm-presence` reports a connected
+      gamemaster: the cached value outlives the GM, and a show without one
+      needs its buttons to advance. Client-writable (the GM emits it) and cached last-value, so a show that
+      reloads while hiding is on comes back with its buttons hidden. A GM
+      re-sends its known value after reconnecting when the server's
+      initial-state burst carried none (server restart). Zone: shared
+      (gamemaster writes, show applies). See
+      specs/gamemaster-hide-show-controls.md.
+
   content-changed:
     address: content-changed
     messages:
@@ -209,7 +231,8 @@ channels:
       config.json, theme-settings.json, or a games/*.json changes on disk
       (from any source: admin CMS, direct edit, git, fixtures). Flags
       (`config` / `theme` / `games`) tell clients what to re-fetch so edits
-      apply without a page reload. NOT cached — late joiners fetch fresh on
+      apply without a page reload. `filmStripes` is sent by a finished
+      film-stripe build (a cache write the watcher does not see). NOT cached — late joiners fetch fresh on
       mount. Zone: shared (show re-fetches settings + current game; admin/show
       re-fetch theme). See specs/live-config-reload.md.
 
@@ -251,8 +274,8 @@ channels:
       at app level (`AppContent`), not per screen, because no mounted screen owns
       both a router and a command listener. See specs/gamemaster-run-of-show.md.
 
-  gamemaster-team-state-v2:
-    address: gamemaster-team-state-v2
+  gamemaster-team-state-v3:
+    address: gamemaster-team-state-v3
     messages:
       gamemasterTeamState:
         $ref: "#/components/messages/GamemasterTeamStateMessage"
@@ -262,7 +285,10 @@ channels:
       `rev` strictly beats the cached one, and sends the cached value back to a
       rejected writer so it converges (equal revs = concurrent mutation from the
       same base → first write wins). An explicit `null` payload resets the cache.
-      Zone: shared. See specs/cross-device-gamemaster.md.
+      Renamed from `gamemaster-team-state-v2` when rosters changed from name strings
+      to `RosterPlayer` objects, so a peer still running the old code stops syncing
+      instead of misreading them. Zone: shared. See specs/cross-device-gamemaster.md
+      and specs/players.md.
 
   gamemaster-question-tally:
     address: gamemaster-question-tally
@@ -420,10 +446,10 @@ operations:
 
   receiveGamemasterTeamState:
     action: receive
-    channel: { $ref: "#/channels/gamemaster-team-state-v2" }
+    channel: { $ref: "#/channels/gamemaster-team-state-v3" }
     summary: Every PWA receives team/joker state changes.
     messages:
-      - $ref: "#/channels/gamemaster-team-state-v2/messages/gamemasterTeamState"
+      - $ref: "#/channels/gamemaster-team-state-v3/messages/gamemasterTeamState"
 
   receiveGamemasterQuestionTally:
     action: receive
@@ -471,10 +497,10 @@ operations:
 
   sendGamemasterTeamState:
     action: send
-    channel: { $ref: "#/channels/gamemaster-team-state-v2" }
+    channel: { $ref: "#/channels/gamemaster-team-state-v3" }
     summary: Any PWA publishes team/joker state mutations.
     messages:
-      - $ref: "#/channels/gamemaster-team-state-v2/messages/gamemasterTeamState"
+      - $ref: "#/channels/gamemaster-team-state-v3/messages/gamemasterTeamState"
 
   sendGamemasterQuestionTally:
     action: send
@@ -510,6 +536,20 @@ operations:
     summary: Show PWA renders / clears the panic/pause hold overlay.
     messages:
       - $ref: "#/channels/show-hold/messages/showHold"
+
+  sendShowControlsHidden:
+    action: send
+    channel: { $ref: "#/channels/show-controls-hidden" }
+    summary: Gamemaster PWA hides / shows the show's own control buttons.
+    messages:
+      - $ref: "#/channels/show-controls-hidden/messages/showControlsHidden"
+
+  receiveShowControlsHidden:
+    action: receive
+    channel: { $ref: "#/channels/show-controls-hidden" }
+    summary: Show PWA hides / shows its own control buttons.
+    messages:
+      - $ref: "#/channels/show-controls-hidden/messages/showControlsHidden"
 
 components:
   messages:
@@ -672,6 +712,7 @@ components:
           config: { type: boolean, description: "config.json changed → re-fetch settings + current game" }
           theme: { type: boolean, description: "theme-settings.json changed → re-fetch theme" }
           games: { type: boolean, description: "a games/*.json changed → re-fetch current game" }
+          filmStripes: { type: boolean, description: "a film stripe finished computing (not a file the watcher sees; sent by the film-stripe build) → re-fetch current game, whose questions carry the cached `stripe`" }
 
     # ─── Cached bidirectional ───
 
@@ -754,6 +795,13 @@ components:
       payload:
         $ref: "#/components/schemas/ShowHoldState"
 
+    ShowControlsHiddenMessage:
+      name: showControlsHidden
+      title: Whether the show hides its own control buttons
+      contentType: application/json
+      payload:
+        $ref: "#/components/schemas/ShowControlsHiddenState"
+
   schemas:
 
     # WS-only schemas. HTTP-shared schemas live in openapi.yaml and are
@@ -814,10 +862,12 @@ components:
           description: >-
             The clues the audience is looking at, for a game whose puzzle is a set
             of hints around one hidden answer (`city-compass`: the neighbor cities
-            on the rose; `four-statements`: the clues). Rendered as its own
+            on the rose; `four-statements`: the clues; `venn`: the categories).
+            Rendered as its own
             labelled block IN ADDITION to `answer` — the host needs the solution
             while asking. The rows are static unless `hintListClickable` is set.
-            See specs/games/city-compass.md and specs/games/four-statements.md.
+            See specs/games/city-compass.md, specs/games/four-statements.md and
+            specs/games/venn.md.
           items:
             type: object
             required: [rank, text, revealed]
@@ -832,7 +882,7 @@ components:
           description: >-
             When true, the `hintList` rows are reveal controls: clicking row N sends
             the `hint-<n>` control on `gamemaster-command`, and the game shows
-            exactly hints 1…N (`four-statements`). Absent, the rows are static.
+            exactly hints 1…N (`four-statements`, `venn`). Absent, the rows are static.
         nextAnswer:
           type: object
           description: >-
@@ -863,6 +913,30 @@ components:
             type: { const: button-group }
             id: { type: string }
             label: { type: string }
+            layout:
+              type: string
+              enum: [grid]
+              description: "Optional. `grid` lays the buttons out as equal-width cells instead of centred, content-sized rows — for long lists such as the players of a team."
+            team:
+              type: string
+              enum: [team1, team2, team3, team4]
+              description: "Optional. Renders the group as a card marked with this team's colour (dot + accent edge). See specs/team-colors.md."
+            rename:
+              type: object
+              description: >-
+                Optional. Makes the group's label editable in place — the team name on a
+                start-screen team card after the reveal. Tapping the label opens an input:
+                opening it and every keystroke send `<id>:change` with `{ name }`, saving
+                (Enter, ✓ or a tap outside the editor) sends `<id>` with `{ name }` when the name
+                changed, cancelling (Escape, ✕) sends nothing. See specs/team-management.md
+                ("Optional team names").
+              required: [id, value]
+              properties:
+                id: { type: string, description: "Command id, `team-name-<teamKey>` on the start screen." }
+                value: { type: string, description: "The value the input opens with ('' = no custom name)." }
+                placeholder: { type: string }
+                ariaLabel: { type: string }
+                hint: { type: string, description: "Shown under the input while editing — the long-name warning." }
             buttons:
               type: array
               items:
@@ -875,6 +949,28 @@ components:
                   variant: { type: string, enum: [success, danger, primary] }
                   active: { type: boolean }
                   disabled: { type: boolean }
+                  menu:
+                    type: array
+                    description: >-
+                      Optional. When present, tapping the button does NOT send its own id:
+                      the GM opens a popover next to the button listing these entries, and
+                      tapping an entry sends that entry's id as the `controlId`. One level
+                      only (an entry's own `menu` is ignored). Used on the start screen for
+                      the per-player "→ Team X" / "Entfernen" menu. See
+                      specs/team-management.md ("GM button menu").
+                    items:
+                      type: object
+                      required: [id, label]
+                      properties:
+                        id: { type: string }
+                        label: { type: string }
+                        variant: { type: string, enum: [success, danger, primary] }
+                        disabled: { type: boolean }
+                  menuTitle:
+                    type: string
+                    description: >-
+                      Heading of the `menu` popover; the button's `label` when absent. The
+                      start screen sets the player's full name (`Michael „Michi“ Huber`).
         - type: object
           required: [type, id, inputs, submitLabel]
           properties:
@@ -892,8 +988,31 @@ components:
                   placeholder: { type: string }
                   value: { type: string }
                   emitOnChange: { type: boolean }
+                  suggestions:
+                    type: array
+                    description: >-
+                      Autocomplete candidates — the registry players not yet in the draw, on the
+                      "Spieler hinzufügen" fields. The GM lists the ones whose label contains
+                      what is being typed; picking one fills its label into the field, and
+                      submitting sends it like typed text — the show resolves the label to that
+                      player. See specs/players.md ("Autocomplete").
+                    items:
+                      type: object
+                      required: [id, label]
+                      properties:
+                        id: { type: string, description: Registry player id. }
+                        label: { type: string, description: "Admin label, e.g. `Michael „Michi“ Huber`." }
+                        fullMatch:
+                          type: array
+                          items: { type: string }
+                          description: >-
+                            A disabled player's names. Offer the entry only when the typed text
+                            is one of them in full (case-insensitive), not on a partial match.
             submitLabel: { type: string }
             submitDisabled: { type: boolean }
+            clearOnSubmit:
+              type: boolean
+              description: Empty the fields after a submit (the "Spieler hinzufügen" fields).
         - type: object
           required: [type, id, text]
           properties:
@@ -968,7 +1087,10 @@ components:
       type: object
       required: [controlId, timestamp]
       properties:
-        controlId: { type: string }
+        controlId:
+          type: string
+          description: >-
+            The control's id; `<input-group id>:change` for an `emitOnChange` keystroke.
         value:
           oneOf:
             - { type: string }
@@ -1002,6 +1124,22 @@ components:
           type: number
           description: "Epoch ms — used for replay deduplication on the receiver."
 
+    RosterPlayer:
+      type: object
+      description: >-
+        One player in a live team roster. Configured players carry their registry `id`
+        and `nickname`; players added during the show have neither and may have an empty
+        `lastName`. The show labels a player by `nickname` (else `firstName`).
+        Receivers must also accept a plain string (a roster from before players had two
+        names) and read it as first word = `firstName`, rest = `lastName`.
+        See specs/players.md.
+      required: [firstName, lastName]
+      properties:
+        firstName: { type: string, minLength: 1 }
+        lastName: { type: string }
+        nickname: { type: string }
+        id: { type: string }
+
     TeamState:
       type: object
       description: >-
@@ -1012,16 +1150,16 @@ components:
         See specs/team-count.md.
       required: [team1, team2, team1Points, team2Points, team1JokersUsed, team2JokersUsed]
       properties:
-        team1: { type: array, items: { type: string } }
-        team2: { type: array, items: { type: string } }
+        team1: { type: array, items: { $ref: "#/components/schemas/RosterPlayer" } }
+        team2: { type: array, items: { $ref: "#/components/schemas/RosterPlayer" } }
         team1Name: { type: string, description: "Optional custom name for team 1; falls back to \"Team 1\" when absent." }
         team2Name: { type: string, description: "Optional custom name for team 2; falls back to \"Team 2\" when absent." }
         team1Points: { type: number }
         team2Points: { type: number }
         team1JokersUsed: { type: array, items: { type: string } }
         team2JokersUsed: { type: array, items: { type: string } }
-        team3: { type: array, items: { type: string } }
-        team4: { type: array, items: { type: string } }
+        team3: { type: array, items: { $ref: "#/components/schemas/RosterPlayer" } }
+        team4: { type: array, items: { $ref: "#/components/schemas/RosterPlayer" } }
         team3Name: { type: string }
         team4Name: { type: string }
         team3Points: { type: number }
@@ -1050,6 +1188,13 @@ components:
             display order (with two teams: team2 left, team1 right); the gamemaster
             always shows the mirror of the frontend order. Team identities/points are
             unaffected. Optional; defaults to false. See specs/team-order-mirror.md.
+        teamsRevealed:
+          type: boolean
+          description: >-
+            Random mode only: whether the show may display the rosters. The draw is
+            made in the background and stays hidden (the gamemaster previews it)
+            until "Teams zuweisen" sets this. When absent (older peer or cache),
+            read it as "any roster non-empty". See specs/team-management.md.
         rev:
           type: number
           description: >-
@@ -1088,3 +1233,9 @@ components:
       properties:
         active: { type: boolean, description: "True while the panic/pause hold overlay covers the projector." }
         message: { type: string, description: "Optional custom German message shown under the title." }
+
+    ShowControlsHiddenState:
+      type: object
+      required: [hidden]
+      properties:
+        hidden: { type: boolean, description: "True while the show hides its own control buttons because the gamemaster drives the show." }

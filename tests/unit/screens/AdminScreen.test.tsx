@@ -44,8 +44,8 @@ describe('AdminScreen', () => {
 
   it('renders team name inputs', () => {
     renderAdmin();
-    expect(screen.getByPlaceholderText('Alice, Bob, ...')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Clara, Dave, ...')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Anna Müller, Ben Huber, ...')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Clara Weber, Dave Bauer, ...')).toBeInTheDocument();
   });
 
   it('renders team point inputs', () => {
@@ -62,7 +62,7 @@ describe('AdminScreen', () => {
 
     renderAdmin();
 
-    const team1Input = screen.getByPlaceholderText('Alice, Bob, ...') as HTMLInputElement;
+    const team1Input = screen.getByPlaceholderText('Anna Müller, Ben Huber, ...') as HTMLInputElement;
     expect(team1Input.value).toBe('Alice, Bob');
 
     const spinbuttons = screen.getAllByRole('spinbutton');
@@ -73,12 +73,12 @@ describe('AdminScreen', () => {
   it('saves team data to localStorage on blur', async () => {
     renderAdmin();
 
-    const input = screen.getByPlaceholderText('Alice, Bob, ...');
+    const input = screen.getByPlaceholderText('Anna Müller, Ben Huber, ...');
     fireEvent.change(input, { target: { value: 'New Team 1' } });
     fireEvent.blur(input);
 
     await waitFor(() => {
-      expect(JSON.parse(localStorage.getItem('team1') || '[]')).toContain('New Team 1');
+      expect(JSON.parse(localStorage.getItem('team1') || '[]')).toContainEqual({ firstName: '', lastName: '', nickname: 'New Team 1' });
     });
   });
 

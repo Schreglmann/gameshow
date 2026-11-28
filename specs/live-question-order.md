@@ -124,9 +124,10 @@ The first deal uses the same PRNG, the same Fisher–Yates loop and the same lis
 ### `src/utils/gamePlaythroughStore.ts`
 
 Widened from `Map<gameId, seed>` to `Map<gameId, { seed, order, highWater }>`. Storing the
-**order** — not just the seed — is what makes the guarantee survive a *length* change. In-memory
-and session-scoped as before: a page reload clears it, matching the rule that a reload restarts
-the show from home. `tests/setup.ts` clears it before every test, modelling a fresh page load.
+**order** — not just the seed — is what makes the guarantee survive a *length* change. It is
+written through to the tab's `sessionStorage`, so a reload of the show keeps the deck (see
+[crash-recovery.md](crash-recovery.md)). `tests/setup.ts` clears it before every test, modelling a
+fresh tab.
 
 `highWater` is the furthest play index the show reached; back-review resumes at
 `min(lastIndex, highWater)` so it never opens on a question appended after the game was played.
@@ -207,4 +208,4 @@ all: a deleted question simply never comes up again, and an added one queues at 
   playthrough inherits the first's deck and edit history. Already true of the seed before this change.
 - Toggling `randomizeQuestions` itself mid-game does not re-deal; the existing order is kept and the
   new mode applies from the next reconcile.
-- The order lives in memory only. A full page reload of the show restarts from home anyway.
+- The order lives in the tab's `sessionStorage`. A new tab (or a closed tab without the browser's session restore) deals a new deck.

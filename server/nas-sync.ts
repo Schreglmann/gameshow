@@ -2,7 +2,13 @@
  * NAS sync algorithm — pure functions for bidirectional file synchronization.
  *
  * The core sync logic compares local and NAS file states against a previous
- * sync snapshot (.sync-state.json) to determine which operations to perform:
+ * sync snapshot (.sync-state.json) to determine which operations to perform.
+ * The snapshot is PER DEVICE: it lives only in `local-assets/` and describes
+ * the last sync between THIS local tree and the NAS. Another device's snapshot
+ * says nothing about this tree — reading it made a fresh clone see every NAS
+ * file as "deleted locally". No local snapshot ⇒ prev = {} ⇒ pure union, no
+ * deletes (see specs/sync-bidirectional.md "Per-device sync state").
+ *
  * - Files on both sides with different sizes → copy newer (by mtime)
  * - Files on one side only + known in previous state → deleted on other side → propagate deletion
  * - Files on one side only + NOT in previous state → new file → copy to other side
@@ -122,7 +128,7 @@ export function computeSyncOps(
  * @param ops        Sync operations that were (or will be) applied
  * @param failedOps  `rel` paths of ops that failed; their files are omitted
  *                   from the new state regardless of which side scanned them
- * @returns New SyncState to write to both sides
+ * @returns New SyncState to persist as this device's local `.sync-state.json`
  */
 export function buildNewSyncState(
   localFiles: Map<string, FileMeta>,
@@ -159,14 +165,6 @@ export function buildNewSyncState(
   }
 
   return { lastSync: new Date().toISOString(), files };
-}
-
-/**
- * Choose the authoritative previous-files record from two sync states.
- * Uses the more recent lastSync timestamp.
- */
-export function resolvePrevFiles(localState: SyncState, nasState: SyncState): Record<string, string> {
-  return localState.lastSync >= nasState.lastSync ? localState.files : nasState.files;
 }
 
 /**

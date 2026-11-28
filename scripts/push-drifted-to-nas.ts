@@ -27,7 +27,6 @@ import { existsSync, readFileSync, statSync } from 'fs';
 import { copyFile, mkdir, rename, unlink } from 'fs/promises';
 import {
   parseSyncState,
-  resolvePrevFiles,
   type SyncState,
 } from '../server/nas-sync.js';
 import { collectFileMetadata } from '../server/nas-walk.js';
@@ -55,9 +54,8 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const localState = readSyncState(LOCAL_ASSETS_BASE);
-  const nasState = readSyncState(NAS_BASE);
-  const prevFiles = resolvePrevFiles(localState, nasState);
+  // Per-device prev (specs/sync-bidirectional.md "Per-device sync state").
+  const prevFiles = readSyncState(LOCAL_ASSETS_BASE).files;
   console.log(`prev-state entries: ${Object.keys(prevFiles).length}`);
 
   console.log('Scanning local + NAS…');

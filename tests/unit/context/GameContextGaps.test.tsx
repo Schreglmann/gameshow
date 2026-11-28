@@ -175,15 +175,18 @@ describe('GameContext - Gaps', () => {
   });
 
   it('restores valid JSON teams from localStorage on init', () => {
-    localStorage.setItem('team1', JSON.stringify(['Alice', 'Bob']));
-    localStorage.setItem('team2', JSON.stringify(['Charlie']));
+    localStorage.setItem('team1', JSON.stringify([{ firstName: 'Alice', lastName: 'Arndt', id: 'alice-arndt' }, { firstName: 'Bob', lastName: '' }]));
+    localStorage.setItem('team2', JSON.stringify([{ firstName: 'Charlie', lastName: 'Chan' }]));
     localStorage.setItem('team1Points', '15');
     localStorage.setItem('team2Points', '8');
 
     renderWithProvider(<ExtendedConsumer />);
     
-    expect(screen.getByTestId('team1').textContent).toBe(JSON.stringify(['Alice', 'Bob']));
-    expect(screen.getByTestId('team2').textContent).toBe(JSON.stringify(['Charlie']));
+    expect(screen.getByTestId('team1').textContent).toBe(JSON.stringify([
+      { firstName: 'Alice', lastName: 'Arndt', id: 'alice-arndt' },
+      { firstName: 'Bob', lastName: '' },
+    ]));
+    expect(screen.getByTestId('team2').textContent).toBe(JSON.stringify([{ firstName: 'Charlie', lastName: 'Chan' }]));
     expect(screen.getByTestId('team1-points').textContent).toBe('15');
     expect(screen.getByTestId('team2-points').textContent).toBe('8');
   });

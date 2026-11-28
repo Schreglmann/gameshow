@@ -335,6 +335,34 @@ describe('WerKenntMehr', () => {
     expect(defaultProps.onAwardPoints).toHaveBeenCalledWith('team2', 7);
     await waitFor(() => expect(defaultProps.onNextGame).toHaveBeenCalled());
   });
+
+  // The GM panel shows exactly one advance control per phase (specs/gamemaster-controls.md).
+  it('Beispiel round: nav "Weiter" is the only GM advance control (no award form)', async () => {
+    const user = userEvent.setup();
+    const sendWsSpy = vi.spyOn(backendSocket, 'sendWs');
+    renderGame();
+    await waitFor(() => expect(screen.getByText('Test WKM')).toBeInTheDocument());
+    await advanceToGame();
+    await waitFor(() => expect(screen.getByText('Beispiel Frage')).toBeInTheDocument());
+
+    await navForward(user); // reveal Beispiel examples
+    await waitFor(() => {
+      const controls = lastControls(sendWsSpy) as (Ctrl & { hideForward?: boolean })[];
+      expect(controls.find(c => c.id === 'nav')?.hideForward).toBeFalsy();
+      expect(controls.some(c => c.id === 'award-submit')).toBe(false);
+    });
+
+    // A real question still gets the award form, with nav "Weiter" hidden.
+    await navForward(user);
+    await waitFor(() => expect(screen.getByText('Frage 1 von 2')).toBeInTheDocument());
+    await navForward(user);
+    await waitFor(() => {
+      const controls = lastControls(sendWsSpy) as (Ctrl & { hideForward?: boolean })[];
+      expect(controls.find(c => c.id === 'nav')?.hideForward).toBe(true);
+      expect(controls.some(c => c.id === 'award-submit')).toBe(true);
+    });
+    sendWsSpy.mockRestore();
+  });
 });
 
 describe('WerKenntMehr — standard scoring mode', () => {

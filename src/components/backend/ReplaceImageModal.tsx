@@ -62,6 +62,8 @@ interface Props {
   // image-guess). Used by the resolution filter so it shares the predicate
   // with the DAM's "Niedrige Auflösung" filter — see specs/admin-backend.md.
   renderBox?: { w: number; h: number };
+  /** Tab shown when the modal opens (default "Suchen"). */
+  initialTab?: Tab;
   onCancel: () => void;
   onReplaced: (result: ImageReplaceResult) => void;
 }
@@ -113,10 +115,11 @@ export default function ReplaceImageModal({
   currentDims,
   currentSizeBytes,
   renderBox,
+  initialTab = 'search',
   onCancel,
   onReplaced,
 }: Props) {
-  const [tab, setTab] = useState<Tab>('search');
+  const [tab, setTab] = useState<Tab>(initialTab);
   // Search panel state is now owned by <ImageSearchPanel>; only the picked
   // candidate flows back via onSelect. The low-res filter is lifted here so
   // the panel can render its inline toggle while the upload modal renders

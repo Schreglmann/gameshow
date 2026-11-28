@@ -8,6 +8,7 @@ Replace the static `games/_template-*.json` files and `config.template.json` wit
 - [ ] `server/example-games.ts` exports `EXAMPLE_GAMES` — one entry per game type **except `video-guess`** (13 entries), each a single-instance `GameConfig` with a few real German questions and canonical `rules`/`rulesPreset`.
 - [ ] Every `EXAMPLE_GAMES` entry passes `validate-config.ts`'s per-type rules.
 - [ ] `materializeExamples({ gamesDir, localAssetsBase, configPath })` generates each game's media into a dedicated `Beispiele/` subfolder per category (`local-assets/audio/Beispiele/`, `local-assets/images/Beispiele/`) so the DAM groups them in one tidy folder, writes `games/beispiel-<type>.json` (atomic, trailing `\n`), adds/replaces the `beispiele` gameshow `{ name: "Beispiele", gameOrder: [...13] }` in config, sets it active, and returns `{ createdGames, gameshow }`.
+- [x] **Example players.** A fresh clone gets nine made-up players ([server/example-players.ts](../server/example-players.ts)): two "Michi" and two "Jo" (the show tells them apart by surname), two more with a full name, one with only a nickname ("Maus", "Name fehlt"), and two who are NOT in the gameshow — one to pick from the autocomplete (Clara Weiß) and one disabled (Felix Brandl, suggested only for a name typed in full). Seven of them are the `beispiele` gameshow's `players`. Both `buildDefaultConfig()` and `materializeExamples` (via `applyExampleGameshow`) seed them, but **only into an empty registry** — a real registry (the maintainer's decrypted config) never gets them. A re-run keeps the players the `beispiele` gameshow already lists instead of dropping them. See [players.md](players.md).
 - [ ] The `beispiele` `gameOrder` places **final-style game types last** — `bet-quiz`, `quizjagd`, `final-quiz` (the set `FINAL_GAME_TYPES`) appear at the end, after all other types, so the demo gameshow reads like a real show (a finale never sits in the middle). Relative order within each group follows the `EXAMPLE_GAMES` definition order.
 - [ ] `POST /api/backend/games/examples` runs `materializeExamples` against the live paths and returns `{ success: true, createdGames, gameshow }`.
 - [ ] `npm run fixtures` runs the same `materializeExamples` from the CLI.
@@ -20,7 +21,7 @@ Replace the static `games/_template-*.json` files and `config.template.json` wit
 - **New endpoint**: `POST /api/backend/games/examples` → `{ success: true, createdGames: string[], gameshow: string }`.
 - **New npm script**: `"fixtures": "tsx scripts/create-examples.ts"`.
 - **New client fn**: `createExampleGames()` in `src/services/backendApi.ts`.
-- **Config**: `buildDefaultConfig()` (server/clean-install.ts) returns a config with a single empty `beispiele` gameshow (active) — no template scanning. `buildDefaultGameOrder` and `configReferencesOnlyTemplates` are removed.
+- **Config**: `buildDefaultConfig()` (server/clean-install.ts) returns a config with a single `beispiele` gameshow (active, no games yet) and the example players — no template scanning. `buildDefaultGameOrder` and `configReferencesOnlyTemplates` are removed.
 - **`.gitignore`**: add `games/beispiel-*.json`.
 - **`.gitattributes`**: remove the `games/_template-*.json -filter -diff` exception.
 - Persisted to disk: yes (game files, media, config) — all in gitignored locations.

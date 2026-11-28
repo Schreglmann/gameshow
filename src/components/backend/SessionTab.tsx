@@ -4,7 +4,8 @@ import { teamNameLongHint } from '@/utils/teamNames';
 import { useTeamNameCheck } from '@/hooks/useTeamNameCheck';
 import { useTheme } from '@/context/ThemeContext';
 import { ALL_TEAM_KEYS, teamKeys, teamNumber, teamPoints, teamRoster, type TeamKey } from '@/utils/teams';
-import type { TeamState } from '@/types/game';
+import type { RosterPlayer, TeamState } from '@/types/game';
+import { fullName, knownPlayers, parsePlayerList, rosterSignature, samePlayer } from '@/utils/playerNames';
 import StatusMessage from './StatusMessage';
 import { useConfirm } from './ConfirmContext';
 import TeamDot from '@/components/common/TeamDot';
@@ -39,7 +40,8 @@ export default function SessionTab() {
   const live = useMemo(() => {
     const values = {} as Record<FieldKey, string>;
     for (const key of ALL_TEAM_KEYS) {
-      values[key] = teamRoster(state.teams, key).join(', ');
+      // Full names here — the admin never shortens them. See specs/players.md.
+      values[key] = teamRoster(state.teams, key).map(fullName).join(', ');
       values[`${key}Name`] = state.teams[`${key}Name`] ?? '';
       values[`${key}Points`] = String(teamPoints(state.teams, key));
     }
@@ -76,15 +78,27 @@ export default function SessionTab() {
    */
   const saveSession = useCallback(() => {
     if (Object.keys(edits).length === 0) return;
-    const parseMembers = (v: string) => v.split(',').map(n => n.trim()).filter(Boolean);
     const teams = state.teams;
+    const existing = ALL_TEAM_KEYS.flatMap(k => teamRoster(teams, k));
+    // A typed name that matches a player already in a roster keeps that entry
+    // (and its registry id); anything else resolves against the registry.
+    const parseMembers = (v: string): RosterPlayer[] =>
+      parsePlayerList(v, knownPlayers(state.settings)).map(p => existing.find(e => samePlayer(e, p)) ?? p);
     const next: TeamState = { ...teams };
     let changed = false;
+    const rosterEdits: Partial<Record<TeamKey, RosterPlayer[]>> = {};
     for (const key of ALL_TEAM_KEYS) {
       const roster = edits[key];
-      if (roster !== undefined) {
-        const parsed = parseMembers(roster);
-        if (parsed.join(', ') !== teamRoster(teams, key).join(', ')) changed = true;
+      if (roster !== undefined) rosterEdits[key] = parseMembers(roster);
+    }
+    // Every player is unique across all teams (specs/players.md).
+    const combined = activeTeams.flatMap(k => rosterEdits[k] ?? teamRoster(teams, k));
+    const duplicate = combined.find((p, i) => combined.findIndex(q => samePlayer(p, q)) !== i);
+    if (duplicate) showMsg('error', `„${fullName(duplicate)}“ ist mehrfach eingetragen – Teams nicht gespeichert.`);
+    for (const key of ALL_TEAM_KEYS) {
+      const parsed = rosterEdits[key];
+      if (parsed !== undefined && !duplicate) {
+        if (rosterSignature(parsed) !== rosterSignature(teamRoster(teams, key))) changed = true;
         next[key] = parsed;
       }
       const name = edits[`${key}Name`];
@@ -102,12 +116,15 @@ export default function SessionTab() {
     }
     if (changed) {
       dispatch({ type: 'SET_TEAM_STATE', payload: next });
-      showMsg('success', 'Gespeichert');
+      if (!duplicate) showMsg('success', 'Gespeichert');
     }
-    // Drop the edits either way: the inputs now read from `live`, which the
-    // reducer has just updated (or which already matched what was typed).
-    setEdits({});
-  }, [edits, state.teams, dispatch]);
+    // Drop the edits: the inputs now read from `live`, which the reducer has
+    // just updated (or which already matched what was typed). Refused roster
+    // text stays in its field so the operator can fix it.
+    const kept: Partial<Record<FieldKey, string>> = {};
+    if (duplicate) for (const key of ALL_TEAM_KEYS) if (edits[key] !== undefined) kept[key] = edits[key];
+    setEdits(kept);
+  }, [edits, state.teams, state.settings, activeTeams, dispatch]);
 
   const resetPoints = async () => {
     if (await confirmDialog({
@@ -172,7 +189,7 @@ export default function SessionTab() {
                 <label className="be-label">Team {n} Mitglieder</label>
                 <input
                   className="be-input"
-                  placeholder={n === 1 ? 'Alice, Bob, ...' : 'Clara, Dave, ...'}
+                  placeholder={n === 1 ? 'Anna Müller, Ben Huber, ...' : 'Clara Weber, Dave Bauer, ...'}
                   value={valueOf(key)}
                   onChange={e => editField(key)(e.target.value)}
                   onBlur={saveSession}

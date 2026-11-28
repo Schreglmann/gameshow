@@ -13,6 +13,7 @@ const mockSaveConfig = vi.fn();
 const mockFetchGames = vi.fn();
 
 vi.mock('@/services/backendApi', () => ({
+  fetchPlayerBin: vi.fn().mockResolvedValue([]),
   fetchConfig: (...args: unknown[]) => mockFetchConfig(...args),
   saveConfig: (...args: unknown[]) => mockSaveConfig(...args),
   saveConfigBeacon: vi.fn(),

@@ -22,7 +22,7 @@ Players and the host navigate a linear route from team setup through all game ro
 - `AppState.currentGame: { currentIndex: number; totalGames: number } | null`
   - Set via `SET_CURRENT_GAME` action when `GameScreen` loads
   - `null` before any game has loaded
-- No localStorage persistence for navigation state (intentional — reloading restarts from home)
+- The route itself is the navigation state: a reload stays on the URL it was on (`/game?index=N`, `/rules`, `/summary`, …). On `/game` the show additionally resumes the phase and question it was on, from the tab's `sessionStorage` — see [crash-recovery.md](crash-recovery.md)
 
 ## UI behaviour
 - `HomeScreen`: textarea for player names; on submit navigates to `/rules` or `/game?index=0`. Start of the flow — no back
@@ -37,5 +37,5 @@ Players and the host navigate a linear route from team setup through all game ro
   run-of-show panel sends a `goto:*` command that this flow's routes answer. See
   [gamemaster-run-of-show.md](gamemaster-run-of-show.md)
 - Resuming a previous game mid-phase (going back always opens it at its title screen — phase history is not persisted)
-- Resuming a partially completed gameshow after a full page reload
+- Resuming after a full page reload *inside* a question (answer reveal, clue steps) — a reload reopens the same game, phase and question, but at the start of that question. See [crash-recovery.md](crash-recovery.md)
 - Multi-device sync (all state is local)

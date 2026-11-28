@@ -12,6 +12,8 @@ import { DEFAULT_TEAM_COUNT } from '../src/utils/teams.js';
 import { normalizePointMode, pointModeRule } from '../src/utils/pointMode.js';
 import { resolveShowTitle } from '../src/utils/showTitle.js';
 import { resolveTeamColors } from '../src/utils/teamColors.js';
+import { applyLivePlayers, resolveGameshowPlayers } from '../src/utils/playerRegistry.js';
+import { loadPlayerBin, recordRegistryChange } from './player-bin.js';
 import { effectiveTeamCount, gameIsScorable, listIncompatibleGames, hasTeamSplit } from './team-count.js';
 import { isAudioFile, normalizeAudioFile } from './normalize.js';
 import { fetchAndSavePoster, videoFilenameToSlug, MOVIE_POSTERS_SUBDIR } from './movie-posters.js';
@@ -33,7 +35,7 @@ import {
   type VideoReferenceMap,
 } from './video-reference-map.js';
 import { probeVideoTracks, buildTonemapVf, type ProbeResult } from './video-probe.js';
-import { computeSyncOps, buildNewSyncState, resolvePrevFiles, parseSyncState, applySnapshotOp, applyDeletionSafety, checkBulkDelete, makeRunId, type SyncState, type SyncOp, type DeletionSafetyResult, type BulkDeleteCheck, type FileMeta } from './nas-sync.js';
+import { computeSyncOps, buildNewSyncState, parseSyncState, applySnapshotOp, applyDeletionSafety, checkBulkDelete, makeRunId, type SyncState, type SyncOp, type DeletionSafetyResult, type BulkDeleteCheck, type FileMeta } from './nas-sync.js';
 import { readNasSyncConflicts, reconcileNasSyncConflicts, getNasSyncConflict, removeNasSyncConflict, countNasSyncConflicts, type DetectedConflict } from './nas-sync-conflicts.js';
 import { readPendingMoves, recordPendingMove, clearPendingMove, savePendingMoves, expirePendingMoves, computeMovedAwayRels, type PendingMove, type PendingMoveMap } from './nas-sync-moves.js';
 import { collectFileMetadata, collectTrashedRelPaths } from './nas-walk.js';
@@ -52,6 +54,7 @@ import {
 } from './random-frame-prerender.js';
 import { setupWebSocket, broadcast, broadcastThrottled } from './ws.js';
 import { startContentWatch } from './content-watch.js';
+import { gameCreatedTimes } from './game-created-at.js';
 import { isGitCryptBlob, loadConfigWithFallback, ensureConfigFile, DEFAULT_GLOBAL_RULES } from './clean-install.js';
 import { pruneGameOrder, parseGameRef, isRefToGame, isRefToInstance, requalifyBareRefs } from './game-order.js';
 import { convertToMultiInstance, countQuestions, selectableInstanceKeys, gameshowPlayedContent } from './game-file.js';
@@ -105,6 +108,20 @@ import {
   type UpscaleModel,
   type UpscaleScale,
 } from './upscale.js';
+import { installCrashHandlers, readLastCrash, STARTED_AT } from './crash-log.js';
+import { sendFileStream } from './send-file-stream.js';
+import {
+  attachFilmStripes, buildFilmStripe, createFrameExtractor, filmStripeDir, filmStripeFrameName,
+  isFilmStripeCurrent, readFilmStripe,
+  type FilmStripeManifest, type FilmStripeSource,
+} from './film-stripe.js';
+
+// Before anything else runs: an uncaught exception is written to logs/crash.log
+// and exits (the supervisor restarts), an unhandled rejection is only logged.
+// See specs/crash-recovery.md.
+installCrashHandlers();
+// Read once at boot — the file only changes when this process is not running.
+const LAST_CRASH = readLastCrash();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -309,6 +326,9 @@ function deleteCacheFilesForVideo(relPath: string): void {
       }
     } catch { /* dir doesn't exist yet */ }
   }
+  // The film stripe is computed from the file itself, so it goes with it. Local-only
+  // cache, so a plain async remove is enough.
+  void rm(filmStripeDir(VIDEO_CACHE_BASE, relPath), { recursive: true, force: true }).catch(() => undefined);
   void deleteNasCacheFilesForSlug(slug);
 }
 
@@ -590,11 +610,20 @@ interface BackgroundTaskMeta {
   end?: number;
   track?: number;
   kind?: 'compressed' | 'sdr';
+  /** State of a `film-stripe` batch, so an admin form that did not start it can still
+   *  follow it. Films run in `paths` order: the first `done` of them are finished. */
+  filmStripe?: {
+    paths: string[];
+    done: number;
+    failed: Array<{ path: string; error: string }>;
+    current?: string;
+    currentPercent?: number;
+  };
 }
 
 interface BackgroundTask {
   id: string;
-  type: 'sdr-warmup' | 'compressed-warmup' | 'audio-normalize' | 'poster-fetch' | 'nas-mirror' | 'hdr-probe' | 'nas-sync' | 'startup-sync' | 'faststart' | 'whisper-asr' | 'random-frame-prerender';
+  type: 'sdr-warmup' | 'compressed-warmup' | 'audio-normalize' | 'poster-fetch' | 'nas-mirror' | 'hdr-probe' | 'nas-sync' | 'startup-sync' | 'faststart' | 'whisper-asr' | 'random-frame-prerender' | 'film-stripe';
   label: string;
   /** Legacy creation timestamp — preserved for back-compat but `elapsed` now uses
    *  `runningAt ?? queuedAt`. New code should prefer those fields. */
@@ -667,11 +696,21 @@ function bgTaskUpdate(id: string, detail: string): void {
   if (t) { t.detail = detail; broadcastSystemStatus(); }
 }
 
-/** Trigger an async system-status broadcast (debounced — only fires if >500ms since last). */
+/** Trigger an async system-status broadcast, at most one per 500 ms. A call inside the
+ *  window schedules one trailing broadcast instead of being dropped, so the last change
+ *  of a burst (a task finishing right after a progress update) always goes out. */
 let _lastSystemBroadcast = 0;
+let _trailingSystemBroadcast: ReturnType<typeof setTimeout> | null = null;
 function broadcastSystemStatus(): void {
   const now = Date.now();
-  if (now - _lastSystemBroadcast < 500) return;
+  const wait = 500 - (now - _lastSystemBroadcast);
+  if (wait > 0) {
+    _trailingSystemBroadcast ??= setTimeout(() => {
+      _trailingSystemBroadcast = null;
+      broadcastSystemStatus();
+    }, wait);
+    return;
+  }
   _lastSystemBroadcast = now;
   buildSystemStatusPayload()
     .then(data => broadcast('system-status', data))
@@ -680,6 +719,14 @@ function broadcastSystemStatus(): void {
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Liveness probe for the supervisor's hang watchdog and for clients waiting out
+// an outage. Registered first and kept free of file system / NAS access, so it
+// answers whenever the event loop does. See specs/crash-recovery.md.
+app.get('/api/health', (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json({ ok: true, uptimeSeconds: process.uptime(), startedAt: STARTED_AT });
+});
 
 app.use(express.json({ limit: '10mb' }));
 
@@ -1682,7 +1729,7 @@ let nasSyncRunning = false;
 let nasQueueGeneration = 0;
 
 // In-memory sync-state snapshot. Mutated only after a NAS op succeeds, then
-// persisted to both .sync-state.json files (debounced). Seeded lazily on first
+// persisted to the per-device local-assets/.sync-state.json (debounced). Seeded lazily on first
 // use from LOCAL_ASSETS_BASE so it reflects whatever the last successful sync
 // wrote. Never rebuilt from a single-sided disk walk — doing so would claim the
 // NAS is in sync when a queued op had failed, causing the next bidirectional
@@ -1692,7 +1739,7 @@ function getSyncStateSnapshot(): SyncState {
   if (_syncStateSnapshot === null) {
     // Synchronous LOCAL-only read: LOCAL_ASSETS_BASE never goes stale, so this
     // is safe on the main thread and keeps the getter synchronous for its many
-    // callers. (The NAS-side `.sync-state.json` is read via async readSyncState.)
+    // callers. The sync state is per device, so there is no NAS-side read.
     const p = path.join(LOCAL_ASSETS_BASE, SYNC_STATE_FILE);
     _syncStateSnapshot = existsSync(p)
       ? parseSyncState(readFileSync(p, 'utf8'))
@@ -2012,7 +2059,13 @@ setInterval(() => {
 
 const SYNC_STATE_FILE = '.sync-state.json';
 
-// Async so a stale NAS mount can never block the main thread (see
+// The sync state is PER DEVICE: read and written only under LOCAL_ASSETS_BASE.
+// A legacy `.sync-state.json` on the NAS (written by older versions) is ignored —
+// it describes another device's tree, and using it as `prev` on a fresh clone
+// turned every NAS file into a `delete-nas` (see specs/sync-bidirectional.md
+// "Per-device sync state").
+//
+// Async so a slow disk can never block the main thread (see
 // specs/nas-freeze-resilience.md). ENOENT → empty state (fresh tree); any other
 // read error PROPAGATES so the sync run aborts rather than proceeding with an
 // empty `prev`, which would disable Layer 2's loss-ratio veto.
@@ -2056,8 +2109,8 @@ function debouncedSaveSyncState(): void {
     const snap = getSyncStateSnapshot();
     snap.lastSync = new Date().toISOString();
     // Fire-and-forget: writeSyncState handles its own errors and must not block.
+    // Local only: the snapshot is per device (specs/sync-bidirectional.md).
     void writeSyncState(LOCAL_ASSETS_BASE, snap);
-    void writeSyncState(NAS_BASE, snap);
   }, 2000);
 }
 
@@ -2254,9 +2307,10 @@ async function startupSyncInner(): Promise<void> {
     const runId = makeRunId();
     const queueGenAtStart = nasQueueGeneration;
 
-    const localState = await readSyncState(LOCAL_ASSETS_BASE);
-    const nasState = await readSyncState(NAS_BASE);
-    const prevFiles = resolvePrevFiles(localState, nasState);
+    // Per-device prev: only THIS tree's snapshot. Another device's snapshot (the
+    // legacy NAS-side copy) made a fresh clone read every NAS file as "deleted
+    // locally". No local snapshot ⇒ {} ⇒ union only, never a delete.
+    const prevFiles = (await readSyncState(LOCAL_ASSETS_BASE)).files;
 
     const [localFiles, nasFiles, trashedRels] = await Promise.all([
       collectFileMetadata(LOCAL_ASSETS_BASE, ASSET_FOLDERS),
@@ -2385,9 +2439,8 @@ async function startupSyncInner(): Promise<void> {
     // Build new state AFTER ops have run so failedOps reflects actual results.
     const newState = buildNewSyncState(localFiles, nasFiles, ops, failedOps);
 
-    // Write updated sync state to both sides
+    // Persist the per-device sync state (local only — see readSyncState note)
     await writeSyncState(LOCAL_ASSETS_BASE, newState);
-    await writeSyncState(NAS_BASE, newState);
     setSyncStateSnapshot(newState);
 
     nasSyncStats.startupSync = { phase: 'done', total: ops.length, done: ops.length };
@@ -2433,9 +2486,10 @@ async function periodicRescan(): Promise<void> {
     const runId = makeRunId();
     const queueGenAtStart = nasQueueGeneration;
 
-    const localState = await readSyncState(LOCAL_ASSETS_BASE);
-    const nasState = await readSyncState(NAS_BASE);
-    const prevFiles = resolvePrevFiles(localState, nasState);
+    // Per-device prev: only THIS tree's snapshot. Another device's snapshot (the
+    // legacy NAS-side copy) made a fresh clone read every NAS file as "deleted
+    // locally". No local snapshot ⇒ {} ⇒ union only, never a delete.
+    const prevFiles = (await readSyncState(LOCAL_ASSETS_BASE)).files;
 
     const [localFiles, nasFiles, trashedRels] = await Promise.all([
       collectFileMetadata(LOCAL_ASSETS_BASE, ASSET_FOLDERS),
@@ -2558,7 +2612,6 @@ async function periodicRescan(): Promise<void> {
     const newState = buildNewSyncState(localFiles, nasFiles, ops, failedOps);
 
     await writeSyncState(LOCAL_ASSETS_BASE, newState);
-    await writeSyncState(NAS_BASE, newState);
     setSyncStateSnapshot(newState);
     bgTaskDone(taskId);
     console.log(`[periodic-rescan] Done: ${ops.length} file(s) synced`);
@@ -3168,8 +3221,7 @@ app.get('/videos-compressed/:start/:end/*splat', async (req, res) => {
       'Content-Type': 'video/mp4',
       'Cache-Control': 'private, max-age=3600',
     });
-    const { createReadStream } = await import('fs');
-    createReadStream(cacheFile, { start, end }).pipe(res);
+    sendFileStream(res, cacheFile, { start, end });
   } else {
     res.writeHead(200, {
       'Content-Length': fileStat.size,
@@ -3177,8 +3229,7 @@ app.get('/videos-compressed/:start/:end/*splat', async (req, res) => {
       'Accept-Ranges': 'bytes',
       'Cache-Control': 'private, max-age=3600',
     });
-    const { createReadStream } = await import('fs');
-    createReadStream(cacheFile).pipe(res);
+    sendFileStream(res, cacheFile);
   }
 });
 
@@ -3260,8 +3311,7 @@ app.get('/videos-sdr/:start/:end/*splat', async (req, res) => {
       'Content-Type': 'video/mp4',
       'Cache-Control': 'private, max-age=3600',
     });
-    const { createReadStream } = await import('fs');
-    createReadStream(cacheFile, { start, end }).pipe(res);
+    sendFileStream(res, cacheFile, { start, end });
   } else {
     res.writeHead(200, {
       'Content-Length': fileStat.size,
@@ -3269,8 +3319,7 @@ app.get('/videos-sdr/:start/:end/*splat', async (req, res) => {
       'Accept-Ranges': 'bytes',
       'Cache-Control': 'private, max-age=3600',
     });
-    const { createReadStream } = await import('fs');
-    createReadStream(cacheFile).pipe(res);
+    sendFileStream(res, cacheFile);
   }
 });
 
@@ -3466,6 +3515,181 @@ async function prerenderFrames(
   return { count: files.length };
 }
 
+// ── Film stripes (game type `film-stripe`, see specs/games/film-stripe.md) ──
+// A stripe is precomputed per VIDEO (not per question — nothing about it is random) and
+// the show only ever reads the cache: the frame route below and the fields
+// /api/game/:index attaches never touch the source file.
+
+/** Cache directory of one video's stripe. */
+function filmStripeDirFor(relPath: string): string {
+  return filmStripeDir(VIDEO_CACHE_BASE, relPath);
+}
+
+/** Size + mtime of a source file, or null when it cannot be read right now. Bounded on
+ *  the NAS (specs/nas-freeze-resilience.md). */
+async function filmStripeSourceStat(fullPath: string): Promise<FilmStripeSource | null> {
+  const onNas = fullPath.startsWith(NAS_BASE + path.sep);
+  const s = onNas ? await nasStat(fullPath) : await stat(fullPath).catch(() => null);
+  return s ? { mtimeMs: s.mtimeMs, size: s.size } : null;
+}
+
+/** Stripe builds in flight, by relative video path — a second request for the same
+ *  film waits for the first instead of seeking through the file twice. */
+const filmStripeBuilds = new Map<string, Promise<FilmStripeManifest>>();
+
+/** Compute (or reuse) the stripe of one video. Throws when the source is unreachable. */
+function prepareFilmStripe(
+  relPath: string,
+  opts: { force?: boolean; onProgress?: (done: number, total: number) => void } = {},
+): Promise<FilmStripeManifest> {
+  const running = filmStripeBuilds.get(relPath);
+  if (running) return running;
+  const build = (async (): Promise<FilmStripeManifest> => {
+    const dir = filmStripeDirFor(relPath);
+    const fullPath = await resolveVideoPathWithNas(relPath);
+    if (!fullPath) throw new Error('Video nicht erreichbar');
+    const source = await filmStripeSourceStat(fullPath);
+    if (!source) throw new Error('Video nicht erreichbar');
+
+    const existing = await readFilmStripe(dir);
+    if (existing && !opts.force && isFilmStripeCurrent(existing, source)) return existing;
+
+    const probe = await cachedProbe(fullPath, relPath);
+    const duration = probe.videoInfo?.duration ?? 0;
+    // Without the tone map an HDR source decodes washed out and every colour of the
+    // stripe comes out grey.
+    const isHdr = probe.videoInfo?.isHdr === true;
+    const toneMapFilter = isHdr ? buildTonemapVf(probe.videoInfo?.maxCLL ?? 0) : undefined;
+    const manifest = await buildFilmStripe({
+      dir,
+      source,
+      duration,
+      extractFrame: createFrameExtractor({
+        ffmpegBin: FFMPEG_BIN,
+        sourcePath: fullPath,
+        toneMapFilter,
+        // Low priority: a stripe is background work and must not starve a running show.
+        spawnFfmpeg: (args, options) => spawnBackgroundFfmpeg(args, options),
+      }),
+      onProgress: opts.onProgress,
+    });
+    // The stripe lives in the video cache, which the content watcher does not see: tell
+    // an open show to re-fetch its game so the stripe appears without a reload.
+    broadcast('content-changed', { filmStripes: true });
+    return manifest;
+  })();
+  filmStripeBuilds.set(relPath, build);
+  void build.catch(() => undefined).finally(() => { filmStripeBuilds.delete(relPath); });
+  return build;
+}
+
+// GET /api/film-stripe/frame?path=<rel>&i=<n> — one time-lapse still of a prepared
+// stripe. Cache only: 404 when the stripe has not been computed.
+app.get('/api/film-stripe/frame', (req, res) => {
+  const relPath = typeof req.query.path === 'string' ? req.query.path : '';
+  const index = Number.parseInt(String(req.query.i ?? ''), 10);
+  if (!relPath || !isSafePath(relPath) || !Number.isInteger(index) || index < 0 || index > 999) {
+    return res.status(400).send('Invalid params');
+  }
+  const file = path.join(filmStripeDirFor(relPath), filmStripeFrameName(index));
+  if (!existsSync(file)) return res.status(404).send('Frame not available');
+  res.setHeader('Content-Type', 'image/jpeg');
+  res.setHeader('Cache-Control', 'private, max-age=3600');
+  sendFileStream(res, file);
+});
+
+// GET /api/backend/assets/videos/film-stripe/status?paths=a|b
+// → { status: { [path]: { ready, current, sourceReachable, frames, colors } } }
+// `current` is false when the video file changed since the stripe was computed.
+app.get('/api/backend/assets/videos/film-stripe/status', async (req, res) => {
+  const raw = typeof req.query.paths === 'string' ? req.query.paths : '';
+  const paths = [...new Set(raw.split('|').filter(p => p && isSafePath(p)))];
+  const status: Record<string, { ready: boolean; current: boolean; sourceReachable: boolean; frames: number; colors: string[] }> = {};
+  await Promise.all(paths.map(async relPath => {
+    const manifest = await readFilmStripe(filmStripeDirFor(relPath));
+    const fullPath = await resolveVideoPathWithNas(relPath);
+    const source = fullPath ? await filmStripeSourceStat(fullPath) : null;
+    status[relPath] = {
+      ready: manifest !== null,
+      current: manifest !== null && isFilmStripeCurrent(manifest, source),
+      sourceReachable: source !== null,
+      frames: manifest?.frames ?? 0,
+      colors: manifest?.colors ?? [],
+    };
+  }));
+  res.json({ status });
+});
+
+// POST /api/backend/assets/videos/film-stripe/prepare — compute the stripes of the
+// given videos. Body: { paths: string[], force?: boolean }. A stripe that is already
+// current is kept unless `force`. Streams SSE: `{ taskId }` first (the background task
+// the run is tracked under), `{ path, percent }` while a film is sampled, `{ path, ready }`
+// / `{ path, itemError }` per film, `{ percent }` for the batch, then
+// `{ percent: 100, done: true, failures }`. The task's `meta.filmStripe` mirrors the run
+// over the `system-status` channel for admin forms that did not start it.
+app.post('/api/backend/assets/videos/film-stripe/prepare', async (req, res) => {
+  const body = req.body as { paths?: unknown; force?: unknown };
+  const paths = Array.isArray(body.paths)
+    ? [...new Set(body.paths.filter((p): p is string => typeof p === 'string' && p !== '' && isSafePath(p)))]
+    : [];
+  if (paths.length === 0) return res.status(400).json({ error: 'No valid paths' });
+  const force = body.force === true;
+
+  res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' });
+  const send = (data: Record<string, unknown>) => {
+    try { res.write(`data: ${JSON.stringify(data)}\n\n`); } catch { /* client gone */ }
+  };
+
+  const run: NonNullable<BackgroundTaskMeta['filmStripe']> = { paths, done: 0, failed: [] };
+  const taskId = bgTaskQueue('film-stripe', `Filmstreifen berechnen: ${paths.length} ${paths.length === 1 ? 'Film' : 'Filme'}`, `0 % · Film 1/${paths.length}`, { filmStripe: run });
+  bgTaskMarkRunning(taskId);
+  send({ taskId });
+  // The batch percent leads the detail: the System tab reads the first `nn %` for its bar
+  // and its ETA, which must cover the whole batch, not the film being sampled.
+  const updateTask = () => {
+    const filmPercent = run.currentPercent ?? 0;
+    const batchPercent = Math.floor(((run.done + filmPercent / 100) / paths.length) * 100);
+    const film = run.current
+      ? ` · Film ${run.done + 1}/${paths.length} · ${path.basename(run.current)} ${filmPercent} %`
+      : ` · ${run.done}/${paths.length} Filme`;
+    bgTaskUpdate(taskId, `${batchPercent} %${film}`);
+  };
+  let failures = 0;
+  for (const relPath of paths) {
+    let lastPercent = -1;
+    run.current = relPath;
+    run.currentPercent = 0;
+    updateTask();
+    try {
+      await prepareFilmStripe(relPath, {
+        force,
+        onProgress: (n, total) => {
+          const percent = Math.floor((n / total) * 100);
+          if (percent === lastPercent) return;
+          lastPercent = percent;
+          run.currentPercent = percent;
+          send({ path: relPath, percent });
+          updateTask();
+        },
+      });
+      send({ path: relPath, ready: true });
+    } catch (err) {
+      failures++;
+      const message = (err as Error).message;
+      run.failed.push({ path: relPath, error: message });
+      send({ path: relPath, itemError: message });
+    }
+    run.done++;
+    delete run.current;
+    delete run.currentPercent;
+    send({ percent: Math.round((run.done / paths.length) * 100) });
+    updateTask();
+  }
+  send({ percent: 100, done: true, failures });
+  if (failures > 0 && failures === paths.length) bgTaskError(taskId, 'Alle fehlgeschlagen'); else bgTaskDone(taskId);
+  try { res.end(); } catch { /* already closed */ }
+});
+
 app.get('/api/random-frame', async (req, res) => {
   const filePath = typeof req.query.path === 'string' ? req.query.path : '';
   if (!filePath || !isSafePath(filePath)) return res.status(400).send('Invalid path');
@@ -3496,7 +3720,7 @@ app.get('/api/random-frame', async (req, res) => {
     if (!file) return false;
     res.setHeader('Content-Type', 'image/jpeg');
     res.setHeader('Cache-Control', 'private, max-age=3600');
-    createReadStream(file).pipe(res);
+    sendFileStream(res, file);
     return true;
   };
 
@@ -3514,7 +3738,8 @@ app.get('/api/random-frame', async (req, res) => {
   if (existsSync(cacheFile)) {
     res.setHeader('Content-Type', 'image/jpeg');
     res.setHeader('Cache-Control', 'private, max-age=3600');
-    return createReadStream(cacheFile).pipe(res);
+    sendFileStream(res, cacheFile);
+    return;
   }
 
   const fullPath = resolveVideoPath(filePath);
@@ -3835,6 +4060,9 @@ app.get('/api/run-of-show', async (_req, res) => {
   }
 });
 
+/** Unknown gameshow player ids already reported, so a bad config logs once, not per request. */
+const loggedUnknownPlayerIds = new Set<string>();
+
 app.get('/api/settings', async (_req, res) => {
   try {
     const config = await loadConfig();
@@ -3885,10 +4113,111 @@ app.get('/api/settings', async (_req, res) => {
       jokersInLastGame: config.jokersInLastGame === true,
       jokerUsageScope: config.jokerUsageScope === 'per-game' ? 'per-game' : 'per-gameshow',
       backgroundMusicSource: config.backgroundMusicSource === 'default' ? 'default' : 'theme',
-      players: activeShow?.players ?? [],
+      // The active gameshow's player ids resolved to registry players. An
+      // unknown id is skipped (and logged once). See specs/players.md.
+      players: resolveGameshowPlayers(config.players, activeShow?.players, id => {
+        if (loggedUnknownPlayerIds.has(id)) return;
+        loggedUnknownPlayerIds.add(id);
+        console.warn(`[settings] Gameshow "${config.activeGameshow}" lists unknown player id "${id}" — skipped`);
+      }),
+      // The whole registry, for the show's and the GM's add-field autocomplete.
+      registry: resolveGameshowPlayers(config.players, (config.players ?? []).map(p => p.id)),
+      // Deleted players (players-bin.json): suggested only for a name typed in full.
+      binned: await (async () => {
+        const ids = new Set((config.players ?? []).map(p => p.id));
+        return (await loadPlayerBin(ROOT_DIR)).filter(p => !ids.has(p.id));
+      })(),
     });
   } catch {
     res.status(500).json({ error: 'Failed to load config' });
+  }
+});
+
+// ── Live player adds/removes (show + gamemaster) ──
+//
+// POST /api/live-players — the show writes every add and remove made on the
+// show or the GM into the active gameshow's `players`; a new name becomes a
+// registry player with only the nickname. See specs/players.md ("Sync to the
+// gameshow").
+type LiveAdd = { id: string } | { firstName?: string; lastName?: string; nickname: string };
+
+function parseLivePlayersBody(body: unknown): { add: LiveAdd[]; remove: string[] } | null {
+  if (!body || typeof body !== 'object') return null;
+  const raw = body as Record<string, unknown>;
+  const add: LiveAdd[] = [];
+  const remove: string[] = [];
+  if (raw.add !== undefined) {
+    if (!Array.isArray(raw.add) || raw.add.length > 200) return null;
+    for (const entry of raw.add) {
+      if (!entry || typeof entry !== 'object') return null;
+      const e = entry as Record<string, unknown>;
+      if (typeof e.id === 'string' && e.id) {
+        add.push({ id: e.id });
+      } else if (typeof e.nickname === 'string' && e.nickname.trim()) {
+        const firstName = typeof e.firstName === 'string' ? e.firstName : '';
+        const lastName = typeof e.lastName === 'string' ? e.lastName : '';
+        add.push({ firstName, lastName, nickname: e.nickname });
+      } else {
+        return null;
+      }
+    }
+  }
+  if (raw.remove !== undefined) {
+    if (!Array.isArray(raw.remove) || raw.remove.length > 200) return null;
+    for (const id of raw.remove) {
+      if (typeof id !== 'string') return null;
+      remove.push(id);
+    }
+  }
+  return { add, remove };
+}
+
+app.post('/api/live-players', async (req, res) => {
+  const request = parseLivePlayersBody(req.body);
+  if (!request) {
+    res.status(400).json({ error: 'Body must be { add?: ({ id } | { nickname, firstName?, lastName? })[], remove?: string[] }' });
+    return;
+  }
+  try {
+    const result = await withConfigWriteLock(async () => {
+      let raw: Buffer;
+      try {
+        raw = await readFile(CONFIG_PATH);
+      } catch {
+        return { ok: false as const, status: 409, error: 'Keine config.json vorhanden.' };
+      }
+      if (isGitCryptBlob(raw)) return { ok: false as const, status: 409, error: 'config.json ist verschlüsselt.' };
+      let config: AppConfig;
+      try {
+        config = JSON.parse(raw.toString('utf8')) as AppConfig;
+      } catch {
+        return { ok: false as const, status: 409, error: 'config.json ist kein gültiges JSON.' };
+      }
+      const before = JSON.parse(raw.toString('utf8')) as unknown;
+      const applied = applyLivePlayers(config, request, await loadPlayerBin(ROOT_DIR));
+      if (!applied.ok) return { ok: false as const, status: 409, error: applied.error };
+      if (applied.changed) {
+        // Removed players go to the bin, restored ones come out of it.
+        await recordRegistryChange(ROOT_DIR, before, config);
+        const indent = await detectJsonIndent(CONFIG_PATH);
+        const tmpPath = `${CONFIG_PATH}.${randomUUID()}.tmp`;
+        try {
+          await writeFile(tmpPath, JSON.stringify(config, null, indent) + '\n', 'utf8');
+          await rename(tmpPath, CONFIG_PATH);
+        } catch (err) {
+          await unlink(tmpPath).catch(() => { /* tmp may already be gone */ });
+          throw err;
+        }
+      }
+      return { ok: true as const, players: applied.players };
+    });
+    if (!result.ok) {
+      res.status(result.status).json({ error: result.error });
+      return;
+    }
+    res.json({ players: result.players });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to save players: ${(err as Error).message}` });
   }
 });
 
@@ -4013,6 +4342,15 @@ app.get('/api/game/:index', async (req, res) => {
       gameConfig = { ...gameConfig, questions: enrichedQuestions };
     }
 
+    // Attach the precomputed stripe of each film. Cache only — a film whose stripe
+    // was never computed simply comes without the fields, and the show says so.
+    if (gameConfig.type === 'film-stripe') {
+      gameConfig = {
+        ...gameConfig,
+        questions: await attachFilmStripes(gameConfig.questions, VIDEO_CACHE_BASE, isSafePath),
+      };
+    }
+
     // Scoring is enabled for THIS game only when the show has teams AND this
     // game's mechanic can be scored with that many. An incompatible game still
     // plays in full — every game type implements the scoring-off path — it just
@@ -4044,10 +4382,21 @@ app.get('/api/backend/games', async (_req, res) => {
   try {
     const files = await readdir(GAMES_DIR);
     const jsonFiles = files.filter(f => f.endsWith('.json') && !f.includes('.fingerprints.'));
+    // First-added time per file from git; files git doesn't know fall back to the
+    // file's own times. See specs/admin-games-list.md.
+    const createdTimes = await gameCreatedTimes(ROOT_DIR, path.relative(ROOT_DIR, GAMES_DIR) || 'games');
 
     const results = await Promise.all(
       jsonFiles.map(async (file): Promise<GameFileSummary | null> => {
         const fileName = file.replace('.json', '');
+        let modifiedAt: number | undefined;
+        let createdAt: number | undefined;
+        try {
+          const st = await stat(path.join(GAMES_DIR, file));
+          modifiedAt = Math.round(st.mtimeMs);
+          createdAt = createdTimes.get(fileName)
+            ?? Math.round(st.birthtimeMs > 0 ? Math.min(st.birthtimeMs, st.mtimeMs) : st.mtimeMs);
+        } catch { /* timestamps are optional */ }
         try {
           const raw = await readFile(path.join(GAMES_DIR, file));
           if (isGitCryptBlob(raw)) return null;
@@ -4102,6 +4451,8 @@ app.get('/api/backend/games', async (_req, res) => {
             disabled,
             disabledInstances,
             scoringModes,
+            modifiedAt,
+            createdAt,
           };
         } catch (err) {
           console.warn(`Skipping invalid game file "${file}": ${(err as Error).message}`);
@@ -4112,6 +4463,8 @@ app.get('/api/backend/games', async (_req, res) => {
             instances: [],
             isSingleInstance: true,
             parseError: (err as Error).message,
+            modifiedAt,
+            createdAt,
           };
         }
       })
@@ -4569,6 +4922,18 @@ app.get('/api/backend/bandle/audio-status/:bandlePath', (req, res) => {
   res.json({ available: tracks.length > 0, tracks });
 });
 
+// GET /api/backend/player-bin — deleted players (players-bin.json), for the
+// admin's gameshow combobox. See specs/players.md ("Player bin").
+app.get('/api/backend/player-bin', async (_req, res) => {
+  try {
+    const config = JSON.parse(await readFile(CONFIG_PATH, 'utf8')) as AppConfig;
+    const ids = new Set((config.players ?? []).map(p => p.id));
+    res.json({ players: (await loadPlayerBin(ROOT_DIR)).filter(p => !ids.has(p.id)) });
+  } catch {
+    res.json({ players: await loadPlayerBin(ROOT_DIR) });
+  }
+});
+
 // GET /api/backend/config — return full config.json
 app.get('/api/backend/config', async (_req, res) => {
   try {
@@ -4584,6 +4949,15 @@ app.put('/api/backend/config', async (req, res) => {
   const tmpPath = `${CONFIG_PATH}.tmp`;
   try {
     await withConfigWriteLock(async () => {
+      // Players this write removes from the registry go to the local bin (and
+      // restored ones come out), before the config lands. An unreadable or
+      // encrypted old config bins nothing. See specs/players.md ("Player bin").
+      let before: unknown = null;
+      try {
+        const raw = await readFile(CONFIG_PATH);
+        if (!isGitCryptBlob(raw)) before = JSON.parse(raw.toString('utf8'));
+      } catch { /* no old config */ }
+      await recordRegistryChange(ROOT_DIR, before, req.body);
       const indent = await detectJsonIndent(CONFIG_PATH);
       await writeFile(tmpPath, JSON.stringify(req.body, null, indent) + '\n', 'utf8');
       await rename(tmpPath, CONFIG_PATH);
@@ -6086,6 +6460,7 @@ async function buildSystemStatusPayload(): Promise<Record<string, unknown>> {
       ffmpegAvailable,
       ytDlpAvailable,
       ytDlpPath: ytDlpAvailable ? YT_DLP_BIN : null,
+      lastCrash: LAST_CRASH,
     },
     storage: {
       nasMount: { reachable: nas },
@@ -6950,6 +7325,13 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
           if (code === 0) resolve(out.trim().split('\n'));
           else reject(new Error(`yt-dlp metadata exit ${code}`));
         });
+        // A failed spawn (missing binary, EACCES) emits 'error'; unhandled, it
+        // kills the whole server. See specs/crash-recovery.md.
+        proc.on('error', (err) => {
+          clearTimeout(metaTimeout);
+          jobAbort.signal.removeEventListener('abort', onAbort);
+          reject(err);
+        });
       });
 
       for (const line of metaLines) {
@@ -7032,6 +7414,9 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
           `https://www.youtube.com/watch?v=${track.id}`,
         ];
         const ytdlp = spawn(YT_DLP_BIN, ytdlpArgs);
+        // Settles the exit-code promise below as a failure instead of crashing the server.
+        let spawnFailed = false;
+        ytdlp.on('error', (err) => { spawnFailed = true; console.warn(`[yt-dlp] track spawn failed: ${err.message}`); });
 
         // Kill child process if job is cancelled
         const onAbort = () => { ytdlp.kill('SIGTERM'); };
@@ -7064,12 +7449,13 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
         ytdlp.stdout.on('data', onData);
 
         const exitCode = await new Promise<number>((resolve) => {
-          ytdlp.on('close', resolve);
+          ytdlp.on('close', (code) => resolve(code ?? -1));
+          ytdlp.on('error', () => resolve(-1));
         });
 
         jobAbort.signal.removeEventListener('abort', onAbort);
 
-        if (jobAbort.signal.aborted || exitCode !== 0) return null;
+        if (jobAbort.signal.aborted || spawnFailed || exitCode !== 0) return null;
 
         const files = (await readdir(trackDir)).filter(f => !f.startsWith('.'));
         // yt-dlp writes the media file + a .jpg thumbnail (via --write-thumbnail). Pick the
@@ -7179,6 +7565,12 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
         clearTimeout(t);
         jobAbort.signal.removeEventListener('abort', onAbort);
         resolve(out.trim().split('\n')[0] ?? '');
+      });
+      // Probe is best-effort: a failed spawn just means "no title", never a crash.
+      proc.on('error', () => {
+        clearTimeout(t);
+        jobAbort.signal.removeEventListener('abort', onAbort);
+        resolve('');
       });
     });
     if (probedTitle) {
@@ -7300,7 +7692,8 @@ app.post('/api/backend/assets/:category/youtube-download', async (req, res) => {
     ytdlp.stdout.on('data', onData);
 
     const exitCode = await new Promise<number>((resolve) => {
-      ytdlp.on('close', resolve);
+      ytdlp.on('close', (code) => resolve(code ?? -1));
+      ytdlp.on('error', (err) => { downloadError += `\n${err.message}`; resolve(-1); });
     });
 
     if (exitCode !== 0) {
@@ -9403,7 +9796,19 @@ async function runStartupMaintenance(): Promise<void> {
   });
 }
 
-const httpServer = app.listen(PORT, async () => {
+const httpServer = app.listen(PORT, async (err?: Error) => {
+  // Express 5 hands a listen error (e.g. EADDRINUSE) to this callback. Without
+  // this check the startup work below ran on a server that never listened.
+  // Exit so the supervisor retries with backoff. See specs/crash-recovery.md.
+  if (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    const msg = code === 'EADDRINUSE'
+      ? `Port ${PORT} is already in use — is another gameshow server still running?`
+      : `Server could not listen on port ${PORT}: ${err.message}`;
+    console.error(`[startup] ${msg}`);
+    flushAndExit(1);
+    return;
+  }
   // Warm the public-IP cache in the background so the System tab can show it
   // immediately on first open (best-effort — no-op when offline).
   getPublicIpCached();
@@ -9465,6 +9870,9 @@ const httpServer = app.listen(PORT, async () => {
 // across Node restarts. The next start picks them back up via PID liveness check.
 function flushAndExit(code: number = 0): void {
   try { whisperJobs.flushSync(); } catch { /* ignore */ }
+  // Stop accepting connections and drop the open ones so the port is free for
+  // the supervisor's restart right away. process.exit() follows synchronously.
+  try { httpServer.close(); httpServer.closeAllConnections(); } catch { /* ignore */ }
   process.exit(code);
 }
 process.on('SIGTERM', () => flushAndExit(0));

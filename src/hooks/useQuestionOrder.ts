@@ -11,6 +11,7 @@ import {
   setPlayOrder,
   getHighWater,
   noteHighWater,
+  bootResumeCursor,
 } from '@/utils/gamePlaythroughStore';
 
 /**
@@ -42,6 +43,11 @@ export interface QuestionOrderHandle {
   resumeIndex: number;
   /** Records how far the show has got. Safe to call on every question change. */
   note: (playIdx: number) => void;
+  /** Play index a reload of the show tab resumes at, or `null` when this mount
+   *  is not resuming one. A function, read when the question index initialises:
+   *  the token is dropped once the game phase is left, and a memoised value
+   *  would outlive that. See specs/crash-recovery.md. */
+  bootResumeIndex: () => number | null;
 }
 
 /**
@@ -54,9 +60,10 @@ export interface QuestionOrderHandle {
  * `useLiveQuestionIndex` in any component that tracks a current question.
  * See specs/live-question-order.md.
  *
- * With a `gameId` the order is stored per game for the session, so re-entering
- * the game via back-navigation reproduces the exact deck it was played with
- * (specs/game-back-review.md). Without one it lives for the component's lifetime.
+ * With a `gameId` the order is stored per game in the tab's sessionStorage, so
+ * re-entering the game via back-navigation — or reloading the tab — reproduces
+ * the exact deck it was played with (specs/game-back-review.md,
+ * specs/crash-recovery.md). Without one it lives for the component's lifetime.
  */
 export function useQuestionOrder<T extends { disabled?: boolean }>(
   questions: T[],
@@ -107,6 +114,10 @@ export function useQuestionOrder<T extends { disabled?: boolean }>(
       note: (playIdx: number) => {
         if (gameId) noteHighWater(gameId, playIdx);
         else if (playIdx > localHighWater.current) localHighWater.current = playIdx;
+      },
+      bootResumeIndex: () => {
+        const cursor = bootResumeCursor(gameId);
+        return cursor === null ? null : Math.min(cursor, lastIdx);
       },
     };
   }, [order, slotKeys, played.length, gameId]);

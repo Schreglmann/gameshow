@@ -3,6 +3,7 @@ import type { GameComponentProps } from './types';
 import type { WerKenntMehrConfig, WerKenntMehrQuestion, SimpleQuizQuestion } from '@/types/config';
 import type { GamemasterAnswerData, GamemasterControl, GamemasterCommand } from '@/types/game';
 import { useGameContext } from '@/context/GameContext';
+import { useRosterDisplayNames } from '@/hooks/useRosterDisplayNames';
 import { teamName } from '@/utils/teamNames';
 import { ALL_TEAM_KEYS, teamKeys, isTeamKey, type TeamKey } from '@/utils/teams';
 import { teamDisplayOrder } from '@/utils/teamOrder';
@@ -146,6 +147,7 @@ function WerKenntMehrInner({
   setGameTimer,
 }: InnerProps) {
   const { state } = useGameContext();
+  const playerLabels = useRosterDisplayNames();
   // Resuming (back-navigation): open at the last question's answer phase. The
   // live per-team count of that round isn't reconstructed — the answer is shown
   // for review (see specs/game-back-review.md).
@@ -394,7 +396,7 @@ function WerKenntMehrInner({
     );
     const subs = {} as Record<TeamKey, string | undefined>;
     for (const key of ALL_TEAM_KEYS) {
-      const members = state.teams[key] ?? [];
+      const members = playerLabels[key];
       subs[key] = members.length > 0 ? members.join(', ') : undefined;
     }
     const labelFor = labelOf;
@@ -441,15 +443,19 @@ function WerKenntMehrInner({
             active: selected[k] === true,
           })),
         });
-        controls.push({
-          type: 'input-group',
-          id: 'award-submit',
-          inputs: [
-            { id: `count-q${qIdx}`, label: 'Anzahl', inputType: 'number', placeholder: 'Anzahl', value: count, emitOnChange: true },
-          ],
-          submitLabel: isExample ? 'Weiter' : 'Punkte vergeben',
-          submitDisabled: !isExample && activeTeams.every(t => selected[t] !== true),
-        });
+        // The example awards nothing, so it gets no award form — the nav row's
+        // "Weiter" is its single advance control (specs/gamemaster-controls.md).
+        if (!isExample) {
+          controls.push({
+            type: 'input-group',
+            id: 'award-submit',
+            inputs: [
+              { id: `count-q${qIdx}`, label: 'Anzahl', inputType: 'number', placeholder: 'Anzahl', value: count, emitOnChange: true },
+            ],
+            submitLabel: 'Punkte vergeben',
+            submitDisabled: activeTeams.every(t => selected[t] !== true),
+          });
+        }
       }
     } else if (phase === 'summary') {
       // Standard-mode end reward screen — host picks the overall winner.
@@ -480,7 +486,7 @@ function WerKenntMehrInner({
     }
     setGamemasterControls(controls);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, qIdx, qKey, count, selectedKey, isExample, isStandard, pointSystemEnabled, labelOf, activeTeams, roundWins, tallyText, finalWinners, state.teams, state.settings.teamMirrorEnabled, state.settings.teamCount, setGamemasterControls, setNavState]);
+  }, [phase, qIdx, qKey, count, selectedKey, isExample, isStandard, pointSystemEnabled, labelOf, activeTeams, roundWins, tallyText, finalWinners, state.teams, playerLabels, state.settings.teamMirrorEnabled, state.settings.teamCount, setGamemasterControls, setNavState]);
 
   // Gamemaster command routing.
   const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
@@ -632,7 +638,7 @@ function WerKenntMehrInner({
         <div className="bet-quiz-host-panel">
           <div className="bet-quiz-host-row" data-team-count={showOrder.length}>
             {showOrder.map(teamKey => {
-              const members = state.teams[teamKey] ?? [];
+              const members = playerLabels[teamKey];
               const sel = selected[teamKey] === true;
               return (
                 <div className="bet-quiz-team-choice" data-team={teamKey} key={teamKey}>

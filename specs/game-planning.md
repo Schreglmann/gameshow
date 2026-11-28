@@ -20,9 +20,9 @@ This is why, when **two upcoming shows use the same game** with an overlapping p
 
 ## Acceptance criteria
 
-- [x] Each `GameshowConfig` has an optional `players` field (`string[]`) listing the current participants
+- [x] Each `GameshowConfig` has an optional `players` field (`string[]` of registry ids — see [players.md](players.md)) listing the current participants
 - [x] In the admin Config/Gameshows tab, each gameshow card has a **Spieler** field — a multi-value combobox where the operator picks participants
-- [x] The combobox suggests all player names known from **every gameshow's `players`** list; the operator can also type new names
+- [x] The combobox suggests the players of the global registry (`AppConfig.players`), matched on the full name; a name that is not in it offers "„…“ neu anlegen" (first/last-name form, adds the player to the registry and the gameshow in one step)
 - [x] Players are displayed as removable chips; typing and pressing Enter/comma adds a new name; Backspace removes the last chip
 - [x] Each gameshow card has a **▼ Planung** toggle button that expands the planning overview
 - [x] The planning overview lists every playable game instance (excluding `template` and `archive`), sorted by overlap: **Neu** first, then **Ungespielt**, then **Eingeplant**, then **Teilweise**, then **Gespielt**. Archive is always excluded here
@@ -46,21 +46,25 @@ Given gameshow G's `players` roster `P` and a ref `R` (first match wins):
 - **none** (`Ungespielt`): `R` was in a played show, but by nobody in `P`
 - **fresh** (`Neu`): never in a played show and not planned earlier
 
-Comparison is case-insensitive; names are trimmed. If no players are set, `planned`/`partial`/`full` cannot occur; a played-show game is `none` and everything else is `fresh` (badges for non-fresh are hidden when no roster is set).
+Players are compared by registry id, so a renamed player is still the same player. If no players are set, `planned`/`partial`/`full` cannot occur; a played-show game is `none` and everything else is `fresh` (badges for non-fresh are hidden when no roster is set).
 
 **Already-played gameshows hide all overlap badges.** When the gameshow card being viewed is itself before the active gameshow in config order (it has already happened), the planning aids no longer apply, so the overlap badges + provenance are hidden everywhere in that card (game-order rows, comboboxes, Planung overview). Only the active gameshow and upcoming ones show badges.
+
+## Spiele tab
+
+The admin **Spiele** list shows the per-game badge (same aggregation as the "Spiel hinzufügen…" picker) against the **active** gameshow, and can sort by it or filter to Neu / Ungespielt. See [admin-games-list.md](admin-games-list.md).
 
 ## Game editor: "Bereits gespielt von"
 
 The game editor (`GameEditor` → `InstanceEditor`) shows, per instance, a read-only derived list of which gameshows used that exact instance and their rosters — split into **Bereits gespielt** (happened shows) and **Eingeplant** (upcoming shows). Backed by `instanceUsage(ref, gameshows, activeGameshow)` in `src/utils/playerStats.ts`; `GameEditor` loads `gameshows` + `activeGameshow` from `fetchConfig()` and passes the per-instance result down as the `instanceUsage` prop.
 
-Each **player name in that display is clickable** and opens the player-profile modal (`PlayerStatsModal`) inline in the game editor (`GameEditor` loads the games list via `fetchGames()` for title resolution and passes `onPlayerClick`). The modal's gameshow links hand off the target id via `sessionStorage['focus-gameshow']` and switch to the Gameshows tab, which consumes it once loaded to expand + scroll to that card.
+Each **player name in that display is clickable** and opens the player lightbox over the game editor (names + stats — see [player-stats.md](player-stats.md)). Its gameshow links hand off the target id via `sessionStorage['focus-gameshow']` and switch to the Gameshows tab, which consumes it once loaded to expand + scroll to that card. The player names in the planning overview's "Gespielt / Eingeplant" lines open the player lightbox too.
 
 ## State / data changes
 
-- `players?: string[]` on `GameshowConfig` (`src/types/config.ts`), persisted in `config.json`
+- `players?: string[]` (registry ids) on `GameshowConfig` (`src/types/config.ts`), persisted in `config.json`
 - **No** per-game player field, **no** API changes. Derivation is entirely client-side from the `config.gameshows` record already available in the Gameshows tab.
-- Shared pure helpers live in `src/utils/playerStats.ts`: `buildOverlapContext` (takes `gameshows`, `currentId`, `currentPlayers`, `activeId`), `classifyOverlap`, `classifyGameOverlap`, `refProvenance`, and `instanceUsage` (editor display). Also used by the player-stats modal — see [player-stats.md](player-stats.md).
+- Shared pure helpers live in `src/utils/playerStats.ts`: `buildOverlapContext` (takes `gameshows`, `currentId`, `currentPlayers`, `activeId`), `classifyOverlap`, `classifyGameOverlap`, `refProvenance`, and `instanceUsage` (editor display). Also used by the player lightbox's stats — see [player-stats.md](player-stats.md).
 - `GameshowEditor` receives `activeGameshow` (the "now" divider) alongside `allGameshows`.
 
 ## UI behaviour

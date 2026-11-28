@@ -285,6 +285,9 @@ describe('Gamemaster run-of-show — expand toggle', () => {
 describe('Gamemaster run-of-show — navigation suppression', () => {
   beforeEach(() => {
     localStorage.clear();
+    // The input lock is on by default; unlock so these tests exercise the
+    // overlay guard, not the lock.
+    localStorage.setItem('gm-input-locked', 'false');
     sendCommandMock.mockClear();
     mockAnswer = null;
     mockControls = null;

@@ -7,6 +7,7 @@ import { MusicProvider } from '@/context/MusicContext';
 import BaseGameWrapper from '@/components/games/BaseGameWrapper';
 import { useFullscreen, useRegisterFullscreenMedia, type FullscreenMedia } from '@/context/FullscreenContext';
 import { __emitChannelForTests } from '@/services/useBackendSocket';
+import { getShowPosition, hydratePlaythroughStore, noteShowPhase, peekBootResume, setShowPosition } from '@/utils/gamePlaythroughStore';
 
 vi.mock('@/services/api', () => ({
   fetchSettings: vi.fn().mockResolvedValue({
@@ -357,6 +358,52 @@ describe('BaseGameWrapper (shared game shell)', () => {
       await sendGmCommand('toggle-fullscreen');
       await waitFor(() => expect(true).toBe(true));
       expect(document.querySelector('.lightbox-image')).toBeNull();
+    });
+  });
+
+  // A reload of the show tab resumes the phase the game was in. See specs/crash-recovery.md.
+  describe('reload resume', () => {
+    function reloadedIn(phase: 'rules' | 'game' | 'points', gameIndex = 2) {
+      setShowPosition(gameIndex, 'quiz/v1');
+      noteShowPhase(gameIndex, phase);
+      hydratePlaythroughStore();
+    }
+
+    it('reopens in the game phase without the landing or rules screens', async () => {
+      reloadedIn('game');
+      renderWrapper({ currentIndex: 2 });
+      await waitFor(() => expect(screen.getByText('Spielinhalt')).toBeInTheDocument());
+      expect(screen.queryByText('Regeln:')).not.toBeInTheDocument();
+    });
+
+    it('reopens on the rules screen', async () => {
+      reloadedIn('rules');
+      renderWrapper({ currentIndex: 2 });
+      await waitFor(() => expect(screen.getByText('Regeln:')).toBeInTheDocument());
+    });
+
+    it('reopens on the award screen', async () => {
+      reloadedIn('points');
+      renderWrapper({ currentIndex: 2 });
+      await waitFor(() => expect(screen.getByText('Punkte vergeben')).toBeInTheDocument());
+    });
+
+    it('ignores a saved position for another game index', async () => {
+      reloadedIn('game', 5);
+      renderWrapper({ currentIndex: 2 });
+      await waitFor(() => expect(screen.getByText('Testspiel')).toBeInTheDocument());
+      expect(screen.queryByText('Spielinhalt')).not.toBeInTheDocument();
+    });
+
+    it('records phase changes and drops the token once the resumed phase is left', async () => {
+      reloadedIn('game');
+      renderWrapper({ currentIndex: 2 });
+      await waitFor(() => expect(screen.getByText('Spielinhalt')).toBeInTheDocument());
+      expect(peekBootResume()).not.toBeNull();
+      pressArrowLeft(); // game → rules
+      await waitFor(() => expect(screen.getByText('Regeln:')).toBeInTheDocument());
+      expect(getShowPosition()?.phase).toBe('rules');
+      expect(peekBootResume()).toBeNull();
     });
   });
 });

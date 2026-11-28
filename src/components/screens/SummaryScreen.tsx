@@ -4,7 +4,8 @@ import { useGameContext } from '@/context/GameContext';
 import { useGamemasterSync, useGamemasterControlsSync, useGamemasterCommandListener } from '@/hooks/useGamemasterSync';
 import type { GamemasterCommand } from '@/types/game';
 import { teamName, joinTeamNames } from '@/utils/teamNames';
-import { leadingTeams, teamKeys, teamPoints, teamRoster } from '@/utils/teams';
+import { leadingTeams, teamKeys, teamPoints } from '@/utils/teams';
+import { useRosterDisplayNames } from '@/hooks/useRosterDisplayNames';
 import TeamDot from '@/components/common/TeamDot';
 import confetti from 'canvas-confetti';
 
@@ -32,7 +33,8 @@ export default function SummaryScreen() {
   const navigate = useNavigate();
   const { pointSystemEnabled, teamCount, showTitle } = state.settings;
 
-  const capitalize = (name: string) => name.charAt(0).toUpperCase() + name.slice(1);
+  // First names, plus a surname prefix where two share one. See specs/players.md.
+  const memberLabels = useRosterDisplayNames();
 
   // Back returns to the LAST game, opened at its end for review — the summary
   // is the end of the flow so there is no forward. See specs/app-navigation-flow.md
@@ -82,7 +84,7 @@ export default function SummaryScreen() {
       return {
         text: `${teamPoints(state.teams, solo)} Punkte`,
         subtitle: 'Vielen Dank fürs Spielen!',
-        members: teamRoster(state.teams, solo).map(capitalize),
+        members: memberLabels[solo],
       };
     }
     if (hasWinner) {
@@ -90,7 +92,7 @@ export default function SummaryScreen() {
       return {
         text: `${teamName(state.teams, winner)} hat gewonnen!`,
         subtitle: '',
-        members: teamRoster(state.teams, winner).map(capitalize),
+        members: memberLabels[winner],
         // Only the single-winner case names a team, so it is the only one that
         // can carry a colour dot. See specs/team-colors.md.
         team: winner,
@@ -102,7 +104,7 @@ export default function SummaryScreen() {
       ? `${joinTeamNames(state.teams, winners)} liegen gleichauf`
       : '';
     return { text: 'Es ist ein Unentschieden!', subtitle, members: [] };
-  }, [pointSystemEnabled, activeTeams, hasWinner, winners, state.teams]);
+  }, [pointSystemEnabled, activeTeams, hasWinner, winners, state.teams, memberLabels]);
 
   const showConfetti = pointSystemEnabled && hasWinner;
 

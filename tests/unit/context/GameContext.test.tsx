@@ -291,7 +291,7 @@ describe('GameContext', () => {
     expect(screen.getByTestId('order-swapped').textContent).toBe('true');
   });
 
-  it('restores teams from localStorage on init', () => {
+  it('restores teams from localStorage on init (legacy name strings are converted)', () => {
     localStorage.setItem('team1', JSON.stringify(['Restored1']));
     localStorage.setItem('team2', JSON.stringify(['Restored2']));
     localStorage.setItem('team1Points', '10');
@@ -299,8 +299,8 @@ describe('GameContext', () => {
 
     renderWithProvider(<TestConsumer />);
 
-    expect(screen.getByTestId('team1').textContent).toBe('["Restored1"]');
-    expect(screen.getByTestId('team2').textContent).toBe('["Restored2"]');
+    expect(screen.getByTestId('team1').textContent).toBe(JSON.stringify([{ firstName: 'Restored1', lastName: '' }]));
+    expect(screen.getByTestId('team2').textContent).toBe(JSON.stringify([{ firstName: 'Restored2', lastName: '' }]));
     expect(screen.getByTestId('team1-points').textContent).toBe('10');
     expect(screen.getByTestId('team2-points').textContent).toBe('20');
   });

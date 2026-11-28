@@ -1,6 +1,7 @@
 import { useGameContext } from '@/context/GameContext';
 import { teamName, hasNamedTeams } from '@/utils/teamNames';
-import { teamRoster, type TeamKey } from '@/utils/teams';
+import type { TeamKey } from '@/utils/teams';
+import { useRosterDisplayNames } from '@/hooks/useRosterDisplayNames';
 import { teamDisplayOrder } from '@/utils/teamOrder';
 import { tallyTotals, questionTally } from '@/utils/correctAnswers';
 import { NO_QUESTION_KEY } from '@/types/game';
@@ -30,6 +31,7 @@ export default function CorrectAnswersTracker({
   readOnly = false,
 }: CorrectAnswersTrackerProps) {
   const { state, dispatch } = useGameContext();
+  const memberLabels = useRosterDisplayNames();
   const byQuestion = state.correctAnswersByGame[String(gameIndex)];
   // The big number stays the GAME total (the host's habitual read); it is summed
   // from the per-question buckets rather than stored, so the two can't drift.
@@ -101,7 +103,7 @@ export default function CorrectAnswersTracker({
         renderTeam(
           team,
           hasNamedTeams(state.settings.teamCount) ? teamName(state.teams, team) : 'Richtig',
-          teamRoster(state.teams, team),
+          memberLabels[team],
         ),
       )}
     </div>

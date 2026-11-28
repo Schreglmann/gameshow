@@ -12,6 +12,7 @@ A standard question-and-answer game where the host reads a question aloud, then 
 - [x] Optional `questionAudio`: plays when question is shown and **keeps playing** while the answer is shown; if the question also has `answerAudio` that refers to a different file, question audio is stopped immediately (not faded) when the answer is revealed
 - [x] Optional `answerAudio`: plays automatically when the answer is revealed; if it refers to a different file than `questionAudio`, the question audio is stopped immediately to hand over
 - [x] When `questionAudio` and `answerAudio` reference the **same file**, playback continues on reveal instead of restarting — the existing audio element keeps playing from its current position, and answer-side `answerAudioEnd` / `answerAudioLoop` settings take over. `answerAudioStart` is ignored in this case (the point is to continue, not jump)
+- [x] Gamemaster audio controls (`audio-playpause` / `audio-restart`) drive the question audio until the reveal; once an `answerAudio` plays, they drive that clip instead (restart = `answerAudioStart`). Without `answerAudio` the question audio keeps its controls through the reveal
 - [x] Optional `answerList`: displays a list of accepted answers instead of a single answer string
 - [x] When advancing to the next question, both question and answer audio are **cut immediately** (no fade)
 - [x] When navigating **backwards** (ArrowLeft):

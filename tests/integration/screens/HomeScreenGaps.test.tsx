@@ -14,7 +14,9 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
+const mockSyncLivePlayers = vi.hoisted(() => vi.fn().mockResolvedValue({ players: [] }));
 vi.mock('@/services/api', () => ({
+  syncLivePlayers: (...args: unknown[]) => mockSyncLivePlayers(...args),
   fetchSettings: vi.fn().mockResolvedValue({
     pointSystemEnabled: true,
     teamRandomizationEnabled: true,
@@ -116,8 +118,8 @@ describe('HomeScreen - Gaps', () => {
     // Members render as editable inputs.
     expect(screen.getByDisplayValue('Alice')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Bob')).toBeInTheDocument();
-    // No name-pool textarea (that's the random-mode surface).
-    expect(screen.queryByPlaceholderText(/Name 1, Name 2/)).not.toBeInTheDocument();
+    // No hidden-draw add field (that's the random-mode surface).
+    expect(screen.queryByLabelText('Name hinzufügen')).not.toBeInTheDocument();
   });
 
   it('manual mode: typing into the ghost slot adds a player', async () => {
@@ -135,6 +137,32 @@ describe('HomeScreen - Gaps', () => {
     await user.type(screen.getByLabelText('Spieler zu Team 1 hinzufügen'), 'Zoe');
     await user.keyboard('{Enter}');
     await waitFor(() => expect(screen.getByDisplayValue('Zoe')).toBeInTheDocument());
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('manual mode: a suggestion picked in the ghost slot is filled in, the next Enter adds them', async () => {
+    const user = userEvent.setup();
+    localStorage.setItem('team1', JSON.stringify(['Alice']));
+    vi.mocked(fetchSettings).mockResolvedValue({
+      pointSystemEnabled: true,
+      teamRandomizationEnabled: false,
+      globalRules: [],
+      registry: [{ id: 'marlene-auer', firstName: 'Marlene', lastName: 'Auer', nickname: 'Maus' }],
+    });
+
+    renderHome();
+    const slot = await screen.findByLabelText('Spieler zu Team 1 hinzufügen');
+    await user.type(slot, 'mar');
+    await user.keyboard('{ArrowDown}{Enter}');
+    // Filled in, not added yet: the slot keeps the focus.
+    expect(slot).toHaveValue('Marlene „Maus“ Auer');
+    expect(slot).toHaveFocus();
+    expect(JSON.parse(localStorage.getItem('team1') ?? '[]')).toEqual(['Alice']);
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(screen.getByDisplayValue('Maus')).toBeInTheDocument());
+    expect(JSON.parse(localStorage.getItem('team1') ?? '[]')).toContainEqual(
+      { firstName: 'Marlene', lastName: 'Auer', nickname: 'Maus', id: 'marlene-auer' },
+    );
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 
@@ -228,19 +256,18 @@ describe('HomeScreen - Gaps', () => {
       expect(screen.getByText('Game Show')).toBeInTheDocument();
     });
 
-    const input = await screen.findByPlaceholderText('Name 1, Name 2, ...');
+    const input = await screen.findByLabelText('Name hinzufügen');
     await user.type(input, '  Alice , , Bob ,  ');
+    await user.click(screen.getByRole('button', { name: 'Hinzufügen' }));
+    await user.click(screen.getByRole('button', { name: 'Teams zuweisen' }));
 
-    // Submit
-    const form = input.closest('form');
-    if (form) {
-      form.dispatchEvent(new Event('submit', { bubbles: true }));
-    }
-
-    // Should show teams after assignment  
+    // Should show teams after assignment — exactly the two real names.
     await waitFor(() => {
       expect(screen.getByText(/Team 1/)).toBeInTheDocument();
     });
+    expect(screen.getByDisplayValue('Alice')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('Bob')).toBeInTheDocument();
+    expect(document.querySelectorAll('.team-member-input')).toHaveLength(2);
   });
 
   it('shows team assignment after submission', async () => {
@@ -251,14 +278,10 @@ describe('HomeScreen - Gaps', () => {
       expect(screen.getByText('Game Show')).toBeInTheDocument();
     });
 
-    const input = await screen.findByPlaceholderText('Name 1, Name 2, ...');
+    const input = await screen.findByLabelText('Name hinzufügen');
     await user.type(input, 'Alice, Bob, Charlie, Dave');
-
-    // Submit
-    const form = input.closest('form');
-    if (form) {
-      form.dispatchEvent(new Event('submit', { bubbles: true }));
-    }
+    await user.click(screen.getByRole('button', { name: 'Hinzufügen' }));
+    await user.click(screen.getByRole('button', { name: 'Teams zuweisen' }));
 
     // After assignment, both teams should show
     await waitFor(() => {
@@ -271,9 +294,10 @@ describe('HomeScreen - Gaps', () => {
     const user = userEvent.setup();
     renderHome();
 
-    const input = await screen.findByPlaceholderText('Name 1, Name 2, ...');
+    const input = await screen.findByLabelText('Name hinzufügen');
     await user.type(input, 'Alice, Bob');
-    await user.click(screen.getByText('Teams zuweisen'));
+    await user.click(screen.getByRole('button', { name: 'Hinzufügen' }));
+    await user.click(screen.getByRole('button', { name: 'Teams zuweisen' }));
 
     await waitFor(() => {
       expect(screen.getByText(/Team 1/)).toBeInTheDocument();

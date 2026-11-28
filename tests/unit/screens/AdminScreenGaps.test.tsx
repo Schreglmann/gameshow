@@ -119,16 +119,16 @@ describe('AdminScreen - Gaps', () => {
   it('saves team names to localStorage on blur', async () => {
     renderAdmin();
 
-    const team1Input = screen.getByPlaceholderText('Alice, Bob, ...');
-    const team2Input = screen.getByPlaceholderText('Clara, Dave, ...');
+    const team1Input = screen.getByPlaceholderText('Anna Müller, Ben Huber, ...');
+    const team2Input = screen.getByPlaceholderText('Clara Weber, Dave Bauer, ...');
     fireEvent.change(team1Input, { target: { value: 'Awesome Team' } });
     fireEvent.blur(team1Input);
     fireEvent.change(team2Input, { target: { value: 'Cool Team' } });
     fireEvent.blur(team2Input);
 
     await waitFor(() => {
-      expect(JSON.parse(localStorage.getItem('team1') || '[]')).toContain('Awesome Team');
-      expect(JSON.parse(localStorage.getItem('team2') || '[]')).toContain('Cool Team');
+      expect(JSON.parse(localStorage.getItem('team1') || '[]')).toContainEqual({ firstName: '', lastName: '', nickname: 'Awesome Team' });
+      expect(JSON.parse(localStorage.getItem('team2') || '[]')).toContainEqual({ firstName: '', lastName: '', nickname: 'Cool Team' });
     });
   });
 
@@ -155,8 +155,8 @@ describe('AdminScreen - Gaps', () => {
 
     renderAdmin();
 
-    expect((screen.getByPlaceholderText('Alice, Bob, ...') as HTMLInputElement).value).toBe('Alpha');
-    expect((screen.getByPlaceholderText('Clara, Dave, ...') as HTMLInputElement).value).toBe('Beta');
+    expect((screen.getByPlaceholderText('Anna Müller, Ben Huber, ...') as HTMLInputElement).value).toBe('Alpha');
+    expect((screen.getByPlaceholderText('Clara Weber, Dave Bauer, ...') as HTMLInputElement).value).toBe('Beta');
     const spinbuttons = screen.getAllByRole('spinbutton');
     expect((spinbuttons[0] as HTMLInputElement).value).toBe('15');
     expect((spinbuttons[1] as HTMLInputElement).value).toBe('25');

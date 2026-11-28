@@ -3,7 +3,7 @@ import { StrictMode } from 'react';
 import { renderHook, act } from '@testing-library/react';
 import { useQuestionOrder } from '@/hooks/useQuestionOrder';
 import { useLiveQuestionIndex } from '@/hooks/useLiveQuestionIndex';
-import { clearPlaythroughStore } from '@/utils/gamePlaythroughStore';
+import { clearPlaythroughStore, hydratePlaythroughStore, setShowPosition, noteShowPhase, clearBootResume } from '@/utils/gamePlaythroughStore';
 
 interface Q { question: string; disabled?: boolean }
 
@@ -194,6 +194,58 @@ describe('useLiveQuestionIndex', () => {
       });
       expect(second.result.current.qIdx).toBe(2);
       expect(second.result.current.onScreen).toBe('B');
+    });
+  });
+
+  // A reload of the show tab reopens the question that was on screen, in the
+  // same shuffled order. See specs/crash-recovery.md.
+  describe('reload resume', () => {
+    const questions = src('A', 'B', 'C', 'D', 'E', 'F');
+    const gameId = 'random/v1';
+
+    function playThenReload(phase: 'game' | 'rules' = 'game') {
+      const before = renderHook(useHarness, { initialProps: { questions, gameId, randomize: true } });
+      act(() => before.result.current.setQIdx(4));
+      const deck = before.result.current.played.map(p => p.question);
+      const onScreen = before.result.current.onScreen;
+      setShowPosition(2, gameId);
+      noteShowPhase(2, phase);
+      before.unmount();
+      hydratePlaythroughStore(); // the reload
+      return { deck, onScreen };
+    }
+
+    it('reopens the same question in the same shuffled order', () => {
+      const { deck, onScreen } = playThenReload();
+      const after = renderHook(useHarness, { initialProps: { questions, gameId, randomize: true } });
+      expect(after.result.current.played.map(p => p.question)).toEqual(deck);
+      expect(after.result.current.qIdx).toBe(4);
+      expect(after.result.current.onScreen).toBe(onScreen);
+    });
+
+    it('takes precedence over a back-review resumeAtEnd', () => {
+      playThenReload();
+      const after = renderHook(useHarness, { initialProps: { questions, gameId, randomize: true, resumeAtEnd: true } });
+      expect(after.result.current.qIdx).toBe(4);
+    });
+
+    it('does not apply when the reload was outside the game phase', () => {
+      playThenReload('rules');
+      const after = renderHook(useHarness, { initialProps: { questions, gameId, randomize: true } });
+      expect(after.result.current.qIdx).toBe(0);
+    });
+
+    it('a re-entry after the token was dropped starts at question 0', () => {
+      playThenReload();
+      clearBootResume();
+      const after = renderHook(useHarness, { initialProps: { questions, gameId, randomize: true } });
+      expect(after.result.current.qIdx).toBe(0);
+    });
+
+    it('does not apply to a different game', () => {
+      playThenReload();
+      const other = renderHook(useHarness, { initialProps: { questions, gameId: 'other/v1' } });
+      expect(other.result.current.qIdx).toBe(0);
     });
   });
 });

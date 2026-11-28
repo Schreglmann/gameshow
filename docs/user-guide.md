@@ -17,13 +17,13 @@ Open the app in a browser. You will see the **Home Screen**.
 ![Home Screen](./screenshots/home-screen.png)
 > *Add screenshot: `docs/screenshots/home-screen.png` — the home screen with player name fields and a "Weiter" button*
 
-Enter the names of all players into the text field, separated by commas:
+The players configured for the gameshow are listed on the home screen. To add someone, start typing into **Name hinzufügen**: a list suggests the known players (full name and nickname). Pick one with the arrow keys and Enter, or tap it. A name that is not in the list is added exactly as you type it — several at once separated by commas:
 
 ```
-Anna, Ben, Clara, David
+Anna Müller, Ben, Clara
 ```
 
-Click **Weiter**. The app randomly assigns players to **Team 1** and **Team 2**.
+A player who is already listed can't be added twice. Players are shown by their nickname; when two share one, the screen adds the start of the surname ("Anna M." / "Anna H."). Everyone you add or remove here (or on the gamemaster) is added to or removed from the gameshow in the admin too; a new name appears in the admin's **Spieler** tab marked "Name fehlt", so first name and surname can be filled in later. The app assigns everyone to the teams at random, and the host reveals them with **Teams zuweisen**.
 
 > **Tip:** If the team randomization screen does not appear, the host has disabled it. The game starts directly.
 

@@ -9,6 +9,12 @@ import TeamCardName from '@/components/common/TeamCardName';
 // lines the box then holds. See specs/team-management.md.
 const BOX_WIDTH = 200;
 
+// The hook writes both `-webkit-line-clamp` and `line-clamp`. jsdom (since v31)
+// treats them as the same property, so only the last one written survives —
+// read whichever is set.
+const clampOf = (el: HTMLElement) =>
+  el.style.getPropertyValue('-webkit-line-clamp') || el.style.getPropertyValue('line-clamp');
+
 function stubLayout(boxWidth = BOX_WIDTH) {
   const spanOf = () => document.querySelector<HTMLElement>('.team-card-name-text')!;
   const headingOf = () => document.querySelector<HTMLElement>('.team-card-name')!;
@@ -30,7 +36,7 @@ function stubLayout(boxWidth = BOX_WIDTH) {
   vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(boxWidth);
   vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function (this: HTMLElement) {
     // Only the span is measured; the clamp caps how many lines are visible.
-    const clamp = this.style.getPropertyValue('-webkit-line-clamp');
+    const clamp = clampOf(this);
     const visible = clamp && clamp !== 'none' ? Math.min(lines(), parseInt(clamp, 10)) : lines();
     return Math.round(visible * fontSize() * 1.2);
   });
@@ -55,7 +61,7 @@ describe('TeamCardName', () => {
     const { headingOf, spanOf, BASE } = stubLayout();
     render(<TeamCardName team="team1" name="Team 1" />);
     expect(headingOf().style.fontSize).toBe(`${BASE}px`);
-    expect(spanOf().style.getPropertyValue('-webkit-line-clamp')).toBe('1');
+    expect(clampOf(spanOf())).toBe('1');
     expect(spanOf().dataset.nameClipped).toBeUndefined();
   });
 
@@ -65,7 +71,7 @@ describe('TeamCardName', () => {
     const fitted = parseFloat(headingOf().style.fontSize);
     expect(fitted).toBeLessThan(BASE);
     // Two lines of the fitted size fit the one-line box only at half size.
-    expect(Number(spanOf().style.getPropertyValue('-webkit-line-clamp'))).toBeGreaterThan(1);
+    expect(Number(clampOf(spanOf()))).toBeGreaterThan(1);
     expect(spanOf().dataset.nameClipped).toBeUndefined();
   });
 

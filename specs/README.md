@@ -46,6 +46,7 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | No autofocus of admin search inputs on touch devices | [admin-no-autofocus-touch.md](admin-no-autofocus-touch.md) | ✅ Implemented |
 | Game planning | [game-planning.md](game-planning.md) | ✅ Implemented |
 | Player stats (games-played history) | [player-stats.md](player-stats.md) | ✅ Implemented |
+| Players (registry, unique players, short display names) | [players.md](players.md) | ✅ Implemented |
 | Media encryption | [media-encryption.md](media-encryption.md) | ✅ Implemented |
 | Keyboard navigation | [keyboard-navigation.md](keyboard-navigation.md) | ✅ Implemented |
 | Header | [header.md](header.md) | ✅ Implemented |
@@ -74,6 +75,7 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | Admin backend (games/assets/config CMS) | [admin-backend.md](admin-backend.md) | ✅ Implemented |
 | Admin Gameshows tab (split from Config, collapsible cards) | [admin-gameshows-tab.md](admin-gameshows-tab.md) | ✅ Implemented |
 | Admin save queue (unmount-safe autosave, retry, status indicator) | [admin-save-queue.md](admin-save-queue.md) | ✅ Implemented |
+| Admin games list sort + Neu/Ungespielt filter | [admin-games-list.md](admin-games-list.md) | ✅ Implemented |
 | DAM asset merge (deduplication) | [asset-merge.md](asset-merge.md) | 🗂 Planned |
 | Audio cover override + source labels + propagation | [audio-cover-override.md](audio-cover-override.md) | 🗂 Planned |
 | Admin system status dashboard | [admin-system-status.md](admin-system-status.md) | ✅ Implemented |
@@ -83,6 +85,7 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | Gamemaster next-answer preview | [gamemaster-next-answer.md](gamemaster-next-answer.md) | ✅ Implemented |
 | Gamemaster hide-answers toggle | [gamemaster-hide-answers.md](gamemaster-hide-answers.md) | ✅ Implemented |
 | Gamemaster info (host-only note per question, `gmInfo`) | [gamemaster-info.md](gamemaster-info.md) | ✅ Implemented |
+| Gamemaster hide-show-buttons toggle | [gamemaster-hide-show-controls.md](gamemaster-hide-show-controls.md) | ✅ Implemented |
 | Gamemaster show-scroll controls | [gamemaster-scroll.md](gamemaster-scroll.md) | ✅ Implemented |
 | Gamemaster fullscreen toggle | [gamemaster-fullscreen.md](gamemaster-fullscreen.md) | ✅ Implemented |
 | Gamemaster background-music remote control | [gamemaster-music-control.md](gamemaster-music-control.md) | ✅ Implemented |
@@ -103,6 +106,7 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | Rules presets (per-game references to shared rule sets) | [rules-presets.md](rules-presets.md) | 🗂 Planned |
 | Asset resilience (retry, preload, decoder cleanup) | [asset-resilience.md](asset-resilience.md) | ✅ Implemented |
 | Chunk-load recovery (lazy-import retry + reload after stale-build) | [chunk-load-recovery.md](chunk-load-recovery.md) | ✅ Implemented |
+| Crash recovery (supervised restart, crash log, offline indicators, main-show reclaim, resume after reload) | [crash-recovery.md](crash-recovery.md) | ✅ Implemented |
 | Server-side asset-serving priority (file serving pre-empts background ffmpeg) | [server-asset-priority.md](server-asset-priority.md) | ✅ Implemented |
 | DAM image AI-upscale (local Real-ESRGAN, Mac + Linux) | [dam-image-upscale.md](dam-image-upscale.md) | 🗂 Planned |
 | Spelling & grammar check ("Lektorat", LanguageTool, global toggle) | [spellcheck.md](spellcheck.md) | ✅ Implemented |
@@ -130,8 +134,14 @@ Per-zone replacement guides live at [`../docs/replace-frontend.md`](../docs/repl
 | Cover oder Original (uses simple-quiz) | [games/cover-oder-original.md](games/cover-oder-original.md) | ✅ Implemented |
 | Random frame (guess the movie from a random video still) | [games/random-frame.md](games/random-frame.md) | ✅ Implemented |
 | City compass (guess the center city from its neighbors' bearings) | [games/city-compass.md](games/city-compass.md) | ✅ Implemented |
+| Venn / Schnittmenge (the term that fits both categories of two overlapping circles) | [games/venn.md](games/venn.md) | ✅ Implemented |
+| Film stripe / Filmstreifen (guess the film from a stripe of its colours over time) | [games/film-stripe.md](games/film-stripe.md) | ✅ Implemented |
+| Welches Land fehlt? (uses simple-quiz, generated maps) | [games/welches-land-fehlt.md](games/welches-land-fehlt.md) | ✅ Implemented |
 | Ein Stern. Würde nicht wiederkommen. (uses simple-quiz) | [games/ein-stern.md](games/ein-stern.md) | ✅ Implemented |
 | Sprachsalat (uses simple-quiz) | [games/sprachsalat.md](games/sprachsalat.md) | ✅ Implemented — clips placed, need listen-check |
+| Inhaltsverzeichnis (uses four-statements) | [games/inhaltsverzeichnis.md](games/inhaltsverzeichnis.md) | ✅ Implemented |
+| Zutatenliste (uses simple-quiz) | [games/zutatenliste.md](games/zutatenliste.md) | ✅ Implemented |
+| Mandela-Effekt (uses simple-quiz) | [games/mandela-effekt.md](games/mandela-effekt.md) | ✅ Implemented |
 
 ---
 

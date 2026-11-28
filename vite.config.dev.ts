@@ -1,6 +1,6 @@
 import { defineConfig, type Plugin } from 'vite';
 import path from 'path';
-import { sharedPlugins, sharedResolve, sharedServer, projectRoot } from './vite.config.shared';
+import { sharedPlugins, sharedResolve, sharedServer, projectRoot } from './vite.config.shared.ts';
 
 // Route /, /show*, /admin*, /gamemaster* to their respective subdirectory
 // index.html so Vite's dev server serves the right entry instead of falling

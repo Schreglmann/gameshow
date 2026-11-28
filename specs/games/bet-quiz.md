@@ -57,8 +57,8 @@ Every question also accepts the optional `gmInfo` (host-only note, shown in the 
 - Question/answer phase: persistent banner above the question (class `.bet-quiz-banner`) — "Team X · Alice, Bob · Einsatz: 12 Punkte"
 - Gamemaster controls per phase (via `setGamemasterControls`):
   - `category`: `button-group` for team selection (shows member names as part of labels), `input-group` for bet (single numeric field), submit `button` ("Frage anzeigen") with `disabled` when invalid, and an `info` line explaining any cap violation
-  - `question`: nav only (BaseGameWrapper provides Weiter)
-  - `answer`/`judging`: `button-group` with Richtig/Falsch for the winning team + Next button (disabled until judged)
+  - `question`: nav (BaseGameWrapper provides Weiter) + audio play/pause/restart while the question audio is loaded
+  - `answer`/`judging`: audio play/pause/restart while the `answerAudio` plays (the question audio is stopped at the reveal, so it has none) + `button-group` with Richtig/Falsch for the winning team + Next button (disabled until judged)
 - Keyboard nav works the same as `simple-quiz` — forward advances phase/question, back steps through phases
 - Audio/timer behaviour inherited from `SimpleQuiz` via the shared view (audio plays from question phase, cuts between questions, fades at next game's landing per existing rules)
 

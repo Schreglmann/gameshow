@@ -36,7 +36,7 @@ answers are hidden.
   a neutral mask (`•••••`, `.gamemaster-answer-text--masked`). Rank chips and the
   `revealed` / `pending` states stay visible, and clicking a row still sends `rank-<n>`.
   No separate hint line is rendered in this case.
-- [ ] A **hint list** (`city-compass`, `four-statements`, `data.hintList`) is not answer
+- [ ] A **hint list** (`city-compass`, `four-statements`, `venn`, `data.hintList`) is not answer
   content: its `revealed` rows stay legible while answers are hidden, because those cities /
   clues are on the projector anyway. Only the **pending** rows — clues the host has not
   introduced yet — get the mask. Clickable hint rows (`hintListClickable`) stay clickable

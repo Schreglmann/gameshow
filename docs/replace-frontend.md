@@ -21,7 +21,8 @@ All return `application/json` unless noted. Full schemas: [openapi.yaml](../spec
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| `GET` | `/api/settings` | Global settings for the active gameshow (`showTitle` for the landing-page heading, point system incl. `pointMode`, rules, jokers, clean-install flag, `teamColors` — per-team accent colours, empty when the operator has them off). |
+| `GET` | `/api/settings` | Global settings for the active gameshow (`showTitle` for the landing-page heading, point system incl. `pointMode`, rules, jokers, clean-install flag, `teamColors` — per-team accent colours, empty when the operator has them off; `players` of the gameshow and the whole `registry` for the add-field autocomplete). |
+| `POST` | `/api/live-players` | **Optional.** Write the players added or removed during the show into the active gameshow (`{ add: [{ id } \| { nickname }], remove: [id] }`), so the admin stays in sync. Send it from the active show tab only. See [specs/players.md](../specs/players.md). |
 | `GET` | `/api/theme` | Current theme names for frontend + admin. |
 | `PUT` | `/api/theme` | Partial theme update (show PWA writes `frontend` key). |
 | `GET` | `/api/game/:index` | Resolve `gameOrder[index]` → full `GameConfig` + navigation metadata. |
@@ -31,7 +32,9 @@ All return `application/json` unless noted. Full schemas: [openapi.yaml](../spec
 | `GET` | `/videos-compressed/:start/:end/:path` | Range-GET H.264 SDR segment stream. |
 | `GET` | `/videos-sdr/:start/:end/:path` | Range-GET HDR→SDR tone-mapped segment stream. |
 | `GET` | `/api/random-frame?path=<asset>&seed=<n>&variant=<n>&qindex=<n>&start=<s>&end=<s>` | `image/jpeg` — a random still frame from a video (random-frame game). Re-roll by bumping `variant` (the GM rotate counter); for a reachable source it's folded into the seed, for an unreachable source it cycles the per-question prerendered fallback frames (matched by `qindex`). Add `&prerendered=1` to force the downloaded frame (stopgap while a live frame loads). |
+| `GET` | `/api/film-stripe/frame?path=<asset>&i=<n>` | `image/jpeg` — still `i` of the precomputed time-lapse of a film (film-stripe game). Served from the local cache only; 404 when the stripe was never computed. The colours and the number of stills arrive with the question as `stripe` in `GET /api/game/:index`. |
 | `GET` | `/local-assets/**` | Raw asset files (images, audio, videos, background-music, bandle-audio). |
+| `GET` | `/api/health` | **Optional.** `{ ok, uptimeSeconds, startedAt }`. The reference show polls it before an automatic page reload, so a reload never lands on the browser's error page while the server is restarting. See [specs/crash-recovery.md](../specs/crash-recovery.md). |
 
 ## Required WebSocket channels
 
@@ -45,10 +48,11 @@ One socket at `/api/ws`. Wire format: `{ channel, data }` for payloads, `{ type 
 | `show-reemit-request` | no | Server asks the active show to re-emit its cached state (after reconnects). |
 | `gamemaster-command` | no | Commands emitted by the gamemaster (`next`, `award`, `use-joker`, …). |
 | `music-command` | no | **Optional.** `{ action: 'toggle'\|'skip'\|'volume'\|'seek', value?, timestamp }` background-music commands from the gamemaster. Only the active show acts on them, applying them to its background-music player. See [specs/gamemaster-music-control.md](../specs/gamemaster-music-control.md). |
-| `gamemaster-team-state-v2` | yes | Team members + points + joker usage + `scoreHistory` (scoring-undo audit log) changes pushed by any other PWA. Covers teams 1-4; `team3`/`team4` are absent in a 0-2 team show — read a missing team as `[]` / `0`. See specs/team-count.md. |
+| `gamemaster-team-state-v3` | yes | Team members + points + joker usage + `scoreHistory` (scoring-undo audit log) changes pushed by any other PWA. Covers teams 1-4; `team3`/`team4` are absent in a 0-2 team show — read a missing team as `[]` / `0`. See specs/team-count.md. |
 | `show-hold` | yes | `{ active, message? }` panic/pause hold from the gamemaster. While `active`, render a full-screen hold over everything (above the lightbox + music controls). Cached → a reload mid-hold re-receives it. |
+| `show-controls-hidden` | yes | **Optional.** `{ hidden }` from the gamemaster. While `hidden`, hide your own control buttons (the gamemaster drives the show); keep displays the audience reads (jokers, selected team, mirrored bets/guesses) visible. Keep any control that has no gamemaster equivalent, such as taking over as the active show. Apply it only while `gm-presence` reports a connected gamemaster: the value is cached and outlives the gamemaster, and a show without one needs its buttons. Cached → a reload re-receives it. |
 | `gamemaster-question-tally` | yes | Correct-answer tally changes pushed by any other PWA. |
-| `content-changed` | no | `{ config?, theme?, games? }`. On `config`/`games`, re-fetch `GET /api/game/:index` (and `/api/settings`) so edits, added games, and added questions apply without a reload. On `theme`, re-fetch `GET /api/theme`. Stay live without reloading. |
+| `content-changed` | no | `{ config?, theme?, games?, filmStripes? }`. On `config`/`games`/`filmStripes`, re-fetch `GET /api/game/:index` (and `/api/settings`) so edits, added games, and added questions apply without a reload. On `theme`, re-fetch `GET /api/theme`. Stay live without reloading. |
 | `assets-changed` | no | `{ category }`. On `category === 'background-music'`, re-fetch `GET /api/background-music?theme=<id>` so DAM add/delete/move of music applies without a reload. Keep the running track playing on an add or a delete of a non-current track; only crossfade when the *currently-playing* track is deleted. |
 
 ### Publish to (send)
@@ -57,7 +61,7 @@ One socket at `/api/ws`. Wire format: `{ channel, data }` for payloads, `{ type 
 |---------|---------|--------------|
 | `gamemaster-answer` | yes | Whenever the visible answer card changes (or `null` when no question is active). Inactive shows must NOT send. |
 | `gamemaster-controls` | yes | Whenever available controls / phase / gameIndex change. Inactive shows must NOT send. |
-| `gamemaster-team-state-v2` | yes | On every team state mutation (joker used, points changed, roster edited locally). Bump `rev` to `(highest rev seen) + 1` on each mutation, and adopt the inbound `rev` verbatim when applying a peer's snapshot — the server drops a write that doesn't beat its cached rev and returns the cached value instead. Never reset `rev` (a points reset or storage wipe that restarts it at 0 is rejected, resurrecting the old score). |
+| `gamemaster-team-state-v3` | yes | On every team state mutation (joker used, points changed, roster edited locally). Bump `rev` to `(highest rev seen) + 1` on each mutation, and adopt the inbound `rev` verbatim when applying a peer's snapshot — the server drops a write that doesn't beat its cached rev and returns the cached value instead. Never reset `rev` (a points reset or storage wipe that restarts it at 0 is rejected, resurrecting the old score). |
 | `gamemaster-question-tally` | yes | On every correct-answer tally mutation. |
 | `music-state` | yes | **Optional.** `{ isPlaying, currentSong, currentTime, duration, volume }` background-music snapshot for the gamemaster's remote-control player. Emit on control changes + ~1 Hz while playing. Only the active show should send. See [specs/gamemaster-music-control.md](../specs/gamemaster-music-control.md). |
 
@@ -94,13 +98,17 @@ The reference implementation writes these keys to `localStorage`:
 | `scoreHistory` | `ScoreLogEntry[]` | Scoring-undo audit log; each entry carries `gameIndex` and (for per-question awards) `questionNumber`. |
 | `doubleNextGame` | `'team1' \| 'team2'` | Armed Aufholjoker multiplier. |
 | `teamOrderSwapped` | `'true' \| 'false'` | Seating-order flip. |
-| `teamStateRev` | `string` | Lamport `rev` last published on `gamemaster-team-state-v2`. |
+| `teamStateRev` | `string` | Lamport `rev` last published on `gamemaster-team-state-v3`. |
 | `currentGame` | `CurrentGame` | `{ currentIndex, totalGames }` — which game is active. |
 | `gm:last-answer` | `GamemasterAnswerData` | Last emitted answer card (used for instant-paint on reload before the WS reconnects). |
 | `gm:last-controls` | `GamemasterControlsData` | Same as above for controls. |
 | `correctAnswersByQuestion` | `Record<gameIndex, Record<questionKey, { team1, team2 }>>` | Correct-answer tally, nested per question. Mirrored to WS cache. |
 
 A replacement is free to pick different keys but must not leak admin-specific state into show localStorage (they share the same origin).
+
+In `sessionStorage` (per tab, so a spare show tab never overwrites the projector's position) the reference show keeps `show:playthrough`: per game the shuffle seed, play order, high-water mark and current question, plus the show's position (game index, gameId, phase). A reload of the tab reopens the same game, phase and question in the same order. Optional for a replacement. See [specs/crash-recovery.md](../specs/crash-recovery.md).
+
+The reference show also shows a small dot in the top-left corner when the WebSocket has been closed for more than 3 s, so the host notices a server outage.
 
 ## Build & serve contract
 

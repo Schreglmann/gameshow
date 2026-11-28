@@ -102,6 +102,7 @@ export default function ImageGuessForm({ questions, onChange, otherInstances, on
                 value={q.image || undefined}
                 category="images"
                 onChange={v => onImageChange(i, v ?? '')}
+                searchQuery={q.answer}
                 renderBox={RENDER_BOX_IMAGE_GUESS}
               />
             </div>

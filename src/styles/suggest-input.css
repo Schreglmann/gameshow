@@ -1,0 +1,58 @@
+/* Autocomplete list under the player add fields of the show and the
+   gamemaster (SuggestInput). Themed through the shared show tokens; the
+   tinted layer sits on the theme's solid background colour so names stay
+   readable over whatever is underneath. See specs/players.md ("Autocomplete"). */
+.suggest-wrap {
+    position: relative;
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.suggest-wrap > input {
+    flex: 1 1 auto;
+    width: 100%;
+    min-width: 0;
+}
+
+.suggest-list {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    z-index: 30;
+    display: flex;
+    flex-direction: column;
+    max-height: min(50vh, 340px);
+    overflow-y: auto;
+    padding: 4px;
+    border-radius: var(--radius-md, 10px);
+    background:
+        linear-gradient(rgba(var(--glass-rgb, 255, 255, 255), 0.1), rgba(var(--glass-rgb, 255, 255, 255), 0.1)),
+        var(--bg-gradient-to, #1a1a2e);
+    border: 1px solid rgba(var(--glass-rgb, 255, 255, 255), 0.25);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+    color: var(--card-text, var(--text-primary, #fff));
+    text-align: left;
+}
+
+/* `all: unset` first: the show and GM style every <button> (and the add form
+   its own buttons), and none of that belongs on a list row. */
+.suggest-list .suggest-item {
+    all: unset;
+    box-sizing: border-box;
+    display: block;
+    width: 100%;
+    padding: clamp(6px, 1vw, 9px) clamp(10px, 1.4vw, 14px);
+    border-radius: calc(var(--radius-md, 10px) - 4px);
+    font-size: clamp(0.9rem, 1.6vw, 1.05rem);
+    line-height: 1.3;
+    text-align: left;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+}
+
+.suggest-list .suggest-item.is-active,
+.suggest-list .suggest-item:hover {
+    background: rgba(var(--primary-rgb, 120, 140, 255), 0.35);
+}

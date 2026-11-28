@@ -8,10 +8,13 @@ import { toMediaSrc } from '@/utils/assetUrl';
 import { fadeAudio } from '@/utils/fadeAudio';
 import { useMusicPlayer } from '@/context/MusicContext';
 import { useGameContext } from '@/context/GameContext';
+import { useRosterDisplayNames } from '@/hooks/useRosterDisplayNames';
 import { teamName } from '@/utils/teamNames';
 import { ALL_TEAM_KEYS, teamKeys, teamPoints, isTeamKey, type TeamKey } from '@/utils/teams';
 import { teamDisplayOrder } from '@/utils/teamOrder';
 import { useQuizAutoScroll } from '@/hooks/useQuizAutoScroll';
+import { useAudioPlaying } from '@/hooks/useAudioPlaying';
+import { audioControlGroup, restartTrimmedAudio, toggleTrimmedAudio } from '@/utils/gmAudioControls';
 import BaseGameWrapper from './BaseGameWrapper';
 import QuizQuestionView from './QuizQuestionView';
 import TeamDot from '@/components/common/TeamDot';
@@ -158,6 +161,7 @@ function BetQuizInner({
   setGameTimer,
 }: InnerProps) {
   const { state } = useGameContext();
+  const playerLabels = useRosterDisplayNames();
   // Resuming (back-navigation): open at the last question's answer phase. The
   // live bet/result of that round isn't reconstructed — the answer is shown for
   // review (see specs/game-back-review.md).
@@ -169,6 +173,10 @@ function BetQuizInner({
   const [audioCurrentTime, setAudioCurrentTime] = useState(0);
   const [audioDuration, setAudioDuration] = useState(0);
   const [audioPlaying, setAudioPlaying] = useState(false);
+  // The answer-audio element mirrored into state, so the GM audio controls
+  // re-render when it starts/stops. Set/cleared wherever answerAudioRef is.
+  const [answerAudioEl, setAnswerAudioEl] = useState<HTMLAudioElement | null>(null);
+  const answerAudioPlaying = useAudioPlaying(answerAudioEl);
 
   const q = questions[qIdx];
   const isExample = qIdx === 0;
@@ -190,7 +198,6 @@ function BetQuizInner({
   // Serialized so the controls effect depends on the point VALUES, not on the
   // whole teams object (which changes identity on every unrelated mutation).
   const pointsKey = ALL_TEAM_KEYS.map(k => teamPoints(state.teams, k)).join(',');
-  const membersKey = ALL_TEAM_KEYS.map(k => (state.teams[k] ?? []).join(' ')).join('|');
 
   // Keep latest values readable from the command handler without re-registering on every change.
   const bettingTeamRef = useRef(bettingTeam);
@@ -242,6 +249,22 @@ function BetQuizInner({
     audio.play().catch(() => {});
   }, [questionAudioRef, q?.questionAudioStart]);
 
+  const handleAnswerAudioPlayPause = useCallback(() => {
+    const audio = answerAudioRef.current;
+    if (!audio) return;
+    toggleTrimmedAudio(audio, { start: q?.answerAudioStart, end: q?.answerAudioEnd });
+  }, [answerAudioRef, q?.answerAudioStart, q?.answerAudioEnd]);
+
+  const handleAnswerAudioRestart = useCallback(() => {
+    const audio = answerAudioRef.current;
+    if (!audio) return;
+    restartTrimmedAudio(audio, { start: q?.answerAudioStart });
+  }, [answerAudioRef, q?.answerAudioStart]);
+
+  // The question audio stops at reveal (its effect re-runs on `phase`), so in
+  // the answer phase the GM audio buttons drive the answer audio, if any.
+  const answerAudioActive = showAnswer && answerAudioEl !== null;
+
   // Per-question record of the round that was played, so stepping BACK into an
   // already-judged question restores it.
   //
@@ -263,6 +286,7 @@ function BetQuizInner({
     if (qIdx < questions.length - 1) {
       answerAudioRef.current?.pause();
       answerAudioRef.current = null;
+      setAnswerAudioEl(null);
       questionAudioRef.current?.pause();
       questionAudioRef.current = null;
       setQIdx(prev => prev + 1);
@@ -333,6 +357,7 @@ function BetQuizInner({
     if (phase === 'answer') {
       answerAudioRef.current?.pause();
       answerAudioRef.current = null;
+      setAnswerAudioEl(null);
       if (q?.questionAudio) {
         questionAudioRef.current?.pause();
         const audio = new Audio(toMediaSrc(q.questionAudio));
@@ -408,7 +433,7 @@ function BetQuizInner({
       // GM control panel → mirror the frontend order (GM faces the crowd).
       const teamSubs = {} as Record<TeamKey, string | undefined>;
       for (const key of ALL_TEAM_KEYS) {
-        const members = state.teams[key] ?? [];
+        const members = playerLabels[key];
         teamSubs[key] = members.length > 0 ? members.join(', ') : undefined;
       }
       controls.push({
@@ -441,16 +466,12 @@ function BetQuizInner({
       }
     } else if (phase === 'question') {
       if (q?.questionAudio && audioDuration > 0) {
-        controls.push({
-          type: 'button-group',
-          id: 'audio-controls',
-          buttons: [
-            { id: 'audio-playpause', label: audioPlaying ? 'Pause' : 'Abspielen' },
-            { id: 'audio-restart', label: 'Von vorne' },
-          ],
-        });
+        controls.push(audioControlGroup(audioPlaying));
       }
     } else if (phase === 'answer') {
+      if (answerAudioActive) {
+        controls.push(audioControlGroup(answerAudioPlaying));
+      }
       if (pointSystemEnabled && bettingTeam !== null) {
         controls.push({
           type: 'button-group',
@@ -464,8 +485,7 @@ function BetQuizInner({
       }
     }
     setGamemasterControls(controls);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, pointSystemEnabled, bettingTeam, bet, betValid, betCapExceeded, betNum, result, qIdx, questions.length, isExample, q?.questionAudio, audioDuration, audioPlaying, membersKey, pointsKey, currentTeamPoints, teamLabels, state.teams.orderSwapped, state.settings.teamMirrorEnabled, state.settings.teamCount, setGamemasterControls, setNavState]);
+  }, [phase, pointSystemEnabled, bettingTeam, bet, betValid, betCapExceeded, betNum, result, qIdx, questions.length, isExample, q?.questionAudio, audioDuration, audioPlaying, answerAudioActive, answerAudioPlaying, playerLabels, pointsKey, currentTeamPoints, teamLabels, state.teams.orderSwapped, state.settings.teamMirrorEnabled, state.settings.teamCount, setGamemasterControls, setNavState]);
 
   // Gamemaster command routing
   const commandHandlerFn = useCallback((cmd: GamemasterCommand) => {
@@ -491,9 +511,14 @@ function BetQuizInner({
       }
     } else if (cmd.controlId === 'judge-correct') judgeTeam(true);
     else if (cmd.controlId === 'judge-incorrect') judgeTeam(false);
-    else if (cmd.controlId === 'audio-playpause') handleAudioPlayPause();
-    else if (cmd.controlId === 'audio-restart') handleAudioRestart();
-  }, [judgeTeam, handleAudioPlayPause, handleAudioRestart]);
+    else if (cmd.controlId === 'audio-playpause') {
+      if (answerAudioActive) handleAnswerAudioPlayPause();
+      else handleAudioPlayPause();
+    } else if (cmd.controlId === 'audio-restart') {
+      if (answerAudioActive) handleAnswerAudioRestart();
+      else handleAudioRestart();
+    }
+  }, [judgeTeam, answerAudioActive, handleAudioPlayPause, handleAudioRestart, handleAnswerAudioPlayPause, handleAnswerAudioRestart]);
 
   useEffect(() => {
     setCommandHandler(commandHandlerFn);
@@ -539,6 +564,7 @@ function BetQuizInner({
       const audio = new Audio(toMediaSrc(q.answerAudio));
       audio.volume = 1;
       answerAudioRef.current = audio;
+      setAnswerAudioEl(audio);
       if (q.answerAudioStart !== undefined) audio.currentTime = q.answerAudioStart;
       const answerEndTime = q.answerAudioEnd;
       const answerLoop = q.answerAudioLoop;
@@ -568,16 +594,14 @@ function BetQuizInner({
 
   // Auto-play question audio when entering question phase
   useEffect(() => {
-    if (phase !== 'question' && phase !== 'answer') {
-      setAudioCurrentTime(0);
-      setAudioDuration(0);
-      setAudioPlaying(false);
-      return;
-    }
-    if (phase !== 'question') return;
+    // Reset on every phase change. Leaving the question phase runs the previous
+    // run's cleanup, which removes the listeners before pausing — so the
+    // pause event never clears `audioPlaying`, and without this reset the
+    // answer phase would show a stale player bar.
     setAudioCurrentTime(0);
     setAudioDuration(0);
     setAudioPlaying(false);
+    if (phase !== 'question') return;
     if (q?.questionAudio) {
       questionAudioRef.current?.pause();
       const audio = new Audio(toMediaSrc(q.questionAudio));
@@ -653,7 +677,7 @@ function BetQuizInner({
           <div className="bet-quiz-host-panel">
             <div className="bet-quiz-host-row" data-team-count={showOrder.length}>
               {showOrder.map(teamKey => {
-                const members = state.teams[teamKey] ?? [];
+                const members = playerLabels[teamKey];
                 return (
                   <div className="bet-quiz-team-choice" data-team={teamKey} key={teamKey}>
                     {members.length > 0 && (
@@ -702,7 +726,7 @@ function BetQuizInner({
 
   const betNumber = Number.isFinite(betNum) ? betNum : 0;
   const bannerTeamLabel = bettingTeam ? teamLabels[bettingTeam] : '';
-  const bannerMembers = bettingTeam ? (state.teams[bettingTeam] ?? []).join(', ') : '';
+  const bannerMembers = bettingTeam ? playerLabels[bettingTeam].join(', ') : '';
 
   return (
     <>

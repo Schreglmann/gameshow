@@ -1,4 +1,5 @@
 import { lazy, type ComponentType } from 'react';
+import { waitForServer } from '@/utils/waitForServer';
 
 // See specs/chunk-load-recovery.md
 const RELOAD_KEY = 'chunkLoadReloaded';
@@ -24,6 +25,9 @@ export function lazyWithRetry<T extends ComponentType<any>>(
         return mod;
       } catch (err) {
         if (typeof window !== 'undefined' && !sessionStorage.getItem(RELOAD_KEY)) {
+          // The chunk may have failed because the server is down; a reload now
+          // would land on the browser's error page. Wait until it answers.
+          await waitForServer();
           sessionStorage.setItem(RELOAD_KEY, '1');
           window.location.reload();
           return new Promise<{ default: T }>(() => {});

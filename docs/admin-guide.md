@@ -29,6 +29,8 @@ This guide explains how to **set up the app** and **create your own gameshow** u
    - [Wer kennt mehr?](#wer-kennt-mehr)
    - [Random Frame (Zufallsbild)](#random-frame-zufallsbild)
    - [City Compass (Städte-Kompass)](#city-compass-städte-kompass)
+   - [Schnittmenge (Venn)](#schnittmenge-venn)
+   - [Filmstreifen (Film Stripe)](#filmstreifen-film-stripe)
 5. [Uploading Media (Images & Audio)](#5-uploading-media-images--audio)
 6. [Global Settings](#6-global-settings)
 7. [Jokers](#7-jokers)
@@ -65,6 +67,8 @@ npm run build
 ```bash
 npm start
 ```
+
+`npm start` runs the server under a small supervisor (`scripts/supervise.cjs`): if the server process dies, it is restarted within about a second, and the crash is written to `logs/crash.log`. Server output is also kept in `logs/server-YYYY-MM-DD.log`. `npm run start:unsupervised` runs the server without it.
 
 **4. Open the app**
 
@@ -184,6 +188,49 @@ Click **"+ Neue Gameshow"**. A new card appears, already expanded for editing.
   title from the Config tab — see [Global Settings](#6-global-settings))
 - Click **"Set as active"** to make it the one that runs when players open the app
 
+### Players
+
+Pick the gameshow's players in the **Spieler** field of its card. The suggestions come from the
+global player list (the **Spieler** tab, see below). Typing a name that is not in it offers
+**„…“ neu anlegen**: enter first name, surname and nickname (Spitzname — leave it empty to use the
+first name), and the player is added to the list and to this gameshow at once. Click a player to see which games they already played.
+
+### The Spieler tab
+
+Every player exists once, with a nickname (Spitzname) and usually a first name and a surname. A first
+name or a nickname is required, and the same full name can't be added twice; an empty nickname is set
+to the first name. The tab lists every player as a whole name — `Michael „Michi“ Huber`, the nickname
+only when it differs from the first name — and the search finds players by any of the three names.
+
+Players added during the show (on the show's **Name hinzufügen** field or on the gamemaster) land here
+too, with only the nickname they were typed as, marked **Name fehlt**: open them and fill in first
+name and surname. Every add and remove during the show also updates the active gameshow's
+**Spieler** field.
+
+- **+ Spieler** opens a popup to add a player.
+- Click a name to open the player in a lightbox: the names (they save as you type, like every other
+  field, and the change reaches every gameshow; a name that already exists shows an error and isn't
+  saved until it is fixed) and below them the statistics: which games the player already played
+  or has coming up, by gameshow and by game type. ✕, Esc or a click outside close it.
+- Clicking a player name anywhere else in the admin (a gameshow's player chips, "Bereits gespielt von"
+  in the game editor, the planning lines) opens the same lightbox, without leaving that tab.
+- The number next to a name is how many gameshows the player is in (hover lists them).
+- ✕ deletes a player; a player who is in a gameshow is removed from it too, after a confirmation.
+- The **Aktiv** switch in the lightbox disables a player: they stay in the gameshows they are in (and
+  in the statistics), but no field suggests them any more — not in the Gameshows tab, not on the show
+  or the gamemaster — unless you type one of their names in full (first name, surname, nickname or the
+  full name). The list dims them and marks them **Deaktiviert**.
+- A player taken out of their last gameshow (the × on a gameshow's player chip, or a remove on the
+  show or the gamemaster) disappears from this tab as well — like a player you delete here, they go
+  to a local bin (`players-bin.json`, not committed). Type one of their names in full (first name,
+  surname, nickname or full name) in a gameshow's **Spieler** field, or on the show or gamemaster,
+  and they are suggested again ("· aus dem Papierkorb"); adding them brings them back as they were. A player you add here and haven't put in
+  a gameshow yet stays; deleting a whole gameshow keeps its players.
+
+On the show, players are called by their nickname. Only when two players in the draw share a
+nickname does the show add as much of the surname as it takes to tell them apart — usually just the
+first letter: "Michi H." / "Michi P.", "Jo Ka." / "Jo Ko.".
+
 ### Step 3 — Add games to the gameshow
 
 In the **Game Order** section of your gameshow card:
@@ -208,6 +255,19 @@ Go to the **Spiele tab**.
 
 ![Games Tab](./screenshots/admin-games.png)
 > *Add screenshot: `docs/screenshots/admin-games.png` — the games list with search and game type badges*
+
+### Sorting and filtering the list
+
+The button next to the search field (it shows the current sort, e.g. `Name ↓`) opens sorting and filtering:
+
+- **Sort** by **Name** (default), **Typ**, **Geändert**, **Erstellt** or **Status** (Neu first, Gespielt last). Click the active sort again to reverse it. You can also click a column heading (Titel, Status, Typ, or the date) to sort by it. Sorting by **Geändert** or **Erstellt** adds a column with that date; Name and Status show no date.
+- **Filter** — tick one or more of **Neu**, **Ungespielt**, **Gemischt** and **Gespielt** to show only those games. The button then names the filter too, e.g. `Name ↓ · Neu`.
+
+Sort and filter stay set when you switch to another admin tab and come back; reloading the page resets them.
+
+The status is the same badge the gameshow's "Spiel hinzufügen…" picker shows, worked out for the **active gameshow** and its players: **Neu** = never played in an earlier gameshow, **Ungespielt** = played before, but not by these players, **Gemischt** = some of these players know it (for a game with several instances: some instances), **Gespielt** = all of these players already played it. The **Status** sort orders the list by this status, in that order. Without an active gameshow the filter and the Status sort are hidden.
+
+"Erstellt" is the date the game file was first committed to git; a game that is not committed yet shows its last save.
 
 ### Creating a new game
 
@@ -491,6 +551,43 @@ See [GAME_TYPES.md](../GAME_TYPES.md) for the full field reference and [specs/ga
 
 ---
 
+### Schnittmenge (Venn)
+
+Two overlapping circles, each with a category. Teams name the term that fits both — *Planet* and *Schokoriegel* give *Mars*.
+
+**Each question has:**
+- **Kategorie 1** and **Kategorie 2** — the two circles the question opens with. They should already have one clear answer
+- **Hinweis-Kategorie** *(optional)* — a third category. It appears as a dashed third circle when the host advances, before the answer
+- **Antwort** — the term that fits every category
+- **Antwort-Bild** *(optional)* — shown with the answer
+- **Vorschau** — the diagram as the audience will see it, once two categories are filled in
+
+Every category has to really contain the answer. Long category names are set smaller or broken into two lines automatically; check the preview.
+
+See [GAME_TYPES.md](../GAME_TYPES.md) for the field reference and [specs/games/venn.md](../specs/games/venn.md) for behaviour details.
+
+---
+
+### Filmstreifen (Film Stripe)
+
+A whole film shown as one stripe of colours, left to right in film order. Teams name the film. The hint is the film as a short time-lapse.
+
+**Each question has:**
+- **Video** — the film. Picking it fills in the answer from the file name
+- **Antwort** — the film title
+- **Frage** *(optional)* — a custom prompt (defaults to *"Welcher Film ist das?"*)
+- **Antwort-Bild** *(optional)* — shown with the answer; the film poster works well
+
+**Streifen berechnen.** The stripe is not computed during the show. Press **Streifen berechnen** above the questions once the films are chosen: the server samples every film and stores the stripe and the time-lapse stills locally. This takes up to a few minutes per film (about three for a 4K film on the local disk, longer from the NAS); the progress bar shows the film being worked on, and the job also appears in the System tab. Films that already have a current stripe are skipped.
+
+Under each video field you see the stripe as a thin preview. *"kein Streifen berechnet"* means the film will show a notice on stage instead of a stripe. *"Streifen veraltet"* means the video file was replaced since — compute again.
+
+Once computed, the game runs without the video files: you can prepare at home with the NAS mounted and play at the venue without it.
+
+See [GAME_TYPES.md](../GAME_TYPES.md) for the field reference and [specs/games/film-stripe.md](../specs/games/film-stripe.md) for behaviour details.
+
+---
+
 ### Multi-Instance Games
 
 Any game type can have **multiple instances** — separate question sets that share one game file. This is useful when you want to reuse the same game format across different gameshows.
@@ -559,8 +656,26 @@ In all four cases the original bytes are backed up under `local-assets/images/.r
 
 In the Simple Quiz editor, click the image field and pick an uploaded image from the asset browser.
 
+You can also paste an image into the picker. Copy an image, or the URL of an image, and press **Strg+V** (**⌘V** on a Mac) while the picker is open. This works in both **DAM** and **🌐 Online** mode. The picker shows a preview; choose the target folder under **Speichern in:** and click **✓ Übernehmen**. The image is saved to the DAM and set on the question. A clipboard image is named `pasted-<Datum>.png`; an image from a URL keeps the file name from the URL. **Verwerfen** or Esc discards the paste.
+
+To change or improve an image that is already on a question, click its thumbnail, either in the collapsed question row or in the image field. The enlarged view shows the image's size in pixels and two buttons:
+
+- **↻ Ersetzen** opens the same picker as **Ändern** (DAM, **🌐 Online**, Strg+V). The picked image is set on this question only; the old file and other games stay unchanged.
+- **✨ Hochskalieren** opens the replace dialog of the Assets tab on its **AI hochskalieren** tab. It only appears when the image's resolution is too low for the game, by the same rule as the Assets tab's **Niedrige Auflösung** filter (smaller than 1920 × 540, or 1920 × 648 in Bilderrätsel), and only for JPG, PNG and WebP. The result overwrites the file in the DAM, so every game that uses it gets the new version. The dialog's other tabs (search, URL, file) replace the file's content the same way.
+
 ![Image Picker](./screenshots/admin-assets-image-picker.png)
 > *Add screenshot: `docs/screenshots/admin-assets-image-picker.png` — the image picker lightbox*
+
+### Loading audio or video from YouTube in a question
+
+Audio and video fields in the game editor can take a track straight from YouTube, without going through the Assets tab first:
+
+1. Click the audio or video field (or **Ändern**) and switch the picker from **DAM** to **▶ YouTube**.
+2. Search by keyword, or paste a YouTube link into **URL einfügen** and press **Vorschau**.
+3. Click a result to open the preview player and check that it is the right video. **Auf YouTube öffnen ↗** opens it on YouTube, for videos that can't be played embedded. The **✕** in the preview's corner (or Esc) closes the preview.
+4. Choose the target folder under **Speichern in:** and click **✓ Herunterladen**.
+
+Progress shows in the download tracker. When it finishes, the file is in the DAM and set on the question. Audio is normalized and gets the YouTube thumbnail as its cover, the same as a download from the Assets tab. If you close the picker during the download, the file still lands in the DAM, but the question is left unchanged.
 
 ### Background music
 
@@ -608,7 +723,7 @@ Each gameshow can offer a set of **jokers** — single-use powers a team can spe
 
 - The catalog is fixed and lives in `src/data/jokers.ts`. To add a new joker, run the `add-joker` skill (see `skills/add-joker/SKILL.md`).
 - Each enabled joker appears as a row of icons at the bottom of the player screen during every phase.
-- Teams spend a joker by clicking its icon; the gamemaster can also mark jokers used remotely.
+- Teams spend a joker by clicking its icon; the gamemaster can also mark jokers used remotely. While **Show-Buttons ausblenden** is on, the icons stay visible but only the gamemaster can mark them.
 - Each joker is single-use **per team** — the effect is resolved manually by the gamemaster.
 - **Joker pro Spiel zurücksetzen** (Config tab → "Globale Einstellungen" toggle; hover for details): off (default) = each joker is one use for the whole show; on = every joker *except* the Aufholjoker becomes available again at the start of each game. The Aufholjoker is always one-use-per-show.
 - Jokers cannot be used in the last game of a gameshow, unless "Joker im letzten Spiel erlauben" is enabled.
@@ -627,7 +742,8 @@ Go to the **Session tab** during a live game.
 > *Add screenshot: `docs/screenshots/admin-session.png` — the session tab with team name fields and point inputs*
 
 From here you can:
-- **Edit team names** — change the player list for each team
+- **Edit team names and members** — the members field lists full names, separated by commas. A
+  player can only be in one team once; a duplicate is refused and the field keeps your text
 - **Edit points directly** — correct a mistake by entering the right number
 - **Reset points** — set both teams back to 0
 - **Clear session data** — wipe all stored data (requires double confirmation)
@@ -648,7 +764,7 @@ From here you can:
 
 1. Open `http://localhost:3000` on the display (projector/TV)
 2. Open `http://localhost:3000/admin` on your host device (tablet/laptop)
-3. Players enter their names on the home screen
+3. The gameshow's players are drawn into teams in the background and listed on the home screen without their teams; add or remove names there or on the gamemaster. The gamemaster previews the draw, taps a player to move or remove them, can press **Neu mischen**, and reveals the teams with **Teams zuweisen** (**Zuweisung verbergen** takes them off the show again, keeping the draw)
 4. Navigate with **arrow keys** or by **clicking**
 5. After each game, award points to the winning team
 6. The app ends automatically on the summary screen
@@ -658,6 +774,16 @@ From here you can:
 - The admin panel never interrupts the game — you can check or correct things at any time
 - Points can be manually corrected in the **Session tab** if you make a mistake
 - Use **keyboard shortcuts** (`→` to advance, `←` to go back) for smooth presenting
+- If you run the show from the gamemaster, press **Show-Buttons ausblenden** in its toolbar. The projector then hides its own buttons (Weiter, Richtig/Falsch, the music player, …). Joker icons, the team picks on the points screen and the entered bets and guesses stay visible. Press **Show-Buttons einblenden** to bring the buttons back. The setting applies to every show screen and stays on when the projector reloads. It only takes effect while a gamemaster is connected: if the gamemaster device drops out, the projector shows its buttons again so the show can carry on without it.
+
+### If the server crashes
+
+With `npm start`, a crashed server restarts by itself within about a second. Nothing needs to be reloaded:
+
+- The show and the gamemaster reconnect on their own. While the server is unreachable, the show displays a small red dot in the top-left corner (after 3 s), and the gamemaster displays "Server getrennt – verbinde neu…". A command tapped in that state is **not** sent ("Befehl nicht gesendet") — tap it again once the banner is gone.
+- The projector stays the main show, even if a second show tab is open.
+- If you do reload the show tab, it reopens the same game, phase and question, in the same order. Within the question it starts over: the answer is hidden again. Points already awarded stay — don't award the resumed question twice.
+- The **System** tab shows "Letzter Absturz" with the time and reason. The full trace is in `logs/crash.log`.
 
 ---
 

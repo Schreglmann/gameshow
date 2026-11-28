@@ -223,13 +223,8 @@ function FinalQuizInner({ questions, order, gameTitle, pointSystemEnabled, onGam
           ],
         });
       });
-      controls.push({
-        type: 'button',
-        id: 'next-question',
-        label: qIdx < questions.length - 1 ? 'Nächste Frage' : 'Weiter',
-        variant: 'primary',
-        disabled: !allJudged,
-      });
+      // No own advance button: the nav row's "Weiter" (→ handleNext) is the single
+      // advance control, and it stays hidden until every team is judged (above).
     }
     setGamemasterControls(controls);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -262,7 +257,10 @@ function FinalQuizInner({ questions, order, gameTitle, pointSystemEnabled, onGam
       const correct = cmd.controlId.endsWith('-correct');
       const team = cmd.controlId.slice(0, cmd.controlId.lastIndexOf('-'));
       if (isTeamKey(team)) judgeTeam(team, correct);
-    } else if (cmd.controlId === 'next-question') handleNext();
+    } else if (cmd.controlId === 'next-question') {
+      // Legacy id: a gamemaster on an older cached bundle still shows this button.
+      handleNext();
+    }
   }, [applyBets, showAnswerFn, judgeTeam, handleNext]);
 
   useEffect(() => {

@@ -9,6 +9,7 @@
 
 import { readFile, writeFile, rename } from 'fs/promises';
 import type { AppConfig } from '../src/types/config.js';
+import { exampleGameshowPlayerIds, examplePlayers } from './example-players.js';
 
 /**
  * git-crypt encrypts files with a magic header of `\0GITCRYPT\0` followed by
@@ -117,10 +118,14 @@ export function buildDefaultConfig(): AppConfig {
       },
     ],
     activeGameshow: 'beispiele',
+    // Made-up example players, so the draw and the autocomplete can be tried
+    // on a fresh clone. See server/example-players.ts.
+    players: examplePlayers(),
     gameshows: {
       beispiele: {
         name: 'Beispiele',
         gameOrder: [],
+        players: exampleGameshowPlayerIds(),
       },
     },
   };

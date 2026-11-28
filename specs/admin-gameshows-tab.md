@@ -7,7 +7,7 @@ Move gameshow management out of the admin **Config** tab into its own **Gameshow
 - [ ] A **Gameshows** tab appears in the admin sidebar between **Config** and **Spiele**.
 - [ ] The Config tab no longer renders gameshows — only Themes, Global Settings, and Global Rules.
 - [ ] The Gameshows tab lets you create (`+ Neue Gameshow`), rename, edit (players, planning, game order, jokers), activate, and delete gameshows — same functionality as before the split.
-- [ ] Clicking a player chip's name in the **Spieler** combobox opens a player-stats modal (games-played history). See [player-stats.md](player-stats.md).
+- [ ] Clicking a player chip's name in the **Spieler** combobox opens the player lightbox (names + games-played history) over the tab. See [player-stats.md](player-stats.md). The combobox picks registry players and can create a new one ("„…“ neu anlegen") — see [players.md](players.md).
 - [ ] Each gameshow card is collapsible via a disclosure chevron in its header. When collapsed, the header still shows the name, a game-count chip, the active badge / "Als aktiv setzen" button, and the delete button.
 - [ ] The game-count chip (collapsed header) and the expanded-header meta line both show the **total number of questions** across all games in the gameshow next to the game count, e.g. `3 Spiele · 42 Fragen`. The total sums each referenced game/instance's question count (quizjagd buckets summed).
 - [ ] The gameshow name is shown as plain text (not an always-on input). Clicking it swaps it for an input; Enter/Blur commits the rename, Escape cancels — the same inline click-to-edit pattern as DAM filenames.
