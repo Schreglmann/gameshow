@@ -67,6 +67,10 @@ registry and in the active gameshow, so the admin stays in sync with the room.
       `Michael „Michi“ Huber` (registry, combobox chips, stats); a player with neither first name nor
       surname shows the nickname. The Session tab's member fields list first name + surname (the
       nickname for a player without them).
+- [x] Exception: the compact "gameshow: players" overviews — the game editor's **Bereits gespielt /
+      Eingeplant** rows and the planning provenance lines (**Gespielt / Eingeplant · «Show»**) — show
+      the short label instead (`playerShortLabels`: nickname, else first name, with a surname prefix
+      only when two players in the same row share it). The full admin label is the hover title.
 
 ### Live rosters
 - [x] A roster entry is `RosterPlayer = { firstName, lastName, nickname?, id? }`. Registry players

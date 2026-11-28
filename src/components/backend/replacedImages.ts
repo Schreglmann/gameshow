@@ -1,13 +1,13 @@
 import { useSyncExternalStore } from 'react';
 import { useCoverUrl } from '@/context/AudioCoverMetaContext';
 
-// Images replaced from a game-editor lightbox during this admin session.
+// Images replaced or renamed from a game-editor lightbox during this admin session.
 // Replacing keeps the path (or only changes its extension), so thumbnails need
 // a cache-busting version, and after an extension change the old path must
 // show the new file until the editor reloads the rewritten game file.
 // Admin UI cache only — not app state. See specs/dam-image-replace.md.
 
-interface Entry { path: string; version: number }
+interface Entry { path: string; version: number | null }
 
 // Keyed by the path without a leading slash: `images/Logos/foo.png`.
 const entries = new Map<string, Entry>();
@@ -21,8 +21,7 @@ function subscribe(listener: () => void) {
   return () => { listeners.delete(listener); };
 }
 
-/** Records a replace. `target` and `newFilename` are relative to `images/`. */
-export function recordImageReplace(target: string, newFilename: string, version: number): void {
+function record(target: string, newFilename: string, version: number | null): void {
   const from = `images/${target}`;
   const to = `images/${newFilename}`;
   // Earlier replaces that led to `from` now lead on to `to`.
@@ -33,6 +32,21 @@ export function recordImageReplace(target: string, newFilename: string, version:
   entries.set(to, { path: to, version });
   revision++;
   listeners.forEach(l => l());
+}
+
+/** Records a replace. `target` and `newFilename` are relative to `images/`. */
+export function recordImageReplace(target: string, newFilename: string, version: number): void {
+  record(target, newFilename, version);
+}
+
+/**
+ * Records a rename (`from` → `to`, both relative to `images/`). The bytes did
+ * not change and the new path has never been fetched, so no cache-busting
+ * version is needed.
+ */
+export function recordImageRename(from: string, to: string): void {
+  if (from === to) return;
+  record(from, to, null);
 }
 
 /** The path to show for `rawPath` (with a leading slash) and its version, if replaced. */

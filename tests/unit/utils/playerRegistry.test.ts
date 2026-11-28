@@ -6,6 +6,7 @@ import {
   findNameConflict,
   playerById,
   playerLabel,
+  playerShortLabels,
   playerNameError,
   renamePlayer,
   resolveGameshowPlayers,
@@ -43,6 +44,15 @@ describe('lookup', () => {
     const byId = playerById([anna]);
     expect(playerLabel('anna-mueller', byId)).toBe('Anna Müller');
     expect(playerLabel('ghost', byId)).toBe('ghost (unbekannt)');
+  });
+
+  it('playerShortLabels prints nicknames, disambiguates shared ones, and keeps unknown ids', () => {
+    const michi = { id: 'michael-huber', firstName: 'Michael', lastName: 'Huber', nickname: 'Michi' };
+    const michi2 = { id: 'michaela-koch', firstName: 'Michaela', lastName: 'Koch', nickname: 'Michi' };
+    const byId = playerById([anna, michi, michi2]);
+    expect(playerShortLabels(['anna-mueller', 'michael-huber'], byId)).toEqual(['Anna', 'Michi']);
+    expect(playerShortLabels(['michael-huber', 'ghost', 'michaela-koch'], byId))
+      .toEqual(['Michi H.', 'ghost (unbekannt)', 'Michi K.']);
   });
 
   it('findNameConflict ignores case and the excepted id', () => {

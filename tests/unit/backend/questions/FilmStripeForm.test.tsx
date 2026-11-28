@@ -87,6 +87,38 @@ describe('FilmStripeForm', () => {
     await waitFor(() => expect(screen.getByText(/1 fehlgeschlagen/)).toBeInTheDocument());
   });
 
+  it('expands the failed films and jumps to the question of one', async () => {
+    vi.mocked(backendApi.prepareFilmStripes).mockImplementation(async (_paths, onEvent) => {
+      onEvent?.({ path: 'Dune.m4v', itemError: 'Video nicht erreichbar' });
+      onEvent?.({ path: 'Gone.m4v', itemError: 'Kaputt' });
+      onEvent?.({ percent: 100, done: true, failures: 2 });
+    });
+    const { container } = render(<FilmStripeForm questions={[nemo, { ...dune, answer: 'Dune (2021)' }]} onChange={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Streifen berechnen' }));
+
+    const toggle = await screen.findByRole('button', { name: /2 fehlgeschlagen/ });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('list', { name: 'Fehlgeschlagene Filme' })).not.toBeInTheDocument();
+
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    const list = screen.getByRole('list', { name: 'Fehlgeschlagene Filme' });
+    expect(list).toHaveTextContent('Dune (2021)Video nicht erreichbar');
+    // A film no question uses any more is listed, but not as a link.
+    expect(list).toHaveTextContent('GoneKaputt');
+    expect(screen.queryByRole('button', { name: 'Gone' })).not.toBeInTheDocument();
+
+    const block = container.querySelector<HTMLElement>('.question-block[data-question-index="1"]')!;
+    const scrollIntoView = vi.fn();
+    block.scrollIntoView = scrollIntoView;
+    fireEvent.click(screen.getByRole('button', { name: 'Dune (2021)' }));
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'center' });
+    expect(block).toHaveClass('question-block--highlight');
+
+    fireEvent.click(toggle);
+    expect(screen.queryByRole('list', { name: 'Fehlgeschlagene Filme' })).not.toBeInTheDocument();
+  });
+
   it('shows the run: film x/y, the current film, elapsed time and the state of each question', async () => {
     vi.mocked(backendApi.getFilmStripeStatus).mockResolvedValue({ 'Findet Nemo.m4v': MISSING, 'Dune.m4v': MISSING });
     let emit: (ev: FilmStripePrepareEvent) => void = () => {};

@@ -2718,6 +2718,29 @@ function AdminShowcase() {
         </div>
       </Section>
 
+      {/* Game-editor image lightbox header: the file name renames on click.
+          See specs/dam-image-replace.md "Ersetzen aus dem Frage-Editor". */}
+      <Section title="Bild-Lightbox im Spiel-Editor: Dateiname umbenennen">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {(['idle', 'editing', 'error'] as const).map(state => (
+            <div key={state} className="image-lightbox" style={{ position: 'static', maxWidth: '100%', width: 'auto' }}>
+              <div className="image-lightbox-header">
+                <span className="image-lightbox-name image-lightbox-name--media">
+                  <span className="image-lightbox-icon">🖼</span>
+                  {state === 'idle'
+                    ? <span className="image-lightbox-filename"><span className="asset-file-name-text" role="button" tabIndex={0}>711cUTN0+gL._AC_UF894,1000_QL80_.jpg</span></span>
+                    : <input className="be-input asset-folder-rename-input" defaultValue={state === 'error' ? 'Kim Possible' : 'Monopoly Man'} aria-label="Dateiname" aria-invalid={state === 'error' || undefined} />}
+                </span>
+                {state === 'error' && <span className="image-lightbox-rename-error" role="alert" title='Der Name "Kim Possible.jpg" ist bereits vergeben'>Der Name "Kim Possible.jpg" ist bereits vergeben</span>}
+                <span className="image-lightbox-dims">673 × 1000px</span>
+                <button className="be-icon-btn" style={{ fontSize: 'var(--admin-sz-11, 11px)' }}>↻ Ersetzen</button>
+                <button className="be-icon-btn" aria-label="Schließen">✕</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Section>
+
       {/* Gameshow player combobox: registry players as chips, an unknown id in
           red, and "neu anlegen" with its first/last-name form. See specs/players.md. */}
       <Section title="Spieler-Auswahl (Gameshow)">

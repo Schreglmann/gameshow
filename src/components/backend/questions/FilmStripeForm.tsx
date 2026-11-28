@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { FilmStripeQuestion } from '@/types/config';
 import { useDragReorder } from '../useDragReorder';
 import SpellField from '../SpellField';
@@ -73,6 +73,9 @@ export default function FilmStripeForm({ questions, onChange, otherInstances, on
   /** Errors of the films that failed in the last finished run, shown until the next one. */
   const [lastErrors, setLastErrors] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState<string | null>(null);
+  const [failuresOpen, setFailuresOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const failuresListId = useId();
   const [now, setNow] = useState(() => Date.now());
   /** Task id of the run this form started — its `system-status` copy is not a remote run. */
   const localTaskIdRef = useRef<string | null>(null);
@@ -187,10 +190,10 @@ export default function FilmStripeForm({ questions, onChange, otherInstances, on
         allReady,
       );
       // A stream that ends without `done` was cut off (server restart, lost connection):
-      // the remaining films were never computed.
+      // the remaining films were never computed. Failures get their own expandable list.
       setMsg(!finished
         ? '❌ Abgebrochen (Server neu gestartet?) – erneut starten, fertige Filme werden übersprungen'
-        : failed.length > 0 ? `⚠ ${failed.length} fehlgeschlagen` : '✅ Streifen berechnet');
+        : failed.length > 0 ? null : '✅ Streifen berechnet');
     } catch (e) {
       setMsg(`❌ ${(e as Error).message}`);
     } finally {
@@ -207,6 +210,31 @@ export default function FilmStripeForm({ questions, onChange, otherInstances, on
   const eta = etaSeconds !== null ? formatDuration(etaSeconds) : null;
   const filmNumber = run ? Math.min(run.done + 1, run.paths.length) : 0;
 
+  /** Films that failed in the running batch, or — until the next run — in the last one. */
+  const failures: FilmStripeRun['failed'] = run
+    ? run.failed
+    : Object.entries(lastErrors).map(([path, error]) => ({ path, error }));
+
+  const jumpToQuestion = (index: number) => {
+    const el = rootRef.current?.querySelector<HTMLElement>(`.question-block[data-question-index="${index}"]`);
+    if (!el) return;
+    // Scroll the admin pane, not the window (same as InstanceEditor's jump to a question).
+    const scroller = el.closest('.admin-tab-pane');
+    if (scroller) {
+      const elRect = el.getBoundingClientRect();
+      const scrollerRect = scroller.getBoundingClientRect();
+      const offset = elRect.top - scrollerRect.top + scroller.scrollTop - scroller.clientHeight / 2 + elRect.height / 2;
+      scroller.scrollTo({ top: Math.max(0, offset), behavior: 'smooth' });
+    } else {
+      el.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+    }
+    // Restart the highlight when the same question is clicked twice in a row.
+    el.classList.remove('question-block--highlight');
+    void el.offsetWidth;
+    el.classList.add('question-block--highlight');
+    setTimeout(() => el.classList.remove('question-block--highlight'), 4500);
+  };
+
   const onVideoChange = (i: number, video: string) => {
     const base = i >= questions.length ? empty() : questions[i]!;
     const patch: Partial<FilmStripeQuestion> = { video };
@@ -218,7 +246,7 @@ export default function FilmStripeForm({ questions, onChange, otherInstances, on
   };
 
   return (
-    <div>
+    <div ref={rootRef}>
       <div className="film-stripe-prepare-bar" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 'clamp(8px, 2vw, 14px)', marginBottom: 14, padding: 'clamp(10px, 2vw, 14px)', borderRadius: 8, border: '1px solid rgba(var(--glass-rgb), 0.12)', background: 'rgba(var(--glass-rgb), 0.05)' }}>
         <button
           className="be-btn-primary"
@@ -252,15 +280,46 @@ export default function FilmStripeForm({ questions, onChange, otherInstances, on
               <span style={{ color: 'rgba(var(--text-rgb), 0.55)', fontVariantNumeric: 'tabular-nums' }}>
                 {batchPercent} % gesamt{elapsed && ` · läuft ${elapsed}`}{eta ? ` · noch ca. ${eta}` : ' · Restzeit wird geschätzt…'}
               </span>
-              {run.failed.length > 0 && <span style={{ color: 'rgba(245,158,11,0.9)' }}>⚠ {run.failed.length} fehlgeschlagen</span>}
             </div>
           </div>
+        )}
+        {failures.length > 0 && (
+          <button
+            type="button"
+            className="film-stripe-failures-toggle"
+            aria-expanded={failuresOpen}
+            aria-controls={failuresListId}
+            onClick={() => setFailuresOpen(o => !o)}
+          >
+            <svg className="film-stripe-failures-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18" /></svg>
+            ⚠ {failures.length} fehlgeschlagen
+          </button>
         )}
         {!running && msg && <span style={{ fontSize: 'var(--admin-sz-13, 13px)', color: 'rgba(var(--text-rgb), 0.75)' }}>{msg}</span>}
         {!running && videoPaths.length > 0 && (
           <span style={{ fontSize: 'var(--admin-sz-13, 13px)', color: 'rgba(var(--text-rgb), 0.6)' }}>
             {usableCount}/{videoPaths.length} Filme vorbereitet
           </span>
+        )}
+        {failures.length > 0 && failuresOpen && (
+          <ul id={failuresListId} className="film-stripe-failures" aria-label="Fehlgeschlagene Filme">
+            {failures.map(f => {
+              const index = questions.findIndex(q => q.video && relVideo(q.video) === f.path);
+              const title = (index >= 0 && questions[index]!.answer.trim()) || filenameToAnswer(f.path);
+              return (
+                <li key={f.path}>
+                  {index >= 0 ? (
+                    <button type="button" className="film-stripe-failures-link" onClick={() => jumpToQuestion(index)} title="Zur Frage springen">
+                      {title}
+                    </button>
+                  ) : (
+                    <span className="film-stripe-failures-name">{title}</span>
+                  )}
+                  <span className="film-stripe-failures-error">{f.error}</span>
+                </li>
+              );
+            })}
+          </ul>
         )}
       </div>
       {displayQuestions.map((q, i) => {

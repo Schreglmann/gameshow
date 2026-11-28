@@ -21,7 +21,7 @@ import FilmStripeForm from './questions/FilmStripeForm';
 import RulesEditor from './RulesEditor';
 import type { InstanceUsage } from '@/utils/playerStats';
 import type { Player } from '@/types/config';
-import { playerLabel } from '@/utils/playerRegistry';
+import { playerLabel, playerShortLabels } from '@/utils/playerRegistry';
 
 const EMPTY_PLAYERS: ReadonlyMap<string, Player> = new Map();
 
@@ -92,13 +92,15 @@ export default function InstanceEditor({ gameType, instance, onChange, otherInst
 
   const renderPlayers = (players: string[]) => {
     if (players.length === 0) return '—';
+    const shortNames = playerShortLabels(players, playerNames);
     return players.map((p, i) => {
-      const name = playerLabel(p, playerNames);
+      const name = shortNames[i]!;
+      const fullLabel = playerLabel(p, playerNames);
       return (
         <Fragment key={p}>
           {onPlayerClick
-            ? <button type="button" className="instance-usage-player" onClick={() => onPlayerClick(p)} title={`Profil von ${name}`}>{name}</button>
-            : <span>{name}</span>}
+            ? <button type="button" className="instance-usage-player" onClick={() => onPlayerClick(p)} title={`Profil von ${fullLabel}`}>{name}</button>
+            : <span title={fullLabel}>{name}</span>}
           {i < players.length - 1 ? ', ' : ''}
         </Fragment>
       );

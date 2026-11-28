@@ -300,7 +300,8 @@ describe('SimpleQuizForm', () => {
     ];
     render(<SimpleQuizForm questions={questions} onChange={onChange} />);
     await user.click(screen.getByTitle('A-Bild: /images/Logos/Kim Possible.svg'));
-    expect(screen.getByText('🖼 Kim Possible.svg')).toBeInTheDocument();
+    // The lightbox header shows the file name (clickable to rename it).
+    expect(screen.getByRole('button', { name: 'Kim Possible.svg' })).toBeInTheDocument();
     // SVGs can't be AI-upscaled.
     expect(screen.queryByRole('button', { name: 'Hochskalieren' })).not.toBeInTheDocument();
 
@@ -311,7 +312,7 @@ describe('SimpleQuizForm', () => {
       { question: 'Q2', answer: 'A2', answerImage: '/images/Kim Possible.png' },
     ]);
     // The lightbox now shows the picked image.
-    expect(screen.getByText('🖼 Kim Possible.png')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Kim Possible.png' })).toBeInTheDocument();
   });
 
   it('row thumbnail lightbox offers Hochskalieren for a low-resolution raster image', async () => {

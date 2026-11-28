@@ -94,7 +94,7 @@ describe('InstanceEditor', () => {
   ];
   const playerNames = new Map([
     ['anna-mueller', { id: 'anna-mueller', firstName: 'Anna', lastName: 'Müller' }],
-    ['ben-huber', { id: 'ben-huber', firstName: 'Ben', lastName: 'Huber' }],
+    ['ben-huber', { id: 'ben-huber', firstName: 'Benjamin', lastName: 'Huber', nickname: 'Ben' }],
     ['clara-weber', { id: 'clara-weber', firstName: 'Clara', lastName: 'Weber' }],
   ]);
 
@@ -104,10 +104,11 @@ describe('InstanceEditor', () => {
     );
     expect(screen.getByText('Bereits gespielt')).toBeInTheDocument();
     expect(screen.getByText(/Gameshow 1:/)).toBeInTheDocument();
-    expect(screen.getByText('Anna Müller')).toBeInTheDocument();
-    expect(screen.getByText('Ben Huber')).toBeInTheDocument();
+    // Nicknames (first name when there is none); the full admin label is the hover title.
+    expect(screen.getByText('Anna')).toBeInTheDocument();
+    expect(screen.getByText('Ben')).toHaveAttribute('title', 'Benjamin „Ben“ Huber');
     expect(screen.getByText('Eingeplant')).toBeInTheDocument();
-    expect(screen.getByText('Clara Weber')).toBeInTheDocument();
+    expect(screen.getByText('Clara')).toBeInTheDocument();
   });
 
   it('marks an id missing from the registry as unknown', () => {
@@ -121,7 +122,7 @@ describe('InstanceEditor', () => {
     render(
       <InstanceEditor gameType="simple-quiz" instance={{ questions: [] }} onChange={noop} onGoToAssets={noop} instanceUsage={usageFixture} playerNames={playerNames} />
     );
-    expect(screen.queryByRole('button', { name: 'Anna Müller' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Anna' })).not.toBeInTheDocument();
   });
 
   it('calls onPlayerClick when a player name is clicked (link to profile)', async () => {
@@ -130,7 +131,7 @@ describe('InstanceEditor', () => {
     render(
       <InstanceEditor gameType="simple-quiz" instance={{ questions: [] }} onChange={noop} onGoToAssets={noop} instanceUsage={usageFixture} onPlayerClick={onPlayerClick} playerNames={playerNames} />
     );
-    await user.click(screen.getByRole('button', { name: 'Anna Müller' }));
+    await user.click(screen.getByRole('button', { name: 'Anna' }));
     // The profile is opened by registry id.
     expect(onPlayerClick).toHaveBeenCalledWith('anna-mueller');
   });

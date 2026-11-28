@@ -4289,6 +4289,19 @@ button.session-player.is-link:hover {
   width: auto;
 }
 
+/* Inline error of the game-editor lightbox's file rename (e.g. name taken). */
+.image-lightbox-rename-error {
+  font-size: 12px;
+  color: #f87171;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 0 1 auto;
+  /* Never squeeze the name field to a sliver; the full text is the hover title. */
+  max-width: 30%;
+}
+
 .image-lightbox-dims {
   font-size: 12px;
   color: rgba(var(--text-rgb), max(0.35, var(--text-fade-floor, 0)));
@@ -8744,3 +8757,75 @@ button.session-player.is-link:hover {
   color: rgba(var(--text-rgb), max(0.55, var(--text-fade-floor, 0)));
   font-variant-numeric: tabular-nums;
 }
+
+/* ── Film-stripe form: the expandable list of films whose stripe failed ── */
+.film-stripe-failures-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 6px;
+  background: rgba(245, 158, 11, 0.08);
+  color: rgba(245, 158, 11, 0.95);
+  font: inherit;
+  font-size: var(--admin-sz-13, 13px);
+  /* The global `button` rule uppercases and letter-spaces every button. */
+  text-transform: none;
+  letter-spacing: normal;
+  cursor: pointer;
+}
+.film-stripe-failures-toggle:hover { background: rgba(245, 158, 11, 0.16); }
+.film-stripe-failures-toggle:focus-visible { outline: 2px solid rgba(245, 158, 11, 0.8); outline-offset: 2px; }
+.film-stripe-failures-chevron { transition: transform 0.15s ease; flex-shrink: 0; }
+.film-stripe-failures-toggle[aria-expanded="true"] .film-stripe-failures-chevron { transform: rotate(90deg); }
+
+.film-stripe-failures {
+  flex-basis: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-top: 1px solid rgba(var(--glass-rgb), 0.1);
+  padding-top: 8px;
+  max-height: min(50vh, 320px);
+  overflow-y: auto;
+}
+.film-stripe-failures li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 10px;
+  row-gap: 2px;
+  /* Undo the global `li` rule (20px padding and a divider per item). */
+  padding: 0;
+  border: none;
+  font-size: var(--admin-sz-13, 13px);
+}
+.film-stripe-failures-link,
+.film-stripe-failures-name {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: rgba(var(--text-rgb), 0.9);
+}
+.film-stripe-failures-link {
+  padding: 3px 0;
+  border: none;
+  background: none;
+  font: inherit;
+  text-transform: none;
+  letter-spacing: normal;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: rgba(var(--admin-accent-rgb), 0.6);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.film-stripe-failures-link:hover { color: rgba(var(--admin-accent-rgb), 1); text-decoration-color: currentColor; }
+.film-stripe-failures-link:focus-visible { outline: 2px solid rgba(var(--admin-accent-rgb), 0.8); outline-offset: 2px; border-radius: 3px; }
+.film-stripe-failures-error { color: rgba(245, 158, 11, 0.9); }

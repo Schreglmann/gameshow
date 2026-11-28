@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
-import { recordImageReplace, resetReplacedImages, resolveReplacedImage, useImageSrc } from '@/components/backend/replacedImages';
+import { recordImageRename, recordImageReplace, resetReplacedImages, resolveReplacedImage, useImageSrc } from '@/components/backend/replacedImages';
 
 function Thumb({ path }: { path: string }) {
   const imageSrc = useImageSrc();
@@ -24,6 +24,13 @@ describe('replacedImages', () => {
     recordImageReplace('a.png', 'a.jpg', 1);
     recordImageReplace('a.jpg', 'a.webp', 2);
     expect(resolveReplacedImage('/images/a.png')).toEqual({ path: '/images/a.webp', version: 2 });
+  });
+
+  it('maps a renamed path to the new name without a version, and chains after a replace', () => {
+    recordImageReplace('a.png', 'a.jpg', 3);
+    recordImageRename('a.jpg', 'Neu/b.jpg');
+    expect(resolveReplacedImage('/images/a.png')).toEqual({ path: '/images/Neu/b.jpg', version: null });
+    expect(resolveReplacedImage('/images/a.jpg')).toEqual({ path: '/images/Neu/b.jpg', version: null });
   });
 
   it('re-renders thumbnails with an encoded, cache-busted src after a replace', () => {

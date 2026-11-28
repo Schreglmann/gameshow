@@ -14,7 +14,7 @@ import { useConfirm } from './ConfirmContext';
 import { OVERLAP_BADGE, OVERLAP_BADGE_GAME, OVERLAP_ORDER, gameRefs } from './overlapBadges';
 import { openPlayer } from './openPlayer';
 import { adminLabel, fullName, nameKey, normalizePlayerName, playerMatchesQuery } from '@/utils/playerNames';
-import { playerById, playerLabel } from '@/utils/playerRegistry';
+import { playerById, playerLabel, playerShortLabels } from '@/utils/playerRegistry';
 import {
   buildOverlapContext,
   classifyOverlap,
@@ -468,21 +468,24 @@ function ProvenanceList({ refValue, ctx, gameshows }: { refValue: string; ctx: O
   const playerRegistry = useContext(PlayerRegistryContext);
   const prov = refProvenance(refValue, ctx, gameshows);
   if (!prov.playedIn.length && !prov.plannedIn.length) return null;
-  const line = (kind: 'played' | 'planned', s: { id: string; name: string; overlapPlayers: string[] }) => (
-    <span key={`${kind}-${s.id}`} className={`planning-session${kind === 'planned' ? ' planned' : ''}`}>
-      <span className="planning-session-label">{kind === 'played' ? 'Gespielt' : 'Eingeplant'} · {s.name}</span>
-      {s.overlapPlayers.length > 0 && (
-        <>: {s.overlapPlayers.map((p, pi) => (
-          <span key={pi}>
-            {playerRegistry.has(p)
-              ? <button type="button" className="session-player matched is-link" onClick={() => openPlayer(p)}>{playerLabel(p, playerRegistry)}</button>
-              : <span className="session-player matched">{playerLabel(p, playerRegistry)}</span>}
-            {pi < s.overlapPlayers.length - 1 ? ', ' : ''}
-          </span>
-        ))}</>
-      )}
-    </span>
-  );
+  const line = (kind: 'played' | 'planned', s: { id: string; name: string; overlapPlayers: string[] }) => {
+    const shortNames = playerShortLabels(s.overlapPlayers, playerRegistry);
+    return (
+      <span key={`${kind}-${s.id}`} className={`planning-session${kind === 'planned' ? ' planned' : ''}`}>
+        <span className="planning-session-label">{kind === 'played' ? 'Gespielt' : 'Eingeplant'} · {s.name}</span>
+        {s.overlapPlayers.length > 0 && (
+          <>: {s.overlapPlayers.map((p, pi) => (
+            <span key={pi}>
+              {playerRegistry.has(p)
+                ? <button type="button" className="session-player matched is-link" onClick={() => openPlayer(p)} title={playerLabel(p, playerRegistry)}>{shortNames[pi]}</button>
+                : <span className="session-player matched">{shortNames[pi]}</span>}
+              {pi < s.overlapPlayers.length - 1 ? ', ' : ''}
+            </span>
+          ))}</>
+        )}
+      </span>
+    );
+  };
   return (
     <div className="planning-sessions">
       {prov.playedIn.map(s => line('played', s))}

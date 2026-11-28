@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AssetField, PickerModal } from '@/components/backend/AssetPicker';
 import { resetReplacedImages } from '@/components/backend/replacedImages';
@@ -9,6 +9,7 @@ const mockUploadAsset = vi.fn();
 const mockDownloadImageFromUrl = vi.fn();
 const mockSearchImages = vi.fn();
 const mockSearchYouTube = vi.fn();
+const mockMoveAsset = vi.fn();
 const mockUseUpload = vi.fn<() => unknown>(() => null);
 
 vi.mock('@/services/backendApi', () => ({
@@ -17,6 +18,7 @@ vi.mock('@/services/backendApi', () => ({
   downloadImageFromUrl: (...args: unknown[]) => mockDownloadImageFromUrl(...args),
   searchImages: (...args: unknown[]) => mockSearchImages(...args),
   searchYouTube: (...args: unknown[]) => mockSearchYouTube(...args),
+  moveAsset: (...args: unknown[]) => mockMoveAsset(...args),
 }));
 
 // Stub of the replace modal: exposes its props and lets a test finish or cancel it.
@@ -240,6 +242,7 @@ describe('AssetField image lightbox', () => {
   }
 
   const lightboxImg = () => document.querySelector('.image-lightbox-body img') as HTMLImageElement;
+  const lightboxHeader = () => within(document.querySelector('.image-lightbox-header') as HTMLElement);
 
   /** Simulates the lightbox image loading with the given natural size. */
   function measure(w: number, h: number) {
@@ -252,6 +255,7 @@ describe('AssetField image lightbox', () => {
   beforeEach(() => {
     replaceProps.current = null;
     resetReplacedImages();
+    mockMoveAsset.mockReset();
     mockFetchAssets.mockResolvedValue({ files: ['bar.jpg'], subfolders: [] });
   });
 
@@ -367,6 +371,72 @@ describe('AssetField image lightbox', () => {
     await openLightbox({ value: 'https://example.com/x.png' });
     expect(screen.getByRole('button', { name: 'Ersetzen' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Hochskalieren' })).not.toBeInTheDocument();
+  });
+
+  it('renames the file on click + Enter, keeps the extension and shows the new name', async () => {
+    mockMoveAsset.mockResolvedValue(undefined);
+    const { user, onChange } = await openLightbox();
+    await user.click(lightboxHeader().getByRole('button', { name: 'foo.png' }));
+    const input = screen.getByRole('textbox', { name: 'Dateiname' });
+    expect(input).toHaveValue('foo');
+    await user.clear(input);
+    await user.type(input, 'Monopoly Man.png{Enter}');
+    expect(mockMoveAsset).toHaveBeenCalledWith('images', 'Logos/foo.png', 'Logos/Monopoly Man.png');
+    expect(await lightboxHeader().findByText('Monopoly Man.png')).toBeInTheDocument();
+    expect(lightboxImg().getAttribute('src')).toBe('/images/Logos/Monopoly%20Man.png');
+    // The server rewrites the game files; the editor reconciles via content-changed.
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('keeps other dots in the name and ignores an unchanged name', async () => {
+    mockMoveAsset.mockResolvedValue(undefined);
+    const { user } = await openLightbox();
+    await user.click(lightboxHeader().getByRole('button', { name: 'foo.png' }));
+    await user.keyboard('{Enter}');
+    expect(mockMoveAsset).not.toHaveBeenCalled();
+
+    await user.click(lightboxHeader().getByRole('button', { name: 'foo.png' }));
+    const input = screen.getByRole('textbox', { name: 'Dateiname' });
+    await user.clear(input);
+    await user.type(input, 'Dr. Who{Enter}');
+    expect(mockMoveAsset).toHaveBeenCalledWith('images', 'Logos/foo.png', 'Logos/Dr. Who.png');
+  });
+
+  it('shows a server error inline and keeps the field open; Esc cancels without closing', async () => {
+    mockMoveAsset.mockRejectedValue(new Error('Der Name "bar.png" ist bereits vergeben'));
+    const { user } = await openLightbox();
+    await user.click(lightboxHeader().getByRole('button', { name: 'foo.png' }));
+    const input = screen.getByRole('textbox', { name: 'Dateiname' });
+    await user.clear(input);
+    await user.type(input, 'bar{Enter}');
+    expect(await screen.findByRole('alert')).toHaveTextContent('bereits vergeben');
+    expect(input).toBeInTheDocument();
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('textbox', { name: 'Dateiname' })).not.toBeInTheDocument();
+    expect(lightboxHeader().getByRole('button', { name: 'foo.png' })).toBeInTheDocument();
+    expect(lightboxImg()).not.toBeNull();
+  });
+
+  it('refuses a slash in the name', async () => {
+    const { user } = await openLightbox();
+    await user.click(lightboxHeader().getByRole('button', { name: 'foo.png' }));
+    const input = screen.getByRole('textbox', { name: 'Dateiname' });
+    await user.clear(input);
+    await user.type(input, 'a/b{Enter}');
+    expect(screen.getByRole('alert')).toHaveTextContent('/');
+    expect(mockMoveAsset).not.toHaveBeenCalled();
+  });
+
+  it('offers no rename for read-only fields or non-DAM paths', async () => {
+    const { unmount } = await openLightbox({ readOnly: true });
+    expect(lightboxHeader().getByText(/foo\.png/)).toBeInTheDocument();
+    expect(lightboxHeader().queryByRole('button', { name: 'foo.png' })).not.toBeInTheDocument();
+    unmount();
+
+    await openLightbox({ value: 'https://example.com/x.png' });
+    expect(lightboxHeader().getByText(/x\.png/)).toBeInTheDocument();
+    expect(lightboxHeader().queryByRole('button', { name: 'x.png' })).not.toBeInTheDocument();
   });
 
   it('video fields keep the plain lightbox', async () => {

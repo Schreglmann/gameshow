@@ -5,7 +5,7 @@
  * `scripts/migrate-players.ts`. See specs/players.md.
  */
 import type { LivePlayersRequest, Player } from '../types/config.js';
-import { adminLabel, fullName, hasFullName, nameKey, normalizeWhitespace } from './playerNames.js';
+import { adminLabel, displayNames, fullName, hasFullName, nameKey, normalizeWhitespace } from './playerNames.js';
 import { findInBin } from './playerBin.js';
 
 /** Registry ids are lowercase slugs: `anna-mueller`, `anna-mueller-2`. */
@@ -43,6 +43,20 @@ export function playerById(registry: readonly Player[]): Map<string, Player> {
 export function playerLabel(id: string, byId: ReadonlyMap<string, Player>): string {
   const p = byId.get(id);
   return p ? adminLabel(p) : `${id} (unbekannt)`;
+}
+
+/**
+ * Short labels for a list of registry ids, in input order: the nickname (the
+ * first name when there is none), with a surname prefix only when two players
+ * in the list share it — see `displayNames`. An unknown id keeps its
+ * `playerLabel`. For compact admin overviews like the "Bereits gespielt /
+ * Eingeplant" rows.
+ */
+export function playerShortLabels(ids: readonly string[], byId: ReadonlyMap<string, Player>): string[] {
+  const known = ids.map(id => byId.get(id)).filter((p): p is Player => p !== undefined);
+  const labels = displayNames(known);
+  let k = 0;
+  return ids.map(id => (byId.has(id) ? labels[k++]! : playerLabel(id, byId)));
 }
 
 /**
