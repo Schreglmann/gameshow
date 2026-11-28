@@ -15,9 +15,11 @@ import {
   filmStripeSlug,
   filmStripeWindow,
   isFilmStripeCurrent,
-  meanColor,
+  boostChroma,
+  frameColor,
   readFilmStripe,
   rgbToHex,
+  weightedFrameColor,
   sampleTimestamps,
   toFilmStripeData,
   type FilmStripeManifest,
@@ -70,18 +72,42 @@ describe('colour maths', () => {
     expect(rgbToHex(-5, 300, 15.6)).toBe('#00ff10');
   });
 
-  it('averages an image to one colour', async () => {
-    const hex = await meanColor(await solidFrame(200, 40, 40));
-    const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16)) as [number, number, number];
-    // JPEG is lossy; a solid colour comes back within a few steps.
-    expect(Math.abs(r - 200)).toBeLessThanOrEqual(6);
-    expect(Math.abs(g - 40)).toBeLessThanOrEqual(6);
-    expect(Math.abs(b - 40)).toBeLessThanOrEqual(6);
+  const channels = (hex: string) => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16)) as [number, number, number];
+  const pixels = (...runs: Array<[number, [number, number, number]]>) =>
+    Uint8Array.from(runs.flatMap(([n, rgb]) => Array.from({ length: n }, () => rgb).flat()));
+
+  it('keeps the hue of a solid frame and only saturates it', async () => {
+    const [r, g, b] = channels(await frameColor(await solidFrame(200, 40, 40)));
+    // Still a red, and at least as saturated as the source (JPEG is lossy).
+    expect(r).toBeGreaterThanOrEqual(190);
+    expect(g).toBeLessThanOrEqual(45);
+    expect(b).toBeLessThanOrEqual(45);
+  });
+
+  it('keeps a grey frame grey', () => {
+    expect(weightedFrameColor(pixels([100, [90, 90, 90]]))).toBe('#5a5a5a');
+  });
+
+  it('lets a small coloured area win over a large grey one', () => {
+    // 10 % saturated orange on 90 % mid grey: a plain average would be a dull
+    // grey-brown; the weighted colour stays clearly orange.
+    const [r, g, b] = channels(weightedFrameColor(pixels([90, [110, 110, 110]], [10, [240, 120, 20]])));
+    expect(r - b).toBeGreaterThan(100);
+    expect(r).toBeGreaterThan(g);
+  });
+
+  it('raises chroma without leaving the gamut and leaves greys alone', () => {
+    const [r, g, b] = boostChroma([150, 110, 90], 1.4);
+    expect(r - b).toBeGreaterThan(150 - 90);
+    for (const v of [r, g, b]) expect(v).toBeGreaterThanOrEqual(0);
+    expect(boostChroma([128, 128, 128], 1.4)).toEqual([128, 128, 128]);
+    // Already at the gamut edge: unchanged rather than clipped into another hue.
+    expect(boostChroma([255, 0, 0], 1.4)).toEqual([255, 0, 0]);
   });
 });
 
 describe('isFilmStripeCurrent', () => {
-  const manifest = { source: SOURCE } as FilmStripeManifest;
+  const manifest = { version: FILM_STRIPE_VERSION, source: SOURCE } as FilmStripeManifest;
 
   it('is current when size and mtime match', () => {
     expect(isFilmStripeCurrent(manifest, { ...SOURCE })).toBe(true);
@@ -96,6 +122,12 @@ describe('isFilmStripeCurrent', () => {
 
   it('counts as current when the source cannot be read', () => {
     expect(isFilmStripeCurrent(manifest, null)).toBe(true);
+  });
+
+  it('is outdated when computed with an older method, even when the source cannot be read', () => {
+    const old = { ...manifest, version: FILM_STRIPE_VERSION - 1 };
+    expect(isFilmStripeCurrent(old, { ...SOURCE })).toBe(false);
+    expect(isFilmStripeCurrent(old, null)).toBe(false);
   });
 });
 
@@ -119,6 +151,15 @@ describe('readFilmStripe', () => {
       version: FILM_STRIPE_VERSION, colors: ['red'], frames: 0, framePositions: [], source: SOURCE,
     }));
     expect(await readFilmStripe(dir)).toBeNull();
+  });
+
+  it('still reads a stripe computed with an older method, so the show keeps it', async () => {
+    const dir = path.join(tmp, 'old-method');
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, 'stripe.json'), JSON.stringify({
+      version: 1, colors: ['#112233'], frames: 0, framePositions: [], source: SOURCE, start: 0, end: 1, createdAt: '',
+    }));
+    expect((await readFilmStripe(dir))?.colors).toEqual(['#112233']);
   });
 });
 

@@ -2,8 +2,8 @@
  * Film stripes for the `film-stripe` game type ("Filmstreifen").
  *
  * A stripe is a whole film reduced to FILM_STRIPE_COLUMNS colours: the film is
- * sampled at evenly spaced moments and each sampled frame becomes its average
- * colour. Every FILM_STRIPE_FRAME_EVERY-th sampled frame is also kept as a small
+ * sampled at evenly spaced moments and each sampled frame becomes one colour —
+ * its saturation-weighted average (see `frameColor`). Every FILM_STRIPE_FRAME_EVERY-th sampled frame is also kept as a small
  * JPEG; played in order they are the time-lapse the game shows as a hint.
  *
  * Computing a stripe means hundreds of seeks into a file that is often two hours
@@ -23,8 +23,10 @@ import { mkdir, readFile, readdir, rename, rm, writeFile } from 'fs/promises';
 import path from 'path';
 import sharp from 'sharp';
 
-/** Bump when the sampling or the file layout changes; older caches read as absent. */
-export const FILM_STRIPE_VERSION = 1;
+/** Bump when the sampling or the colour method changes. An older stripe is still read
+ *  (the show keeps it) but counts as outdated; a newer one reads as absent.
+ *  1 = plain average colour, 2 = saturation-weighted colour. */
+export const FILM_STRIPE_VERSION = 2;
 export const FILM_STRIPE_COLUMNS = 240;
 /** Every n-th sampled frame is kept as a time-lapse still (240 / 5 = 48 stills). */
 export const FILM_STRIPE_FRAME_EVERY = 5;
@@ -35,6 +37,12 @@ export const FILM_STRIPE_END_FRAC = 0.93;
 /** A single seek that takes longer than this is killed — a stale NAS mount must not hang the job. */
 export const FILM_STRIPE_FRAME_TIMEOUT_MS = 45_000;
 const PARALLEL_SEEKS = 3;
+/** Width a frame is scaled to before its colour is taken — plenty for an average. */
+const COLOR_SAMPLE_WIDTH = 200;
+/** How much a frame's colour is saturated (OKLab chroma factor). */
+const CHROMA_BOOST = 1.4;
+/** Weight every pixel has regardless of its colour, so a grey frame keeps its grey. */
+const WEIGHT_FLOOR = 0.01;
 /** More failed frames than this share and the stripe is not worth keeping. */
 const MAX_FAILED_SHARE = 0.3;
 
@@ -109,19 +117,93 @@ export function rgbToHex(r: number, g: number, b: number): string {
   return `#${part(r)}${part(g)}${part(b)}`;
 }
 
-/** Average colour of an encoded image. */
-export async function meanColor(image: Buffer): Promise<string> {
-  const { channels } = await sharp(image).removeAlpha().toColourspace('srgb').stats();
-  const [r, g, b] = channels;
-  // A greyscale source decodes to one channel.
-  if (r && (!g || !b)) return rgbToHex(r.mean, r.mean, r.mean);
-  return rgbToHex(r?.mean ?? 0, g?.mean ?? 0, b?.mean ?? 0);
+/** sRGB byte → linear light, as a lookup table. */
+const SRGB_TO_LINEAR = Float64Array.from({ length: 256 }, (_, i) => {
+  const c = i / 255;
+  return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+});
+
+/** Linear light → sRGB byte. */
+function linearToSrgb(l: number): number {
+  const c = l <= 0.0031308 ? l * 12.92 : 1.055 * l ** (1 / 2.4) - 0.055;
+  return Math.max(0, Math.min(255, Math.round(c * 255)));
+}
+
+/**
+ * Raise the colourfulness of an sRGB colour: scale its OKLab chroma by `factor`,
+ * keeping lightness and hue. When that leaves the sRGB gamut the factor is lowered
+ * step by step, so a colour is never clipped into a different hue.
+ */
+export function boostChroma(rgb: readonly [number, number, number], factor: number): [number, number, number] {
+  const [lr, lg, lb] = rgb.map(v => SRGB_TO_LINEAR[Math.max(0, Math.min(255, Math.round(v)))]!) as [number, number, number];
+  const l = Math.cbrt(0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb);
+  const m = Math.cbrt(0.2119034982 * lr + 0.6806995451 * lg + 0.1073969566 * lb);
+  const s = Math.cbrt(0.0883024619 * lr + 0.2817188376 * lg + 0.6299787005 * lb);
+  const L = 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s;
+  const A = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s;
+  const B = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s;
+  for (let f = factor; f > 1; f -= 0.05) {
+    const a = A * f;
+    const b = B * f;
+    const l3 = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3;
+    const m3 = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3;
+    const s3 = (L - 0.0894841775 * a - 1.2914855480 * b) ** 3;
+    const R = 4.0767416621 * l3 - 3.3077115913 * m3 + 0.2309699292 * s3;
+    const G = -1.2684380046 * l3 + 2.6097574011 * m3 - 0.3413193965 * s3;
+    const Bl = -0.0041960863 * l3 - 0.7034186147 * m3 + 1.7076147010 * s3;
+    const inGamut = (v: number) => v >= -0.001 && v <= 1.001;
+    if (inGamut(R) && inGamut(G) && inGamut(Bl)) return [linearToSrgb(R), linearToSrgb(G), linearToSrgb(Bl)];
+  }
+  return [rgb[0], rgb[1], rgb[2]];
+}
+
+/**
+ * The colour of one frame given as raw RGB bytes: a saturation-weighted average in
+ * linear light, then saturated by CHROMA_BOOST.
+ *
+ * A plain average mixes a frame's few strong colours with its large grey and dark
+ * areas, and most of a film came out the same grey-brown. Here every pixel counts
+ * with weight chroma² + WEIGHT_FLOOR (chroma = (max − min) / 255), so the colour
+ * that is there wins and a frame without any colour keeps its grey.
+ * See specs/games/film-stripe.md.
+ */
+export function weightedFrameColor(rgb: Uint8Array | Buffer): string {
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  let weight = 0;
+  for (let i = 0; i + 2 < rgb.length; i += 3) {
+    const R = rgb[i]!;
+    const G = rgb[i + 1]!;
+    const B = rgb[i + 2]!;
+    const chroma = (Math.max(R, G, B) - Math.min(R, G, B)) / 255;
+    const w = chroma * chroma + WEIGHT_FLOOR;
+    r += SRGB_TO_LINEAR[R]! * w;
+    g += SRGB_TO_LINEAR[G]! * w;
+    b += SRGB_TO_LINEAR[B]! * w;
+    weight += w;
+  }
+  if (weight === 0) return '#000000';
+  const mixed: [number, number, number] = [linearToSrgb(r / weight), linearToSrgb(g / weight), linearToSrgb(b / weight)];
+  const [R, G, B] = boostChroma(mixed, CHROMA_BOOST);
+  return rgbToHex(R, G, B);
+}
+
+/** The colour of an encoded frame (JPEG), see `weightedFrameColor`. */
+export async function frameColor(image: Buffer): Promise<string> {
+  const data = await sharp(image)
+    .resize({ width: COLOR_SAMPLE_WIDTH, withoutEnlargement: true })
+    .removeAlpha()
+    .toColourspace('srgb')
+    .raw()
+    .toBuffer();
+  return weightedFrameColor(data);
 }
 
 function isManifest(value: unknown): value is FilmStripeManifest {
   if (!value || typeof value !== 'object') return false;
   const m = value as Record<string, unknown>;
-  return m.version === FILM_STRIPE_VERSION
+  return typeof m.version === 'number' && m.version >= 1 && m.version <= FILM_STRIPE_VERSION
     && Array.isArray(m.colors) && m.colors.length > 0
     && (m.colors as unknown[]).every(c => typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c))
     && typeof m.frames === 'number' && m.frames >= 0
@@ -129,7 +211,8 @@ function isManifest(value: unknown): value is FilmStripeManifest {
     && typeof m.source === 'object' && m.source !== null;
 }
 
-/** The cached stripe of a video, or null when none (or an outdated/corrupt one) is on disk. */
+/** The cached stripe of a video, or null when none (or a corrupt one, or one from a newer
+ *  server) is on disk. A stripe from an older method is returned — see `isFilmStripeCurrent`. */
 export async function readFilmStripe(dir: string): Promise<FilmStripeManifest | null> {
   try {
     const parsed: unknown = JSON.parse(await readFile(path.join(dir, 'stripe.json'), 'utf8'));
@@ -163,11 +246,12 @@ export async function attachFilmStripes<T extends { video: string }>(
 }
 
 /**
- * Was the stripe computed from the file that is there now? `source === null` means
- * the file cannot be stat'ed (NAS unmounted): nothing says the stripe is outdated,
- * and it is the only copy there is, so it counts as current.
+ * Was the stripe computed with the current method, from the file that is there now?
+ * `source === null` means the file cannot be stat'ed (NAS unmounted): nothing says the
+ * file changed, and the stripe is the only copy there is, so only the method counts.
  */
 export function isFilmStripeCurrent(manifest: FilmStripeManifest, source: FilmStripeSource | null): boolean {
+  if (manifest.version !== FILM_STRIPE_VERSION) return false;
   if (!source) return true;
   return manifest.source.size === source.size && Math.abs(manifest.source.mtimeMs - source.mtimeMs) < 2000;
 }
@@ -285,7 +369,7 @@ export async function buildFilmStripe(options: BuildFilmStripeOptions): Promise<
         const i = next++;
         try {
           const frame = await options.extractFrame(timestamps[i]!);
-          colors[i] = await meanColor(frame);
+          colors[i] = await frameColor(frame);
           if (i % frameEvery === 0) stills.set(i, frame);
         } catch {
           failed++;

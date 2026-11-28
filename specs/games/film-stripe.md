@@ -7,7 +7,7 @@ A whole film is shown as one stripe of colours — one line per moment, left to 
 
 ### Stripe computation (server)
 - [x] A stripe is computed per **video**, not per question: nothing about it is random, so two questions on the same film share one
-- [x] The film is sampled at 240 evenly spaced moments inside 3 %–93 % of its runtime (skips studio logos and most of the credits). Each sampled frame is reduced to its average colour
+- [x] The film is sampled at 240 evenly spaced moments inside 3 %–93 % of its runtime (skips studio logos and most of the credits). Each sampled frame is reduced to one colour (below)
 - [x] Every 5th sampled frame is also kept as a JPEG at most 640 px wide: 48 stills, the time-lapse
 - [x] The result is cached locally in `local-assets/videos/.cache/film-stripe/<slug>/`: `stripe.json` (colours, still count, the position of each still on the stripe, size + mtime of the source file, sampled window) and `frame-NN.jpg`
 - [x] A build writes into a temporary directory and swaps it in, so a failed build leaves the previous stripe in place
@@ -18,7 +18,10 @@ A whole film is shown as one stripe of colours — one line per moment, left to 
 - [x] ffmpeg runs through `spawnBackgroundFfmpeg` (low priority), three seeks at a time. Every spawn has an `'error'` listener and is killed after 45 s — a read from a stale NAS mount does not return on its own
 - [x] An HDR source is tone-mapped (`buildTonemapVf`) before the colour is taken; without it every colour comes out grey. The tone map runs after the downscale to 640 px — on the full 4K frame it costs seconds per frame
 - [x] The source is resolved with `resolveVideoPathWithNas` and stat'ed through the bounded NAS helper; no synchronous NAS I/O
+- [ ] A frame's colour is its **saturation-weighted** average: every pixel counts with weight `chroma² + 0.01` (chroma = (max − min) / 255 of its RGB), summed in linear light, then the colour's OKLab chroma is raised by 1.4 (less when that leaves the sRGB gamut). A plain average turned most frames grey-brown because a frame's few strong colours were mixed with its large grey and dark areas; weighting lets the colour that is there win, and the `0.01` floor keeps the grey of a frame that has no colour. Chosen by a side-by-side comparison of five methods on six films (plain average, linear light + saturation, Moviebarcode-style rows, rows + saturation, saturation-weighted)
+- [ ] The frame is scaled to 200 px wide before the colour is taken (the still keeps 640 px)
 - [x] A stripe counts as outdated when the source file's size or mtime differs from the recorded one. A source that cannot be read (NAS unmounted) never makes a stripe outdated
+- [ ] A stripe computed with an older method (`version` below `FILM_STRIPE_VERSION`, currently 2) is still read and shown, but counts as outdated, so "Streifen berechnen" recomputes it without forcing. A version above the current one (a newer server's cache) reads as absent
 - [x] Replacing or deleting a video removes its stripe (`deleteCacheFilesForVideo`)
 - [x] Two prepare requests for the same film share one build
 
@@ -31,7 +34,7 @@ A whole film is shown as one stripe of colours — one line per moment, left to 
 - [x] Each question shows its film's part in the run: `wird berechnet · 42 %` with a small bar, `in Warteschlange`, and — until the next run — the error of a film that failed
 - [x] A `prepare` stream that ends without its `done` event (server restart, lost connection) is reported as aborted, not as finished; starting again skips the films that are done
 - [x] The form follows a run through the `system-status` WebSocket (the task's `meta.filmStripe`): opened while a run is going (after a tab switch, in a second browser tab) it shows the same progress, disables the button and refreshes each stripe as its film finishes. The `prepare` stream's first event names the task (`{ taskId }`), so the form that started a run ignores that task's WebSocket copy
-- [x] Each question shows its stripe as a preview strip under the video field, "kein Streifen berechnet" when there is none (with "Video nicht erreichbar" when that is the reason), and a warning when the stripe is outdated
+- [x] Each question shows its stripe as a preview strip under the video field, "kein Streifen berechnet" when there is none (with "Video nicht erreichbar" when that is the reason), and a warning when the stripe is outdated (the video file changed, or the stripe was computed with an older method)
 - [x] Picking a video fills an empty answer from the file name
 - [x] The job appears in the System tab as a background task. Its detail leads with the batch percent (`47 % · Film 2/3 · Dune.m4v 42 %`), so the row's bar and its ETA cover the whole batch, not the current film
 - [x] The `system-status` broadcast is debounced with a trailing send, so the last change of a burst (a film finishing, the task ending) always reaches the admin

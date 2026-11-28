@@ -308,7 +308,7 @@ export default function FilmStripeForm({ questions, onChange, otherInstances, on
                     <FilmStripeBar colors={st.colors} className="film-stripe-bar--fit" />
                     {!st.current && (
                       <span
-                        title="Die Videodatei wurde seit der Berechnung geändert"
+                        title="Die Videodatei wurde seit der Berechnung geändert, oder der Streifen stammt von einem älteren Verfahren"
                         style={{ display: 'inline-block', marginTop: 4, fontSize: 'var(--admin-sz-12, 12px)', color: 'rgba(245,158,11,0.9)' }}
                       >⚠ Streifen veraltet – neu berechnen</span>
                     )}
